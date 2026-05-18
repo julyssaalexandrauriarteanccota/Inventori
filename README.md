@@ -69,6 +69,8 @@ Comandos útiles:
 
 Si ya existe una base antigua y Prisma detecta diferencias por columnas, claves o cambios hechos durante desarrollo, no edites tablas a mano. Primero ejecuta `pnpm db:status`; si es una base de desarrollo descartable, usa `pnpm db:reset` y luego `pnpm db:seed` si necesitas datos iniciales. Si contiene información real, respáldala y crea una migración controlada antes de aplicar cambios.
 
+También existe un respaldo temporal de datos de prueba en `database-backups/erp_db_demo_backup.sql`. Revisa `database-backups/README.md` para restaurarlo.
+
 Servicios locales:
 
 - Web: `http://localhost:3000`
