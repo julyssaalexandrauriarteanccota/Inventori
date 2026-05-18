@@ -1,0 +1,277 @@
+/* Inventori — design tokens & base styles */
+
+:root {
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Light theme — warm cream */
+  --bg: #f5f1e8;
+  --bg-2: #ece6d6;
+  --surface: #ffffff;
+  --surface-2: #fbf7ee;
+  --surface-3: #f0ead9;
+  --ink: #1d1b16;
+  --ink-2: #4a463c;
+  --ink-3: #8a8576;
+  --line: rgba(29, 27, 22, 0.08);
+  --line-2: rgba(29, 27, 22, 0.14);
+
+  /* Accent (default = warm orange) */
+  --accent: #ff6b35;
+  --accent-ink: #ffffff;
+  --accent-soft: #ffe9dd;
+  --accent-2: #ffd166;
+  --accent-2-soft: #fff3cd;
+
+  /* Semantic */
+  --good: #2ec27e;
+  --good-soft: #d8f4e6;
+  --warn: #f4b740;
+  --warn-soft: #fff1d0;
+  --bad: #e5484d;
+  --bad-soft: #ffd9da;
+  --info: #4f7cff;
+  --info-soft: #dde6ff;
+
+  /* Category colors (products) */
+  --cat-equipo: #6c5ce7;
+  --cat-equipo-soft: #e6e0ff;
+  --cat-repuesto: #ff7a59;
+  --cat-repuesto-soft: #ffe0d6;
+  --cat-insumo: #00b894;
+  --cat-insumo-soft: #d0f4e8;
+  --cat-accesorio: #f7b500;
+  --cat-accesorio-soft: #fff1cc;
+
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 20px;
+  --r-xl: 28px;
+  --r-2xl: 36px;
+
+  --shadow-sm: 0 1px 2px rgba(29,27,22,0.04), 0 1px 1px rgba(29,27,22,0.04);
+  --shadow-md: 0 4px 14px rgba(29,27,22,0.06), 0 1px 3px rgba(29,27,22,0.04);
+  --shadow-lg: 0 18px 48px rgba(29,27,22,0.10), 0 4px 12px rgba(29,27,22,0.05);
+}
+
+[data-theme="dark"] {
+  --bg: #15130f;
+  --bg-2: #1c1a15;
+  --surface: #211e18;
+  --surface-2: #26221b;
+  --surface-3: #2d2920;
+  --ink: #f5f1e8;
+  --ink-2: #cbc4b3;
+  --ink-3: #8a8576;
+  --line: rgba(245, 241, 232, 0.08);
+  --line-2: rgba(245, 241, 232, 0.14);
+
+  --accent-soft: #3a2418;
+  --accent-2-soft: #3b3018;
+
+  --good-soft: #15321f;
+  --warn-soft: #3a2e10;
+  --bad-soft: #3a1316;
+  --info-soft: #1a1f3a;
+
+  --cat-equipo-soft: #2a1f55;
+  --cat-repuesto-soft: #3a1f12;
+  --cat-insumo-soft: #103325;
+  --cat-accesorio-soft: #3a2e0a;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 14px rgba(0,0,0,0.4);
+  --shadow-lg: 0 18px 48px rgba(0,0,0,0.5);
+}
+
+/* Color theme variants — applied to artboards via data-color */
+[data-color="orange"] { --accent: #ff6b35; --accent-2: #ffd166; --accent-ink:#fff; }
+[data-color="mint"]   { --accent: #00b894; --accent-2: #7df0c5; --accent-ink:#fff; }
+[data-color="violet"] { --accent: #6c5ce7; --accent-2: #c3b6ff; --accent-ink:#fff; }
+[data-color="indigo"] { --accent: #4f7cff; --accent-2: #a3bbff; --accent-ink:#fff; }
+
+/* Resets — scoped under .iv to not break the canvas chrome */
+.iv, .iv * { box-sizing: border-box; }
+.iv {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss01", "cv11";
+  letter-spacing: -0.005em;
+}
+.iv h1, .iv h2, .iv h3, .iv h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--ink);
+}
+.iv p { margin: 0; color: var(--ink-2); }
+.iv button { font: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+.iv input, .iv select, .iv textarea { font: inherit; color: inherit; }
+
+/* ─── Common UI atoms ─── */
+.iv .card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.iv .card-soft {
+  background: var(--surface-2);
+  border-radius: var(--r-lg);
+}
+.iv .pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 500;
+  background: var(--surface-3); color: var(--ink-2);
+}
+.iv .btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 18px; border-radius: 999px;
+  font-weight: 500; font-size: 13px;
+  background: var(--ink); color: var(--bg);
+  transition: transform .15s, background .15s, box-shadow .15s;
+}
+.iv .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.iv .btn-accent { background: var(--accent); color: var(--accent-ink); }
+.iv .btn-ghost  { background: transparent; color: var(--ink); border: 1px solid var(--line-2); }
+.iv .btn-soft   { background: var(--surface-3); color: var(--ink); }
+
+.iv .icon-tile {
+  width: 36px; height: 36px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-soft); color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* ─── Animations ─── */
+@keyframes ivFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes ivPop  { 0% { transform: scale(.9); opacity: 0; } 60% { transform: scale(1.04); } 100% { transform: scale(1); opacity: 1; } }
+@keyframes ivSpin { to { transform: rotate(360deg); } }
+@keyframes ivPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes ivShimmer { from { background-position: 0 0; } to { background-position: 200% 0; } }
+@keyframes ivFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes ivStretch { 0% { width: 0; } 100% { width: var(--w, 100%); } }
+@keyframes ivCount { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes ivWave {
+  0% { transform: rotate(0deg); }
+  20% { transform: rotate(14deg); }
+  40% { transform: rotate(-8deg); }
+  60% { transform: rotate(14deg); }
+  80% { transform: rotate(-4deg); }
+  100% { transform: rotate(10deg); }
+}
+@keyframes ivOrbit { to { transform: rotate(360deg); } }
+@keyframes ivDrawCheck { from { stroke-dashoffset: 30; } to { stroke-dashoffset: 0; } }
+
+.iv .anim-fade   { animation: ivFade .6s cubic-bezier(.2,.7,.3,1) both; }
+.iv .anim-pop    { animation: ivPop .5s cubic-bezier(.2,.7,.3,1) both; }
+.iv .anim-float  { animation: ivFloat 4s ease-in-out infinite; }
+.iv .anim-pulse  { animation: ivPulse 2.4s ease-in-out infinite; }
+.iv .anim-wave   { animation: ivWave 1.8s ease-in-out infinite; transform-origin: 70% 70%; }
+.iv .anim-spin   { animation: ivSpin 8s linear infinite; }
+.iv .anim-orbit  { animation: ivOrbit 18s linear infinite; }
+.iv .stagger > * { animation: ivFade .55s cubic-bezier(.2,.7,.3,1) both; }
+.iv .stagger > *:nth-child(1) { animation-delay: .04s; }
+.iv .stagger > *:nth-child(2) { animation-delay: .10s; }
+.iv .stagger > *:nth-child(3) { animation-delay: .16s; }
+.iv .stagger > *:nth-child(4) { animation-delay: .22s; }
+.iv .stagger > *:nth-child(5) { animation-delay: .28s; }
+.iv .stagger > *:nth-child(6) { animation-delay: .34s; }
+.iv .stagger > *:nth-child(7) { animation-delay: .40s; }
+.iv .stagger > *:nth-child(8) { animation-delay: .46s; }
+
+.iv .shimmer {
+  background: linear-gradient(90deg, var(--surface-3) 0%, var(--surface-2) 50%, var(--surface-3) 100%);
+  background-size: 200% 100%;
+  animation: ivShimmer 2.4s linear infinite;
+}
+
+/* ─── Bar chart ─── */
+.iv .bar {
+  display: flex; flex-direction: column; gap: 4px; align-items: center; flex: 1;
+}
+.iv .bar-fill {
+  width: 100%; max-width: 22px; min-height: 4px; border-radius: 6px;
+  background: var(--ink-3); transition: height .8s cubic-bezier(.2,.7,.3,1);
+}
+.iv .bar.is-active .bar-fill { background: var(--accent); }
+
+/* ─── Scrollbars ─── */
+.iv .scroll { overflow: auto; }
+.iv .scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.iv .scroll::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 4px; }
+
+/* ─── Custom inputs ─── */
+.iv .input {
+  width: 100%; padding: 12px 14px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--r-md); color: var(--ink);
+  transition: border-color .15s, background .15s;
+  font-size: 13px;
+}
+.iv .input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+.iv .input::placeholder { color: var(--ink-3); }
+
+.iv .field-label {
+  display: block; font-size: 11px; font-weight: 500;
+  color: var(--ink-3); margin-bottom: 6px;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+/* ─── Mascot blob (printer-shaped friendly mascot) ─── */
+.iv .mascot {
+  position: relative; display: inline-block;
+}
+
+/* ─── Glow ring for active items ─── */
+.iv .glow-ring {
+  position: relative;
+}
+.iv .glow-ring::before {
+  content: ""; position: absolute; inset: -3px; border-radius: inherit;
+  background: conic-gradient(from 0deg, var(--accent), var(--accent-2), var(--accent));
+  z-index: -1; filter: blur(8px); opacity: .55;
+  animation: ivOrbit 6s linear infinite;
+}
+
+/* ─── Toggle pill ─── */
+.iv .seg {
+  display: inline-flex; gap: 2px; padding: 3px;
+  background: var(--surface-2); border-radius: 999px; border: 1px solid var(--line);
+}
+.iv .seg button {
+  padding: 7px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 500; color: var(--ink-2);
+  transition: background .18s, color .18s;
+}
+.iv .seg button.is-on { background: var(--ink); color: var(--bg); }
+.iv .seg.seg-accent button.is-on { background: var(--accent); color: var(--accent-ink); }
+
+/* ─── Table ─── */
+.iv table.tbl { width: 100%; border-collapse: collapse; }
+.iv .tbl th, .iv .tbl td { padding: 12px 14px; text-align: left; font-size: 12.5px; }
+.iv .tbl th {
+  font-weight: 500; color: var(--ink-3);
+  text-transform: uppercase; letter-spacing: 0.06em; font-size: 10.5px;
+  border-bottom: 1px solid var(--line);
+}
+.iv .tbl tbody tr { border-bottom: 1px solid var(--line); }
+.iv .tbl tbody tr:hover { background: var(--surface-2); }
+
+/* ─── Image-slot placeholders (for product imagery) ─── */
+.iv .img-slot {
+  background:
+    repeating-linear-gradient(135deg,
+      var(--surface-3) 0 8px,
+      var(--surface-2) 8px 16px);
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-3); font-family: var(--font-mono); font-size: 10px;
+  text-align: center; padding: 8px;
+}

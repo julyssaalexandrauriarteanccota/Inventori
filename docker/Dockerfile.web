@@ -1,0 +1,23 @@
+FROM node:24-alpine AS base
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copiar archivos de configuración del workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY apps/web/package.json ./apps/web/package.json
+
+# Instalar dependencias
+RUN pnpm install --frozen-lockfile
+
+# Copiar código fuente
+COPY packages/shared ./packages/shared
+COPY apps/web ./apps/web
+
+WORKDIR /app/apps/web
+
+EXPOSE 3000
+
+CMD ["pnpm", "dev"]

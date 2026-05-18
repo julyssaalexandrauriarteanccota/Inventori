@@ -1,0 +1,12 @@
+{
+  "venvPath": "apps/ai",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "include": ["apps/ai/app", "apps/ai/tests"],
+  "executionEnvironments": [
+    {
+      "root": "apps/ai",
+      "extraPaths": ["apps/ai/app"]
+    }
+  ]
+}

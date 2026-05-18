@@ -1,0 +1,7 @@
+export enum TipoProducto {
+  EQUIPO = 'EQUIPO',
+  REPUESTO = 'REPUESTO',
+  INSUMO = 'INSUMO',
+  SERVICIO = 'SERVICIO',
+  ACCESORIO = 'ACCESORIO',
+}

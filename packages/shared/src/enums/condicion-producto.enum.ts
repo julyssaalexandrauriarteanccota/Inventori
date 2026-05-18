@@ -1,0 +1,7 @@
+export enum CondicionProducto {
+  NUEVO = 'NUEVO',
+  SEMINUEVO = 'SEMINUEVO',
+  USADO = 'USADO',
+  REACONDICIONADO = 'REACONDICIONADO',
+  RECUPERADO = 'RECUPERADO',
+}

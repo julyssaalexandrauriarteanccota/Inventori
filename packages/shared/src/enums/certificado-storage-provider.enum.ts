@@ -1,0 +1,5 @@
+export enum CertificadoStorageProvider {
+  LOCAL_PRIVATE = 'LOCAL_PRIVATE',
+  MINIO_PRIVATE = 'MINIO_PRIVATE',
+  SECRET_MANAGER = 'SECRET_MANAGER',
+}

@@ -1,0 +1,27 @@
+FROM node:24-alpine AS base
+
+RUN apk add --no-cache openssl
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+WORKDIR /app
+
+# Copiar archivos de configuración del workspace
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY apps/api/package.json ./apps/api/package.json
+
+# Instalar dependencias
+RUN pnpm install --frozen-lockfile
+
+# Copiar código fuente
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+
+# Generar Prisma Client
+WORKDIR /app/apps/api
+RUN npx prisma generate
+
+EXPOSE 4000
+
+CMD ["pnpm", "start:dev"]

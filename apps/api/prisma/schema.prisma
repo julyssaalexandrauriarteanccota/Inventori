@@ -1,0 +1,1639 @@
+// ERP Sistema — Schema Prisma
+// Core configurable para catálogo, inventario, ventas, soporte y facturación
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── ENUMS ───────────────────────────────────────────
+
+enum RolUsuario {
+  ADMIN
+  ENCARGADO
+  TECNICO
+}
+
+enum TipoCliente {
+  NATURAL
+  EMPRESA
+}
+
+enum EstadoTicket {
+  ABIERTO
+  EN_PROCESO
+  EN_ESPERA
+  CERRADO
+  CANCELADO
+}
+
+enum PrioridadTicket {
+  BAJA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+enum TipoServicio {
+  TALLER
+  VISITA
+  REMOTO
+}
+
+enum TipoMovimiento {
+  COMPRA_RECIBIDA
+  VENTA
+  CONSUMO_SOPORTE
+  DEVOLUCION_CLIENTE
+  DEVOLUCION_PROVEEDOR
+  AJUSTE_POSITIVO
+  AJUSTE_NEGATIVO
+  TRANSFERENCIA
+  BAJA_DANO
+}
+
+enum MovimientoComportamiento {
+  ENTRADA
+  SALIDA
+  TRANSFERENCIA
+}
+
+enum EstadoOrdenCompra {
+  BORRADOR
+  APROBADA
+  ENVIADA_PROVEEDOR
+  RECIBIDA_PARCIAL
+  RECIBIDA_TOTAL
+  CANCELADA
+}
+
+enum EstadoVenta {
+  COTIZACION
+  ORDEN_CONFIRMADA
+  ENTREGADA
+  CANCELADA
+}
+
+// Eje fiscal de la venta. Separado del comercial (D7).
+// Solo lo modifica el dominio Comprobantes vía eventos.
+enum EstadoFacturacionVenta {
+  SIN_COMPROBANTE
+  EN_EMISION
+  EMITIDA
+  EMITIDA_CON_OBS
+  RECHAZADA
+  ANULADA_FISCAL
+}
+
+enum TipoDocumento {
+  FACTURA
+  BOLETA
+  NOTA_CREDITO
+  NOTA_DEBITO
+}
+
+// Set canónico definido en doc 01 §3.3.
+enum EstadoComprobante {
+  PENDIENTE_ENVIO
+  EN_PROCESO_SUNAT
+  ACEPTADO
+  ACEPTADO_CON_OBSERVACIONES
+  RECHAZADO
+  REQUIERE_REVISION
+  BAJA_PENDIENTE
+  ANULADO
+}
+
+enum TipoEnvio {
+  ENVIO_INICIAL
+  REINTENTO
+  CONSULTA_TICKET
+  COMUNICACION_BAJA
+}
+
+enum EstadoComunicacionBaja {
+  PENDIENTE
+  EN_PROCESO
+  ACEPTADA
+  RECHAZADA
+}
+
+enum TipoFiscalProducto {
+  BIEN
+  SERVICIO
+}
+
+enum TipoAfectacionIgv {
+  GRAVADO_OPERACION_ONEROSA
+  EXONERADO_OPERACION_ONEROSA
+  INAFECTO_OPERACION_ONEROSA
+  EXPORTACION
+}
+
+enum AmbienteSunat {
+  BETA
+  PRODUCCION
+}
+
+enum ModalidadEnvioBoletas {
+  INDIVIDUAL
+  RESUMEN
+}
+
+enum CertificadoStorageProvider {
+  LOCAL_PRIVATE
+  MINIO_PRIVATE
+  SECRET_MANAGER
+}
+
+enum EstadoGarantia {
+  ACTIVA
+  VENCIDA
+  ANULADA
+}
+
+enum EstadoEquipo {
+  ACTIVO
+  EN_REPARACION
+  BAJA
+}
+
+enum TipoProducto {
+  EQUIPO
+  REPUESTO
+  INSUMO
+  SERVICIO
+  ACCESORIO
+}
+
+enum CondicionProducto {
+  NUEVO
+  SEMINUEVO
+  USADO
+  REACONDICIONADO
+  RECUPERADO
+}
+
+enum EstadoComercialEquipo {
+  DISPONIBLE
+  VENDIDO
+  ALQUILADO
+  RESERVADO
+  EN_REPARACION
+  USO_INTERNO
+  BAJA
+}
+
+enum EstadoCaja {
+  ABIERTA
+  CERRADA
+}
+
+enum TipoMovimientoCaja {
+  INGRESO
+  EGRESO
+  VENTA
+  DEVOLUCION
+  RETIRO
+  DEPOSITO
+  AJUSTE
+}
+
+// ─── MODELOS ─────────────────────────────────────────
+
+model Usuario {
+  id                 String     @id @default(uuid())
+  nombre             String
+  apellido           String
+  email              String     @unique
+  /// Marca cuando el usuario verificó su correo con el OTP enviado al registrarse.
+  /// Sin verificación, la cuenta no puede activarse desde admin.
+  emailVerificado    Boolean    @default(false)
+  emailVerificadoAt  DateTime?
+  password           String
+  rol                RolUsuario
+  activo             Boolean    @default(true)
+  mustChangePassword Boolean    @default(false)
+  ultimoAcceso       DateTime?
+  telefono           String?
+  celular            String?
+  whatsapp           String?
+  direccion          String?
+  cargo              String?
+  bio                String?
+  avatarUrl          String?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
+
+  contactosCliente ContactoCliente[]
+  movimientosStock MovimientoStock[]
+  ordenesCompra    OrdenCompra[]
+  ventas           Venta[]
+  ticketsAsignados Ticket[]          @relation("TecnicoTickets")
+  ticketsCreados   Ticket[]          @relation("CreadorTickets")
+  historialTickets HistorialTicket[]
+  auditorias       Auditoria[]
+  refreshTokens    RefreshToken[]
+  emailOtps        EmailVerificationOtp[]
+  passwordResets   PasswordResetToken[]
+  alertasResueltas AlertaStock[]     @relation("ResueltaPor")
+  aperturasCaja    AperturaCaja[]    @relation("AperturaUsuario")
+  cierresCaja      AperturaCaja[]    @relation("CierreUsuario")
+  movimientosCaja  MovimientoCaja[]
+  arqueosCaja      ArqueoCaja[]
+  solicitudesAsignadas SolicitudPublica[] @relation("SolicitudAsignada")
+
+  @@map("usuarios")
+}
+
+/// OTP de 6 dígitos enviado al correo del usuario al registrarse, para
+/// confirmar que el email es real antes de que un admin pueda activar
+/// la cuenta. El código se guarda hasheado (bcrypt) para no exponerlo si
+/// la BD se compromete. `intentos` permite limitar fuerza bruta.
+model EmailVerificationOtp {
+  id        String    @id @default(uuid())
+  usuarioId String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  intentos  Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, usedAt])
+  @@map("email_verification_otps")
+}
+
+/// Token de restablecimiento de contraseña enviado por email. Se guarda solo
+/// un hash del identificador interno para poder consumirlo una sola vez.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  usuarioId String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, usedAt])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+model Cliente {
+  id           String      @id @default(uuid())
+  tipo         TipoCliente
+  nombre       String?
+  apellido     String?
+  dni          String?     @unique
+  razonSocial  String?
+  ruc          String?     @unique
+  email        String?
+  telefono     String?
+  celular      String?
+  direccion    String?
+  distrito     String?
+  provincia    String?
+  departamento String?
+  referencia   String?
+  latitud      Float?
+  longitud     Float?
+  notas        String?
+  esGenerico   Boolean     @default(false)
+  activo       Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  contactos         ContactoCliente[]
+  equipoClientes    EquipoCliente[]
+  ventas            Venta[]
+  tickets           Ticket[]
+  validacionesSunat ClienteValidacionSunat[]
+
+  @@map("clientes")
+}
+
+model ContactoCliente {
+  id          String   @id @default(uuid())
+  clienteId   String
+  tipo        String
+  descripcion String
+  fecha       DateTime @default(now())
+  usuarioId   String?
+  createdAt   DateTime @default(now())
+
+  cliente Cliente  @relation(fields: [clienteId], references: [id])
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([clienteId])
+  @@index([usuarioId])
+  @@map("contactos_cliente")
+}
+
+model Proveedor {
+  id               String    @id @default(uuid())
+  razonSocial      String
+  ruc              String    @unique
+  email            String?
+  telefono         String?
+  direccion        String?
+  contactoNombre   String?
+  contactoTelefono String?
+  notas            String?
+  activo           Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  productoProveedores ProductoProveedor[]
+  ordenesCompra       OrdenCompra[]
+
+  @@map("proveedores")
+}
+
+model Categoria {
+  id          String       @id @default(uuid())
+  nombre      String
+  descripcion String?
+  tipo        TipoProducto @default(REPUESTO)
+  padreId     String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  padre     Categoria?  @relation("CategoriaHijos", fields: [padreId], references: [id])
+  hijos     Categoria[] @relation("CategoriaHijos")
+  productos Producto[]
+
+  @@index([padreId])
+  @@index([tipo])
+  @@map("categorias")
+}
+
+model Marca {
+  id        String         @id @default(uuid())
+  nombre    String
+  tipos     TipoProducto[] @default([EQUIPO])
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  deletedAt DateTime?
+
+  productos Producto[]
+  modelos   ModeloCatalogo[]
+
+  @@map("marcas")
+}
+
+model ModeloCatalogo {
+  id          String       @id @default(uuid())
+  nombre      String
+  descripcion String?
+  tipo        TipoProducto @default(EQUIPO)
+  marcaId     String?
+  activo      Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  marca     Marca?     @relation(fields: [marcaId], references: [id])
+  productos Producto[]
+
+  @@index([tipo])
+  @@index([marcaId])
+  @@map("modelos_catalogo")
+}
+
+model UnidadMedida {
+  id          String    @id @default(uuid())
+  codigo      String    @unique
+  nombre      String
+  descripcion String?
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  productos Producto[]
+
+  @@map("unidades_medida")
+}
+
+model Producto {
+  id                String             @id @default(uuid())
+  sku               String             @unique
+  nombre            String
+  descripcion       String?
+  tipo              TipoProducto       @default(REPUESTO)
+  categoriaId       String
+  marcaId           String?
+  modeloCatalogoId  String?
+  unidadMedidaId    String
+  modelo            String?
+  codigoBarras      String?            @unique
+  codigoQr          String?            @unique
+  condicion         CondicionProducto?
+  precioCompra      Decimal            @db.Decimal(10, 2)
+  precioVenta       Decimal            @db.Decimal(10, 2)
+  precioMinimo      Decimal            @db.Decimal(10, 2)
+  stockMinimo       Int                @default(0)
+  manejaInventario  Boolean            @default(true)
+  tieneNumeroSerie  Boolean            @default(false)
+  esConsumible      Boolean            @default(false)
+  requiereRepuestos Boolean            @default(false)
+  tiempoEstimadoMin Int?
+  mesesGarantia     Int                @default(12)
+  garantiaMaxCopias Int?
+  imagen            String?
+  atributos         Json?
+  activo            Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  deletedAt         DateTime?
+
+  categoria                    Categoria            @relation(fields: [categoriaId], references: [id])
+  marca                        Marca?               @relation(fields: [marcaId], references: [id])
+  modeloCatalogo               ModeloCatalogo?      @relation(fields: [modeloCatalogoId], references: [id])
+  unidadMedida                 UnidadMedida         @relation(fields: [unidadMedidaId], references: [id])
+  imagenes                     ProductoImagen[]
+  productoProveedores          ProductoProveedor[]
+  compatibilidadesComoRepuesto Compatibilidad[]     @relation("RepuestoCompatibilidad")
+  compatibilidadesComoModelo   Compatibilidad[]     @relation("ModeloCompatibilidad")
+  equipos                      Equipo[]
+  almacenStocks                AlmacenStock[]
+  movimientosStock             MovimientoStock[]
+  detallesOrdenCompra          DetalleOrdenCompra[]
+  detallesRecepcion            DetalleRecepcion[]
+  detallesVenta                DetalleVenta[]
+  detallesTicket               DetalleTicket[]
+  comprobanteDetalles          ComprobanteDetalle[]
+  alertasStock                 AlertaStock[]
+
+  @@index([categoriaId])
+  @@index([marcaId])
+  @@index([modeloCatalogoId])
+  @@index([unidadMedidaId])
+  @@index([tipo])
+  @@index([condicion])
+  @@map("productos")
+}
+
+model ProductoImagen {
+  id          String   @id @default(uuid())
+  productoId  String
+  url         String
+  nombre      String?
+  tipo        String?
+  tamano      Int?
+  esPrincipal Boolean  @default(false)
+  orden       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([productoId])
+  @@map("producto_imagenes")
+}
+
+model ProductoProveedor {
+  id              String   @id @default(uuid())
+  productoId      String
+  proveedorId     String
+  codigoProveedor String?
+  precioCompra    Decimal? @db.Decimal(10, 2)
+  esPrincipal     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  producto  Producto  @relation(fields: [productoId], references: [id])
+  proveedor Proveedor @relation(fields: [proveedorId], references: [id])
+
+  @@unique([productoId, proveedorId])
+  @@index([productoId])
+  @@index([proveedorId])
+  @@map("producto_proveedores")
+}
+
+model Compatibilidad {
+  id         String   @id @default(uuid())
+  repuestoId String
+  modeloId   String
+  notas      String?
+  createdAt  DateTime @default(now())
+
+  repuesto Producto @relation("RepuestoCompatibilidad", fields: [repuestoId], references: [id])
+  modelo   Producto @relation("ModeloCompatibilidad", fields: [modeloId], references: [id])
+
+  @@unique([repuestoId, modeloId])
+  @@index([repuestoId])
+  @@index([modeloId])
+  @@map("compatibilidades")
+}
+
+model Equipo {
+  id                String                @id @default(uuid())
+  numeroSerie       String                @unique
+  productoId        String
+  almacenId         String?
+  estado            EstadoEquipo          @default(ACTIVO)
+  estadoComercial   EstadoComercialEquipo @default(DISPONIBLE)
+  condicion         CondicionProducto?
+  procedencia       String?
+  contadorInicial   Int?
+  contadorActual    Int?
+  fechaIngreso      DateTime?
+  observacionEstado String?
+  codigoQr          String?               @unique
+  ubicacion         String?
+  firmware          String?
+  notas             String?
+  ipAddress         String?
+  snmpCommunity     String?               @default("public")
+  snmpPort          Int?                  @default(161)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  producto       Producto        @relation(fields: [productoId], references: [id])
+  almacen        Almacen?        @relation(fields: [almacenId], references: [id])
+  equipoClientes EquipoCliente[]
+  lecturasSNMP   LecturaSNMP[]
+  garantias      Garantia[]
+  tickets        Ticket[]
+
+  @@index([productoId])
+  @@index([almacenId])
+  @@index([estadoComercial])
+  @@index([condicion])
+  @@map("equipos")
+}
+
+model EquipoCliente {
+  id          String    @id @default(uuid())
+  equipoId    String
+  clienteId   String
+  ventaId     String?
+  fechaInicio DateTime  @default(now())
+  fechaFin    DateTime?
+  notas       String?
+  createdAt   DateTime  @default(now())
+
+  equipo  Equipo  @relation(fields: [equipoId], references: [id])
+  cliente Cliente @relation(fields: [clienteId], references: [id])
+  venta   Venta?  @relation(fields: [ventaId], references: [id])
+
+  @@index([equipoId])
+  @@index([clienteId])
+  @@index([ventaId])
+  @@map("equipo_clientes")
+}
+
+model LecturaSNMP {
+  id                 String   @id @default(uuid())
+  equipoId           String
+  timestamp          DateTime @default(now())
+  nivelTonerNegro    Int?
+  nivelTonerCian     Int?
+  nivelTonerMagenta  Int?
+  nivelTonerAmarillo Int?
+  paginasTotales     Int?
+  erroresActivos     String[]
+  estadoFusor        String?
+  rawData            Json?
+
+  equipo Equipo @relation(fields: [equipoId], references: [id])
+
+  @@index([equipoId])
+  @@map("lecturas_snmp")
+}
+
+model Almacen {
+  id          String    @id @default(uuid())
+  nombre      String
+  descripcion String?
+  direccion   String?
+  esPrincipal Boolean   @default(false)
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  stocks             AlmacenStock[]
+  equipos            Equipo[]
+  movimientosOrigen  MovimientoStock[] @relation("AlmacenOrigen")
+  movimientosDestino MovimientoStock[] @relation("AlmacenDestino")
+  alertasStock       AlertaStock[]
+
+  @@map("almacenes")
+}
+
+model AlmacenStock {
+  id         String   @id @default(uuid())
+  almacenId  String
+  productoId String
+  cantidad   Int      @default(0)
+  ubicacion  String?
+  updatedAt  DateTime @updatedAt
+
+  almacen  Almacen  @relation(fields: [almacenId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([almacenId, productoId])
+  @@index([almacenId])
+  @@index([productoId])
+  @@map("almacen_stocks")
+}
+
+model MovimientoStock {
+  id                String   @id @default(uuid())
+  tipo              String
+  productoId        String
+  almacenOrigenId   String?
+  almacenDestinoId  String?
+  cantidad          Int
+  cantidadAnterior  Int
+  cantidadPosterior Int
+  costoUnitario     Decimal? @db.Decimal(10, 2)
+  referenciaId      String?
+  referenciaTipo    String?
+  justificacion     String?
+  usuarioId         String
+  createdAt         DateTime @default(now())
+
+  producto       Producto @relation(fields: [productoId], references: [id])
+  almacenOrigen  Almacen? @relation("AlmacenOrigen", fields: [almacenOrigenId], references: [id])
+  almacenDestino Almacen? @relation("AlmacenDestino", fields: [almacenDestinoId], references: [id])
+  usuario        Usuario  @relation(fields: [usuarioId], references: [id])
+
+  @@index([productoId])
+  @@index([almacenOrigenId])
+  @@index([almacenDestinoId])
+  @@index([usuarioId])
+  @@index([tipo])
+  @@map("movimientos_stock")
+}
+
+model OrdenCompra {
+  id            String            @id @default(uuid())
+  numero        String            @unique
+  proveedorId   String
+  usuarioId     String
+  estado        EstadoOrdenCompra @default(BORRADOR)
+  subtotal      Decimal           @db.Decimal(10, 2)
+  igv           Decimal           @db.Decimal(10, 2)
+  total         Decimal           @db.Decimal(10, 2)
+  notas         String?
+  fechaEsperada DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  proveedor   Proveedor            @relation(fields: [proveedorId], references: [id])
+  usuario     Usuario              @relation(fields: [usuarioId], references: [id])
+  detalles    DetalleOrdenCompra[]
+  recepciones RecepcionCompra[]
+
+  @@index([proveedorId])
+  @@index([usuarioId])
+  @@map("ordenes_compra")
+}
+
+model DetalleOrdenCompra {
+  id               String  @id @default(uuid())
+  ordenCompraId    String
+  productoId       String
+  cantidad         Int
+  cantidadRecibida Int     @default(0)
+  precioUnitario   Decimal @db.Decimal(10, 2)
+  subtotal         Decimal @db.Decimal(10, 2)
+
+  ordenCompra OrdenCompra @relation(fields: [ordenCompraId], references: [id])
+  producto    Producto    @relation(fields: [productoId], references: [id])
+
+  @@index([ordenCompraId])
+  @@index([productoId])
+  @@map("detalles_orden_compra")
+}
+
+model RecepcionCompra {
+  id            String   @id @default(uuid())
+  ordenCompraId String
+  notas         String?
+  createdAt     DateTime @default(now())
+
+  ordenCompra OrdenCompra        @relation(fields: [ordenCompraId], references: [id])
+  detalles    DetalleRecepcion[]
+
+  @@index([ordenCompraId])
+  @@map("recepciones_compra")
+}
+
+model DetalleRecepcion {
+  id               String @id @default(uuid())
+  recepcionId      String
+  productoId       String
+  cantidadRecibida Int
+
+  recepcion RecepcionCompra @relation(fields: [recepcionId], references: [id])
+  producto  Producto        @relation(fields: [productoId], references: [id])
+
+  @@index([recepcionId])
+  @@index([productoId])
+  @@map("detalles_recepcion")
+}
+
+model Venta {
+  id             String      @id @default(uuid())
+  numero         String      @unique
+  clienteId      String
+  usuarioId      String
+  metodoPagoId   String?
+  referenciaPago String?
+  estado         EstadoVenta @default(COTIZACION)
+  // Eje fiscal SEPARADO del comercial (D7). Solo lo modifica el dominio
+  // Comprobantes v\u00eda eventos. Ver doc 01 \u00a71.4 y \u00a73.2.
+  estadoFacturacion EstadoFacturacionVenta @default(SIN_COMPROBANTE)
+  subtotal       Decimal     @db.Decimal(10, 2)
+  descuento      Decimal     @default(0) @db.Decimal(10, 2)
+  igv            Decimal     @db.Decimal(10, 2)
+  total          Decimal     @db.Decimal(10, 2)
+  notas          String?
+  validoHasta    DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  deletedAt      DateTime?
+
+  cliente        Cliente         @relation(fields: [clienteId], references: [id])
+  usuario        Usuario         @relation(fields: [usuarioId], references: [id])
+  metodoPago     MetodoPago?     @relation(fields: [metodoPagoId], references: [id])
+  detalles       DetalleVenta[]
+  comprobante    Comprobante?
+  garantias      Garantia[]
+  equipoClientes EquipoCliente[]
+
+  @@index([clienteId])
+  @@index([usuarioId])
+  @@index([metodoPagoId])
+  @@map("ventas")
+}
+
+model DetalleVenta {
+  id             String  @id @default(uuid())
+  ventaId        String
+  productoId     String
+  cantidad       Int
+  precioUnitario Decimal @db.Decimal(10, 2)
+  descuento      Decimal @default(0) @db.Decimal(10, 2)
+  subtotal       Decimal @db.Decimal(10, 2)
+  equipoSerie    String?
+
+  venta    Venta    @relation(fields: [ventaId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([ventaId])
+  @@index([productoId])
+  @@map("detalles_venta")
+}
+
+model Comprobante {
+  id                          String            @id @default(uuid())
+  // ventaId es opcional porque NC/ND no representan una venta nueva,
+  // sino que apuntan a otro Comprobante vía `comprobanteOrigenId`.
+  // Postgres permite múltiples NULLs en UNIQUE, así garantiza una sola
+  // factura/boleta por venta sin restringir las notas asociadas.
+  ventaId                     String?           @unique
+  tipo                        TipoDocumento
+  serie                       String
+  correlativo                 Int
+  numero                      String            @unique
+
+  // Snapshot fiscal inmutable (D8). Estructura definida en doc 01 \u00a74.1.
+  // Mientras se completa la migraci\u00f3n desde campos planos, se mantiene
+  // opcional; los nuevos comprobantes deben poblarlo al emitir.
+  snapshot                    Json?
+  ambiente                    AmbienteSunat     @default(BETA)
+
+  // Snapshot fiscal en forma plana (LEGACY pre-doc-01). Migrar a `snapshot`
+  // y vaciar en doc 07. No usar en c\u00f3digo nuevo.
+  clienteNombre               String
+  clienteDocTipo              String
+  clienteDocNum               String
+  clienteDireccion            String?
+  emisorRuc                   String?
+  emisorRazonSocial           String?
+  emisorNombreComercial       String?
+  emisorDireccionFiscal       String?
+  emisorUbigeoFiscal          String?
+  emisorCodigoEstablecimiento String?
+  subtotal                    Decimal           @db.Decimal(10, 2)
+  igv                         Decimal           @db.Decimal(10, 2)
+  total                       Decimal           @db.Decimal(10, 2)
+  estado                      EstadoComprobante @default(PENDIENTE_ENVIO)
+
+  // Notas de cr\u00e9dito / d\u00e9bito: auto-relaci\u00f3n al comprobante origen.
+  // Reemplaza modelos NotaCredito/NotaDebito (a unificar en doc 05).
+  comprobanteOrigenId         String?
+  comprobanteOrigen           Comprobante?      @relation("ComprobanteNotas", fields: [comprobanteOrigenId], references: [id])
+  notas                       Comprobante[]    @relation("ComprobanteNotas")
+  motivoNota                  String?           // Cat 09 (NC) o Cat 10 (ND)
+  motivoNotaDescripcion       String?
+  esNotaExcepcional           Boolean           @default(false)
+
+  // Trazabilidad SUNAT
+  operationId                 String?           @unique // idempotencia env\u00edo
+  ticketSunat                 String?
+  hashCpe                     String?           // digestValue del XML firmado
+  // Doc 06 \u00a74 \u2014 SHA-256 del XML firmado, base de la idempotencia entre intentos.
+  payloadHash                 String?
+  // Doc 06 \u00a75 \u2014 Plazo legal m\u00e1ximo para que SUNAT reciba el comprobante.
+  fechaVencimientoPlazo       DateTime?
+
+  // Storage documental (MinIO). El contenido NO va en BD (D3).
+  xmlStorageKey               String?
+  cdrStorageKey               String?
+  pdfStorageKey               String?
+  tokenConsulta               String?           @unique
+  tokenConsultaCreatedAt      DateTime?
+
+  // LEGACY: contenido en BD. Vaciar y migrar a MinIO en doc 07.
+  xmlContent                  String?
+  cdrContent                  String?
+  codigoSunat                 String?
+  mensajeSunat                String?
+  hashSunat                   String?
+  fechaEnvio                  DateTime?
+  // Doc 04 §5.2 — fecha en que SUNAT entregó la CDR. Ancla del plazo de 7
+  // días calendario para comunicación de baja (RA). Si es null, se cae al
+  // legacy `fechaEmision` con un warn en logs.
+  cdrRecibidaAt               DateTime?
+  intentosEnvio               Int               @default(0)
+
+  fechaEmision                DateTime          @default(now())
+  emitidoPor                  String?           // userId que dispar\u00f3 la emisi\u00f3n
+  observaciones               String?
+
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+
+  venta              Venta?                @relation(fields: [ventaId], references: [id])
+  detallesFiscales   ComprobanteDetalle[]
+  envioLogs          ComprobanteEnvioLog[]
+  portalAccessLogs   PortalAccessLog[]
+  emailLogs          ComprobanteEmailLog[]
+  comunicacionesBaja ComunicacionBaja[]
+
+  @@index([ventaId])
+  @@index([estado])
+  @@index([fechaEmision])
+  @@index([tipo, serie])
+  @@index([comprobanteOrigenId])
+  @@index([fechaVencimientoPlazo])
+  @@map("comprobantes")
+}
+
+model ComprobanteDetalle {
+  id                 String             @id @default(uuid())
+  comprobanteId      String
+  productoId         String?
+  item               Int
+  codigoInterno      String?
+  descripcion        String
+  unidadSunat        String
+  tipoFiscalProducto TipoFiscalProducto
+  tipoAfectacionIgv  TipoAfectacionIgv
+  cantidad           Decimal            @db.Decimal(12, 4)
+  valorUnitario      Decimal            @db.Decimal(12, 4)
+  precioUnitario     Decimal            @db.Decimal(12, 4)
+  descuento          Decimal            @default(0) @db.Decimal(10, 2)
+  baseImponible      Decimal            @db.Decimal(10, 2)
+  igv                Decimal            @db.Decimal(10, 2)
+  total              Decimal            @db.Decimal(10, 2)
+  metadataFiscal     Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+  producto    Producto?   @relation(fields: [productoId], references: [id])
+
+  @@unique([comprobanteId, item])
+  @@index([comprobanteId])
+  @@index([productoId])
+  @@index([tipoFiscalProducto])
+  @@index([tipoAfectacionIgv])
+  @@map("comprobante_detalles")
+}
+
+model ComprobanteEnvioLog {
+  id              String      @id @default(uuid())
+  comprobanteId   String
+  tipo            TipoEnvio?  // doc 01 §2.3 (opcional mientras coexiste con `tipoEvento` legacy)
+  intento         Int         @default(1)
+  fecha           DateTime    @default(now())
+
+  // Request/response técnico (resumen). El XML/CDR completo va a MinIO (D3).
+  requestPayload  Json?
+  responseCode    String?
+  responseDescription String?
+  cdrStorageKey   String?
+  errorMessage    String?
+  durationMs      Int?
+
+  // LEGACY pre-doc-01. Mantener por compatibilidad mientras se migra.
+  proveedor       String?
+  tipoEvento      String?
+  estado          String?
+  responsePayload Json?
+  codigoRespuesta String?
+  mensaje         String?
+
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+
+  @@index([comprobanteId, intento])
+  @@index([comprobanteId])
+  @@index([tipo])
+  @@map("comprobante_envio_logs")
+}
+
+model PortalAccessLog {
+  id            String   @id @default(uuid())
+  comprobanteId String
+  metodoAcceso  String
+  ipOrigen      String
+  userAgent     String?
+  accion        String
+  createdAt     DateTime @default(now())
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+
+  @@index([comprobanteId, createdAt])
+  @@index([ipOrigen, createdAt])
+  @@map("portal_access_logs")
+}
+
+model ComprobanteEmailLog {
+  id            String    @id @default(uuid())
+  comprobanteId String
+  destinatario  String
+  asunto        String
+  estado        String
+  errorMessage  String?
+  messageId     String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+
+  @@index([comprobanteId, createdAt])
+  @@index([destinatario])
+  @@index([estado])
+  @@map("comprobante_email_logs")
+}
+
+// Comunicación de Baja (RA-yyyymmdd-NNNN). Entidad de primera clase.
+// Detalles de uso en `comprobantes sunat/04-comunicacion-baja.md`.
+model ComunicacionBaja {
+  id                String                 @id @default(uuid())
+  comprobanteId     String
+  identificadorBaja String                 @unique // RA-yyyymmdd-NNNN
+  motivo            String
+  fechaGeneracion   DateTime               @default(now())
+  fechaReferencia   DateTime               // fecha del comprobante a anular
+  deadline          DateTime?              // plazo máximo para enviar el RA a SUNAT
+  estado            EstadoComunicacionBaja @default(PENDIENTE)
+  ticketSunat       String?
+  // Storage documental (MinIO/local). Doc 04 §6 + Doc 09.
+  xmlStorageKey     String?
+  cdrStorageKey     String?
+  // Metadatos CDR de la baja para auditoría / UI.
+  cdrRecibidaAt     DateTime?
+  cdrCodigo         String?
+  cdrMensaje        String?
+  errorMessage      String?
+  iniciadoPor       String                 // userId
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+
+  @@index([comprobanteId])
+  @@index([estado])
+  @@index([ticketSunat])
+  @@map("comunicaciones_baja")
+}
+
+model ConfigEmpresaFiscal {
+  id                      String         @id @default(uuid())
+  ruc                     String         @unique
+  razonSocial             String
+  nombreComercial         String?
+  direccionFiscal         String
+  ubigeoFiscal            String?
+  codigoEstablecimiento   String?
+  correoSee               String?
+  regimenTributario       String?
+  formatoImpresionDefault String?
+  pieImpresion            String?
+  ambienteDefault         AmbienteSunat  @default(BETA)
+  modalidadEnvioBoletas   ModalidadEnvioBoletas @default(INDIVIDUAL)
+  // Doc 10 §6 — overrides de reglas configurables (BLOQUEANTE/ADVERTENCIA).
+  // Si null, se aplican los defaults de @erp/shared REGLAS_CONFIGURABLES_DEFAULTS.
+  reglasValidacion        Json?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+
+  sedes        EmpresaSedeFiscal[]
+  series       SerieDocumento[]
+  seriesBaja   SerieDocumentoBaja[]
+  certificados CertificadoDigital[]
+
+  @@index([codigoEstablecimiento])
+  @@index([ambienteDefault])
+  @@map("config_empresa_fiscal")
+}
+
+model EmpresaSedeFiscal {
+  id                          String   @id @default(uuid())
+  configEmpresaFiscalId       String
+  nombre                      String
+  codigoEstablecimientoSunat  String
+  direccion                   String
+  ubigeo                      String
+  activo                      Boolean  @default(true)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+  deletedAt                   DateTime?
+
+  configEmpresaFiscal ConfigEmpresaFiscal @relation(fields: [configEmpresaFiscalId], references: [id])
+  series              SerieDocumento[]
+
+  @@unique([configEmpresaFiscalId, codigoEstablecimientoSunat])
+  @@index([configEmpresaFiscalId])
+  @@index([activo])
+  @@map("empresa_sedes_fiscales")
+}
+
+model SerieDocumento {
+  id                    String         @id @default(uuid())
+  configEmpresaFiscalId String?
+  sedeFiscalId          String?
+  tipo                  TipoDocumento
+  serie                 String
+  correlativoActual     Int            @default(0)
+  codigoEstablecimiento String         @default("0000")
+  ambiente              AmbienteSunat   @default(BETA)
+  descripcion           String?
+  activo                Boolean        @default(true)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  deletedAt             DateTime?
+
+  configEmpresaFiscal ConfigEmpresaFiscal? @relation(fields: [configEmpresaFiscalId], references: [id])
+  sedeFiscal          EmpresaSedeFiscal?   @relation(fields: [sedeFiscalId], references: [id])
+
+  @@unique([tipo, serie, codigoEstablecimiento, ambiente])
+  @@index([configEmpresaFiscalId])
+  @@index([sedeFiscalId])
+  @@index([tipo])
+  @@index([activo])
+  @@index([ambiente])
+  @@map("series_documento")
+}
+
+// Doc 04 §4.1 — Correlativo diario para Comunicación de Baja (RA-yyyymmdd-NNN).
+model SerieDocumentoBaja {
+  id                    String        @id @default(uuid())
+  configEmpresaFiscalId String
+  ambiente              AmbienteSunat @default(BETA)
+  fecha                 String        // YYYYMMDD
+  correlativoActual     Int           @default(0)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  configEmpresaFiscal ConfigEmpresaFiscal @relation(fields: [configEmpresaFiscalId], references: [id])
+
+  @@unique([configEmpresaFiscalId, ambiente, fecha])
+  @@index([configEmpresaFiscalId])
+  @@map("series_documento_baja")
+}
+
+model CertificadoDigital {
+  id                    String                       @id @default(uuid())
+  configEmpresaFiscalId String
+  nombre                String
+  storageProvider       CertificadoStorageProvider   @default(LOCAL_PRIVATE)
+  storageKey            String
+  passwordSecretRef     String?
+  fingerprintSha256     String?
+  serialNumber          String?
+  subject               String?
+  issuer                String?
+  validoDesde           DateTime?
+  validoHasta           DateTime?
+  activo                Boolean                      @default(false)
+  revokedAt             DateTime?
+  createdAt             DateTime                     @default(now())
+  updatedAt             DateTime                     @updatedAt
+  deletedAt             DateTime?
+
+  configEmpresaFiscal ConfigEmpresaFiscal @relation(fields: [configEmpresaFiscalId], references: [id])
+
+  @@index([configEmpresaFiscalId])
+  @@index([activo])
+  @@index([revokedAt])
+  @@map("certificados_digitales")
+}
+
+model FiscalSecret {
+  id             String    @id @default(uuid())
+  scope          String
+  name           String
+  encryptedValue String
+  iv             String
+  authTag        String
+  algorithm      String    @default("AES-256-GCM")
+  keyVersion     String    @default("v1")
+  rotatedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@unique([scope, name])
+  @@index([scope])
+  @@map("fiscal_secrets")
+}
+
+model ClienteValidacionSunat {
+  id                 String    @id @default(uuid())
+  clienteId          String?
+  tipoDocumentoSunat String
+  numeroDocumento    String
+  nombreNormalizado  String?
+  direccionFiscal    String?
+  estado             String
+  condicionDomicilio String?
+  ultimaValidacionAt DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  cliente Cliente? @relation(fields: [clienteId], references: [id])
+
+  @@unique([tipoDocumentoSunat, numeroDocumento])
+  @@index([clienteId])
+  @@index([estado])
+  @@map("cliente_validaciones_sunat")
+}
+
+// NotaCredito y NotaDebito legacy eliminados (doc 01 §arch + doc 08 §1).
+// El modelo unificado vive en `Comprobante` con `tipo = NOTA_CREDITO/NOTA_DEBITO`
+// y `comprobanteOrigenId` apuntando al CPE origen vía la self-rel "ComprobanteNotas".
+// Migración de datos: 20260506200000_unificar_comprobante_notas.
+
+// Doc 08 §3 — Feriados nacionales y declarados no laborables, usados para
+// calcular el plazo de 10 días hábiles de las NC excepcionales. Mantenible
+// manualmente por año (la lista de feriados PE no cambia frecuentemente
+// pero se decretan días no laborables específicos por DS).
+model FeriadoNacional {
+  id        String   @id @default(uuid())
+  fecha     DateTime @db.Date
+  nombre    String
+  anio      Int
+  esNoLaborable Boolean @default(false) // distingue feriado oficial vs DS no laborable
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fecha])
+  @@index([anio])
+  @@map("feriados_nacionales")
+}
+
+model Garantia {
+  id                String         @id @default(uuid())
+  equipoId          String
+  ventaId           String?
+  clienteIdOriginal String?
+  clienteDocTipo    String?
+  clienteDocNumero  String?
+  clienteNombre     String?
+  fechaInicio       DateTime
+  fechaFin          DateTime
+  cobertura         String
+  exclusiones       String?
+  contadorInicio    Int?
+  contadorMaxCopias Int?
+  estado            EstadoGarantia @default(ACTIVA)
+  codigoQR          String         @unique
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  equipo Equipo         @relation(fields: [equipoId], references: [id])
+  venta  Venta?         @relation(fields: [ventaId], references: [id])
+  casos  CasoGarantia[]
+
+  @@index([equipoId])
+  @@index([ventaId])
+  @@map("garantias")
+}
+
+model CasoGarantia {
+  id          String   @id @default(uuid())
+  garantiaId  String
+  ticketId    String?
+  descripcion String
+  resolucion  String?
+  aceptada    Boolean?
+  motivo      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  garantia Garantia @relation(fields: [garantiaId], references: [id])
+  ticket   Ticket?  @relation(fields: [ticketId], references: [id])
+
+  @@index([garantiaId])
+  @@index([ticketId])
+  @@map("casos_garantia")
+}
+
+model Ticket {
+  id             String          @id @default(uuid())
+  codigo         String          @unique
+  clienteId      String
+  equipoId       String?
+  tecnicoId      String?
+  creadoPorId    String
+  titulo         String
+  descripcion    String
+  fallaReportada String?
+  prioridad      PrioridadTicket @default(MEDIA)
+  estado         EstadoTicket    @default(ABIERTO)
+  tipoServicio   TipoServicio    @default(TALLER)
+  diagnostico    String?
+  solucion       String?
+  montoManoObra  Decimal?        @db.Decimal(10, 2)
+  montoRepuestos Decimal?        @db.Decimal(10, 2)
+  montoTotal     Decimal?        @db.Decimal(10, 2)
+  fechaRecepcion DateTime        @default(now())
+  fechaPromesa   DateTime?
+  fechaCierre    DateTime?
+  firmaCliente   String?
+  firmaFecha     DateTime?
+  firmaGeoLat    Float?
+  firmaGeoLng    Float?
+  notas          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  deletedAt      DateTime?
+
+  cliente       Cliente           @relation(fields: [clienteId], references: [id])
+  equipo        Equipo?           @relation(fields: [equipoId], references: [id])
+  tecnico       Usuario?          @relation("TecnicoTickets", fields: [tecnicoId], references: [id])
+  creadoPor     Usuario           @relation("CreadorTickets", fields: [creadoPorId], references: [id])
+  detalles      DetalleTicket[]
+  adjuntos      AdjuntoTicket[]
+  historial     HistorialTicket[]
+  casosGarantia CasoGarantia[]
+
+  @@index([clienteId])
+  @@index([equipoId])
+  @@index([tecnicoId])
+  @@index([creadoPorId])
+  @@index([estado])
+  @@map("tickets")
+}
+
+model DetalleTicket {
+  id               String   @id @default(uuid())
+  ticketId         String
+  productoId       String
+  cantidad         Int
+  precioUnitario   Decimal  @db.Decimal(10, 2)
+  cubiertoGarantia Boolean  @default(false)
+  notas            String?
+  createdAt        DateTime @default(now())
+
+  ticket   Ticket   @relation(fields: [ticketId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@index([ticketId])
+  @@index([productoId])
+  @@map("detalles_ticket")
+}
+
+model AdjuntoTicket {
+  id        String   @id @default(uuid())
+  ticketId  String
+  url       String
+  nombre    String
+  tipo      String
+  tamano    Int?
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id])
+
+  @@index([ticketId])
+  @@map("adjuntos_ticket")
+}
+
+model HistorialTicket {
+  id           String   @id @default(uuid())
+  ticketId     String
+  usuarioId    String?
+  campo        String
+  valorAntes   String?
+  valorDespues String?
+  notas        String?
+  createdAt    DateTime @default(now())
+
+  ticket  Ticket   @relation(fields: [ticketId], references: [id])
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([ticketId])
+  @@index([usuarioId])
+  @@map("historial_tickets")
+}
+
+model ConfigEmpresa {
+  id                     String   @id
+  razonSocial            String
+  ruc                    String
+  direccion              String
+  telefono               String?
+  email                  String?
+  logo                   String?
+  nombreComercial        String?
+  slogan                 String?
+  descripcionCorta       String?
+  descripcionSeo         String?
+  rubro                  String?
+  website                String?
+  telefonoVentas         String?
+  telefonoSoporte        String?
+  whatsapp               String?
+  emailVentas            String?
+  emailSoporte           String?
+  logoDark               String?
+  favicon                String?
+  colorPrimario          String?
+  colorSecundario        String?
+  heroTitulo             String?
+  heroSubtitulo          String?
+  catalogoDescripcion    String?
+  contactoDescripcion    String?
+  garantiaDescripcion    String?
+  ticketDescripcion      String?
+  pwaDescripcion         String?
+  horarioAtencion        String?
+  googleMapsEmbedUrl     String?
+  latitud                Float?
+  longitud               Float?
+  serieFactura           String   @default("F001")
+  serieBoleta            String   @default("B001")
+  serieNotaCredito       String   @default("FC01")
+  serieNotaDebito        String   @default("FD01")
+  correlativoFactura     Int      @default(0)
+  correlativoBoleta      Int      @default(0)
+  correlativoNotaCredito Int      @default(0)
+  correlativoNotaDebito  Int      @default(0)
+  porcentajeIGV          Decimal  @default(18.00) @db.Decimal(4, 2)
+  updatedAt              DateTime @updatedAt
+
+  @@map("config_empresa")
+}
+
+model Auditoria {
+  id           String   @id @default(uuid())
+  usuarioId    String?
+  accion       String
+  modelo       String
+  modeloId     String?
+  datosAntes   Json?
+  datosDespues Json?
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([modelo])
+  @@map("auditoria")
+}
+
+model MetodoPago {
+  id        String   @id @default(uuid())
+  codigo    String   @unique
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ventas          Venta[]
+  movimientosCaja MovimientoCaja[]
+
+  @@map("metodos_pago")
+}
+
+model TipoMovimientoConfig {
+  id                    String                   @id @default(uuid())
+  codigo                String                   @unique
+  nombre                String
+  activo                Boolean                  @default(true)
+  orden                 Int                      @default(1)
+  comportamiento        MovimientoComportamiento
+  requiereJustificacion Boolean                  @default(false)
+  requiereEvidencia     Boolean                  @default(false)
+  disponibleTecnico     Boolean                  @default(false)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  @@map("tipos_movimiento_config")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  usuarioId String
+  token     String
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+
+  @@index([usuarioId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+model AlertaStock {
+  id            String    @id @default(uuid())
+  productoId    String
+  almacenId     String
+  stockActual   Int
+  stockMinimo   Int
+  resuelta      Boolean   @default(false)
+  resueltaPorId String?
+  resolvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  producto    Producto @relation(fields: [productoId], references: [id])
+  almacen     Almacen  @relation(fields: [almacenId], references: [id])
+  resueltaPor Usuario? @relation("ResueltaPor", fields: [resueltaPorId], references: [id])
+
+  @@index([productoId])
+  @@index([almacenId])
+  @@index([resueltaPorId])
+  @@map("alertas_stock")
+}
+
+model Adjunto {
+  id        String   @id @default(uuid())
+  entidad   String
+  entidadId String
+  url       String
+  nombre    String
+  tipo      String
+  tamano    Int?
+  createdAt DateTime @default(now())
+
+  @@index([entidad, entidadId])
+  @@map("adjuntos")
+}
+
+model Caja {
+  id          String   @id @default(uuid())
+  nombre      String   @unique
+  descripcion String?
+  activa      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  aperturas AperturaCaja[]
+
+  @@map("cajas")
+}
+
+model AperturaCaja {
+  id                String     @id @default(uuid())
+  cajaId            String
+  usuarioAperturaId String
+  usuarioCierreId   String?
+  estado            EstadoCaja @default(ABIERTA)
+  montoInicial      Decimal    @db.Decimal(12, 2)
+  montoEsperado     Decimal?   @db.Decimal(12, 2)
+  montoContado      Decimal?   @db.Decimal(12, 2)
+  diferencia        Decimal?   @db.Decimal(12, 2)
+  notasApertura     String?
+  notasCierre       String?
+  abiertaEn         DateTime   @default(now())
+  cerradaEn         DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  caja            Caja             @relation(fields: [cajaId], references: [id])
+  usuarioApertura Usuario          @relation("AperturaUsuario", fields: [usuarioAperturaId], references: [id])
+  usuarioCierre   Usuario?         @relation("CierreUsuario", fields: [usuarioCierreId], references: [id])
+  movimientos     MovimientoCaja[]
+  arqueos         ArqueoCaja[]
+
+  @@index([cajaId])
+  @@index([usuarioAperturaId])
+  @@index([usuarioCierreId])
+  @@index([estado])
+  @@map("aperturas_caja")
+}
+
+model MovimientoCaja {
+  id             String             @id @default(uuid())
+  aperturaId     String
+  tipo           TipoMovimientoCaja
+  monto          Decimal            @db.Decimal(12, 2)
+  metodoPagoId   String?
+  concepto       String
+  referenciaTipo String?
+  referenciaId   String?
+  usuarioId      String
+  createdAt      DateTime           @default(now())
+
+  apertura   AperturaCaja @relation(fields: [aperturaId], references: [id])
+  metodoPago MetodoPago?  @relation(fields: [metodoPagoId], references: [id])
+  usuario    Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@index([aperturaId])
+  @@index([metodoPagoId])
+  @@index([usuarioId])
+  @@index([referenciaTipo, referenciaId])
+  @@map("movimientos_caja")
+}
+
+model ArqueoCaja {
+  id            String   @id @default(uuid())
+  aperturaId    String
+  usuarioId     String
+  montoEsperado Decimal  @db.Decimal(12, 2)
+  montoContado  Decimal  @db.Decimal(12, 2)
+  diferencia    Decimal  @db.Decimal(12, 2)
+  notas         String?
+  createdAt     DateTime @default(now())
+
+  apertura AperturaCaja @relation(fields: [aperturaId], references: [id])
+  usuario  Usuario      @relation(fields: [usuarioId], references: [id])
+
+  @@index([aperturaId])
+  @@index([usuarioId])
+  @@map("arqueos_caja")
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  Solicitudes públicas (landing → gestión interna)
+// ─────────────────────────────────────────────────────────────────────
+
+enum NecesidadSolicitud {
+  VENTA
+  ALQUILER
+  SOPORTE
+  CONSUMIBLES
+  OTRO
+}
+
+enum EstadoSolicitud {
+  NUEVA
+  EN_PROCESO
+  ATENDIDA
+  DESCARTADA
+}
+
+/// Solicitud llegada desde el formulario público del landing. La crea
+/// cualquier visitante sin autenticación (rate-limited) y la gestiona
+/// el equipo ADMIN/ENCARGADO desde el módulo /solicitudes del ERP.
+model SolicitudPublica {
+  id            String             @id @default(uuid())
+  empresa       String
+  contacto      String
+  necesidad     NecesidadSolicitud
+  detalle       String?
+  origen        String             @default("web-landing")
+  ip            String?
+  userAgent     String?
+
+  estado        EstadoSolicitud    @default(NUEVA)
+  asignadoAId   String?
+  asignadoA     Usuario?           @relation("SolicitudAsignada", fields: [asignadoAId], references: [id])
+  notasInternas String?
+
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  atendidaAt    DateTime?
+
+  @@index([estado])
+  @@index([asignadoAId])
+  @@index([createdAt(sort: Desc)])
+  @@map("solicitudes_publicas")
+}
