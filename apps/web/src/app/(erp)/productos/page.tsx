@@ -53,19 +53,16 @@ import { EtiquetaProductoPdfDocument } from "@/components/products/etiqueta-prod
 import { ProductoThumbnail } from "@/components/products/producto-thumbnail";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import {
-  fetchFirstAssetAsDataUrl,
+  fetchAssetAsDataUrl,
   generateBarcodeDataUrl,
   generateQrDataUrl,
   resolveProductCodeValues,
 } from "@/lib/product-code-utils";
-import {
-  getPrimaryProductImage,
-  getProductImageCandidates,
-} from "@/lib/product-images";
 import { usePublicBranding } from "@/hooks/use-public-branding";
 import {
   TIPO_LABELS,
   formatCurrency,
+  formatDecimal,
   formatPercent,
   getProductoMargenPct,
   getProductoRuleLabels,
@@ -349,7 +346,7 @@ export default function ProductosPage() {
         const [barcodeDataUrl, qrDataUrl, imageDataUrl] = await Promise.all([
           generateBarcodeDataUrl(barcodeValue),
           qrValue ? generateQrDataUrl(qrValue) : Promise.resolve(null),
-          fetchFirstAssetAsDataUrl(getProductImageCandidates(producto)),
+          fetchAssetAsDataUrl(producto.imagen ?? null),
         ]);
         const blob = await pdf(
           <EtiquetaProductoPdfDocument
@@ -410,7 +407,7 @@ export default function ProductosPage() {
         enableSorting: false,
         cell: ({ row }) => (
           <ProductoThumbnail
-            src={getPrimaryProductImage(row.original)}
+            src={row.original.imagen}
             alt={row.original.nombre}
             fallback={row.original.sku}
             size={36}
