@@ -55,6 +55,20 @@ pnpm dev
 
 Antes de ejecutar `pnpm dev`, completa en `.env` los secretos vacíos que correspondan a tu entorno: `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_INTERNAL_KEY`, credenciales SMTP, claves de IA y credenciales SUNAT si vas a probar emisión fiscal real.
 
+### Base de datos y Prisma
+
+En una instalación nueva, la estructura de la base de datos se crea desde las migraciones de Prisma con `pnpm db:migrate`. Esto deja las tablas, columnas, claves e índices alineados con `apps/api/prisma/schema.prisma`.
+
+Comandos útiles:
+
+- `pnpm db:status`: revisa si la base está alineada con las migraciones.
+- `pnpm db:migrate`: aplica migraciones en desarrollo y regenera el estado local.
+- `pnpm db:deploy`: aplica migraciones pendientes en un entorno ya preparado.
+- `pnpm db:seed`: carga datos iniciales.
+- `pnpm db:reset`: borra y reconstruye la base de datos de desarrollo desde cero. Úsalo solo si puedes perder los datos locales o después de hacer backup.
+
+Si ya existe una base antigua y Prisma detecta diferencias por columnas, claves o cambios hechos durante desarrollo, no edites tablas a mano. Primero ejecuta `pnpm db:status`; si es una base de desarrollo descartable, usa `pnpm db:reset` y luego `pnpm db:seed` si necesitas datos iniciales. Si contiene información real, respáldala y crea una migración controlada antes de aplicar cambios.
+
 Servicios locales:
 
 - Web: `http://localhost:3000`
@@ -180,7 +194,10 @@ Desde la raíz del repositorio:
 - Instalar dependencias: `pnpm install`
 - Preparar entorno Python de AI: `pnpm setup:ai`
 - Generar cliente Prisma: `pnpm prisma:generate`
+- Revisar estado de migraciones: `pnpm db:status`
 - Ejecutar migraciones en desarrollo: `pnpm db:migrate`
+- Aplicar migraciones preparadas: `pnpm db:deploy`
+- Reconstruir base local de desarrollo: `pnpm db:reset`
 - Ejecutar seed: `pnpm db:seed`
 - Levantar todo: `pnpm dev`
 - Levantar web: `pnpm dev:web`
