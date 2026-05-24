@@ -244,3 +244,32 @@ export function getCanonicalUbigeoSelection(selection: UbigeoSelection) {
     ...(distrito ? { distrito } : {}),
   }
 }
+
+export function findUbigeoByCode(code?: string) {
+  if (!code || code.length !== 6) {
+    return null
+  }
+
+  const dist = distritos.find((d) => d.code === code)
+  if (!dist) {
+    return null
+  }
+
+  const depto = departamentos.find((d) => d.id === dist.departmentId)
+  const prov = provincias.find((p) => p.id === dist.provinceId)
+
+  return {
+    departamento: depto?.name ?? '',
+    provincia: prov?.name ?? '',
+    distrito: dist.name,
+    code: dist.code,
+  }
+}
+
+export function findUbigeoCodeBySelection(selection: UbigeoSelection) {
+  return findDistritoByName(
+    selection.departamento,
+    selection.provincia,
+    selection.distrito,
+  )?.code ?? null
+}

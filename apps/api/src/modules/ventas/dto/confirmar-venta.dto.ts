@@ -1,4 +1,4 @@
-import { IsUUID, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsUUID, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ConfirmarVentaDto {
@@ -23,4 +23,12 @@ export class ConfirmarVentaDto {
   @ApiProperty({ description: 'ID del almacén de donde se descontará stock' })
   @IsUUID()
   almacenId: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Marca la venta como ticket interno no fiscal. Solo permitido para cliente genérico y total hasta S/ 5.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  ventaInterna?: boolean;
 }

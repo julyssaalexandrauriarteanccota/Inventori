@@ -11,24 +11,36 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 export function ThemeToggle() {
   const { setTheme } = useTheme()
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-full border border-sidebar-border/85 bg-sidebar-accent/78 text-sidebar-primary hover:bg-sidebar-accent"
-          title="Cambiar tema"
-        >
-          <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-          <span className="sr-only">Cambiar tema</span>
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-9 rounded-full border border-sidebar-border/85 bg-sidebar-accent/78 text-sidebar-primary transition-all duration-200 hover:bg-sidebar-accent active:scale-95"
+              aria-label="Cambiar tema"
+            >
+              <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all duration-500 ease-out dark:-rotate-90 dark:scale-0" />
+              <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all duration-500 ease-out dark:rotate-0 dark:scale-100" />
+              <span className="sr-only">Cambiar tema</span>
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end">
+          Cambiar tema
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent
         align="end"
         className="border-sidebar-border/70 bg-sidebar text-sidebar-foreground [&_[data-slot=dropdown-menu-item]]:cursor-pointer [&_[data-slot=dropdown-menu-item]]:focus:bg-sidebar-accent [&_[data-slot=dropdown-menu-item]]:focus:text-sidebar-foreground"
@@ -49,3 +61,4 @@ export function ThemeToggle() {
     </DropdownMenu>
   )
 }
+

@@ -109,6 +109,7 @@ export class UbicacionesService {
 
   async buscar(dto: BuscarUbicacionDto): Promise<LocationSearchResult[]> {
     try {
+      const requestedLimit = dto.limit ?? 5;
       const { data } = await firstValueFrom(
         this.http.get<NominatimSearchResponse[]>(`${this.baseUrl}/search`, {
           headers: this.headers,
@@ -117,12 +118,23 @@ export class UbicacionesService {
             format: 'jsonv2',
             addressdetails: 1,
             countrycodes: 'pe',
-            limit: dto.limit ?? 5,
+            limit: Math.max(requestedLimit * 3, 15), // Request more to account for duplicates
           },
         }),
       );
 
-      return data.map((result) => this.mapResult(result));
+      const mapped = data.map((result) => this.mapResult(result));
+      const seen = new Set<string>();
+      return mapped
+        .filter((item) => {
+          const key = item.direccion.trim().toLowerCase();
+          if (seen.has(key)) {
+            return false;
+          }
+          seen.add(key);
+          return true;
+        })
+        .slice(0, requestedLimit);
     } catch (err) {
       this.handleError(err);
     }

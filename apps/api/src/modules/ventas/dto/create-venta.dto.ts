@@ -23,12 +23,12 @@ export class DetalleVentaDto {
   @Min(1)
   cantidad: number;
 
-  @ApiProperty({ description: 'Precio unitario sin IGV' })
+  @ApiProperty({ description: 'Precio unitario de venta con IGV incluido' })
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   precioUnitario: number;
 
-  @ApiPropertyOptional({ description: 'Descuento por línea' })
+  @ApiPropertyOptional({ description: 'Descuento por línea con IGV incluido' })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
+  AlertCircle,
   Building2,
   CheckCircle2,
   ChevronLeft,
@@ -13,6 +14,7 @@ import {
   Eye,
   LayoutGrid,
   List,
+  Loader2,
   Mail,
   MapPin,
   MoreHorizontal,
@@ -35,10 +37,6 @@ import {
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
-import {
-  readStoredClientesAutoRefreshPreference,
-  writeStoredClientesAutoRefreshPreference,
-} from "@/lib/clientes-auto-refresh";
 import { useAuth } from "@/hooks/use-auth";
 import {
   useCliente,
@@ -48,8 +46,8 @@ import {
   useUpdateCliente,
 } from "@/hooks/use-clientes";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -97,14 +95,7 @@ const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const VIEW_MODE_STORAGE_KEY = "erp:clientes:view-mode";
 
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-];
-
 const CLIENTES_REFRESH_TOAST_ID = "clientes-refresh";
-const CLIENTES_AUTO_REFRESH_TOAST_ID = "clientes-auto-refresh";
 
 function hasNuevoParam() {
   if (typeof window === "undefined") return false;
@@ -117,7 +108,9 @@ function getInitialViewMode() {
   return stored === "grid" ? "grid" : "list";
 }
 
-function isSystemGenericClient(c: Pick<ClienteListItem, "esGenerico" | "dni">): boolean {
+function isSystemGenericClient(
+  c: Pick<ClienteListItem, "esGenerico" | "dni">,
+): boolean {
   return c.esGenerico === true || c.dni === "00000000";
 }
 
@@ -143,9 +136,11 @@ function getDocumento(c: ClienteListItem): string {
 }
 
 function getUbicacion(c: ClienteListItem): string {
-  return [c.distrito, c.provincia, c.departamento].filter(Boolean).join(" / ") ||
+  return (
+    [c.distrito, c.provincia, c.departamento].filter(Boolean).join(" / ") ||
     c.direccion ||
-    "—";
+    "—"
+  );
 }
 
 function getTelefono(c: ClienteListItem): string {
@@ -183,12 +178,12 @@ function getDocumentoFiscalStatus(c: ClienteListItem) {
     };
   }
 
-  if (validation.estado === "VALIDO") {
+  if (validation.estado === "VALIDO" || validation.estado === "ACTIVO") {
     return {
       label: "Validado",
       tone: "success" as const,
       description: validation.condicionDomicilio
-        ? `Condición: ${validation.condicionDomicilio}`
+        ? `Estado: ${validation.estado} · Condición: ${validation.condicionDomicilio}`
         : "Documento válido",
     };
   }
@@ -270,6 +265,40 @@ function getGoogleMapsUrl(
   return `https://www.google.com/maps?q=${c.latitud},${c.longitud}`;
 }
 
+// ── Highlighted Text helper ──────────────────────────────────────────────────
+
+interface HighlightedTextProps {
+  text: string;
+  search: string;
+}
+
+function HighlightedText({ text, search }: HighlightedTextProps) {
+  if (!search || !search.trim()) {
+    return <>{text}</>;
+  }
+
+  const escapedSearch = search.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const regex = new RegExp(`(${escapedSearch})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark
+            key={i}
+            className="rounded bg-[var(--accent)]/18 px-0.5 font-semibold text-foreground dark:bg-[var(--accent)]/24"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
 // ── Grid card ──────────────────────────────────────────────────────────────
 
 interface ClienteCardProps {
@@ -282,6 +311,7 @@ interface ClienteCardProps {
   onEdit: () => void;
   onDelete: () => void;
   animationDelay?: number;
+  search?: string;
 }
 
 function ClienteCard({
@@ -294,6 +324,7 @@ function ClienteCard({
   onEdit,
   onDelete,
   animationDelay,
+  search = "",
 }: ClienteCardProps) {
   const isEmpresa = c.tipo === TipoCliente.EMPRESA;
   const isGeneric = isSystemGenericClient(c);
@@ -302,9 +333,9 @@ function ClienteCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3.5 rounded-xl border bg-card p-4 shadow-sm transition-all duration-150 animate-fade-up",
+        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up",
         isSelected
-          ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/20"
+          ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md ring-2 ring-[var(--accent)]/20"
           : "border-border hover:border-ring/50 hover:shadow-md",
         onToggleSelect && "cursor-pointer",
       )}
@@ -339,8 +370,9 @@ function ClienteCard({
             e.stopPropagation();
             onDelete();
           }}
-          className="absolute right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
+          className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-[var(--semantic-danger-soft)] hover:text-[var(--semantic-danger)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 active:scale-95 active:duration-150"
           title="Eliminar"
+          aria-label="Eliminar cliente"
         >
           <Trash2 className="size-3.5" />
         </button>
@@ -357,8 +389,8 @@ function ClienteCard({
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm",
             isEmpresa
-              ? "bg-linear-to-br from-blue-500 to-blue-700 dark:from-blue-700 dark:to-blue-900 text-white"
-              : "bg-linear-to-br from-violet-500 to-violet-700 dark:from-violet-700 dark:to-violet-900 text-white",
+              ? "bg-[var(--accent)] text-[var(--accent-text)]"
+              : "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/20",
           )}
         >
           {getInitials(c)}
@@ -368,10 +400,10 @@ function ClienteCard({
             className="truncate font-semibold text-sm leading-tight"
             title={getDisplayName(c)}
           >
-            {getDisplayName(c)}
+            <HighlightedText text={getDisplayName(c)} search={search} />
           </p>
           <p className="truncate text-xs text-muted-foreground mt-0.5 font-mono">
-            {getDocumento(c)}
+            <HighlightedText text={getDocumento(c)} search={search} />
           </p>
         </div>
       </div>
@@ -395,7 +427,9 @@ function ClienteCard({
         {c.email ? (
           <div className="flex items-center gap-2 min-w-0">
             <Mail className="size-3 shrink-0 text-muted-foreground/60" />
-            <span className="truncate">{c.email}</span>
+            <span className="truncate">
+              <HighlightedText text={c.email} search={search} />
+            </span>
           </div>
         ) : (
           <div className="flex items-center gap-2 opacity-40">
@@ -406,7 +440,9 @@ function ClienteCard({
         {c.celular && (
           <div className="flex items-center gap-2">
             <Phone className="size-3 shrink-0 text-muted-foreground/60" />
-            <span>{c.celular}</span>
+            <span>
+              <HighlightedText text={c.celular} search={search} />
+            </span>
             <span className="text-[10px] text-muted-foreground/50 ml-auto">
               cel
             </span>
@@ -415,7 +451,9 @@ function ClienteCard({
         {c.telefono && c.telefono !== c.celular && (
           <div className="flex items-center gap-2">
             <Phone className="size-3 shrink-0 text-muted-foreground/60" />
-            <span>{c.telefono}</span>
+            <span>
+              <HighlightedText text={c.telefono} search={search} />
+            </span>
             <span className="text-[10px] text-muted-foreground/50 ml-auto">
               tel
             </span>
@@ -434,7 +472,7 @@ function ClienteCard({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+          className="flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-[var(--accent)] hover:text-[var(--accent-text)] hover:border-[var(--accent)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
           onClick={(e) => {
             e.stopPropagation();
             onView();
@@ -446,7 +484,7 @@ function ClienteCard({
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-8 gap-1.5 rounded-lg text-xs"
+            className="flex-1 h-8 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(e) => {
               e.stopPropagation();
               onEdit();
@@ -478,9 +516,9 @@ function FloatingSelectionBar({
   onClear,
 }: FloatingBarProps) {
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-200">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-300 ease-[cubic-bezier(0.25,1.5,0.5,1)]">
       <div className="flex items-center gap-2 px-2 py-0.5">
-        <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+        <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] text-xs font-bold">
           {count}
         </div>
         <span className="text-sm font-medium whitespace-nowrap">
@@ -491,7 +529,7 @@ function FloatingSelectionBar({
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 gap-1.5 text-xs rounded-xl"
+        className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
         onClick={onExport}
       >
         <Download className="size-3.5" /> Exportar
@@ -499,7 +537,7 @@ function FloatingSelectionBar({
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 gap-1.5 text-xs rounded-xl"
+        className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
         onClick={onPrint}
       >
         <Printer className="size-3.5" /> Imprimir
@@ -507,7 +545,7 @@ function FloatingSelectionBar({
       <Button
         variant="ghost"
         size="sm"
-        className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl"
+        className="h-8 gap-1.5 text-xs text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
         onClick={onDelete}
       >
         <Trash2 className="size-3.5" /> Eliminar
@@ -516,8 +554,9 @@ function FloatingSelectionBar({
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 rounded-xl text-muted-foreground hover:text-foreground"
+        className="size-8 rounded-xl text-muted-foreground hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
         onClick={onClear}
+        aria-label="Limpiar selección"
       >
         <X className="size-4" />
       </Button>
@@ -596,8 +635,8 @@ export default function ClientesPage() {
     (tipoFilter === "all" || tipoFilter === TipoCliente.NATURAL) &&
     (estadoFilter === "all" || estadoFilter === "activos") &&
     (!normalizedSearch ||
-      ["público", "publico", "general", "00000000", "sistema"].some(
-        (value) => value.includes(normalizedSearch),
+      ["público", "publico", "general", "00000000", "sistema"].some((value) =>
+        value.includes(normalizedSearch),
       ));
   const visibleTotal = Math.max(
     (data?.meta?.total ?? 0) -
@@ -621,54 +660,13 @@ export default function ClientesPage() {
   const createMutation = useCreateCliente();
   const updateMutation = useUpdateCliente(editClientId || "");
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", {
-      id: CLIENTES_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    void refetch();
-    showRefreshToast();
-  }, [refetch, showRefreshToast]);
-
-  const handleAutoRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
-  const {
-    enabled: autoRefresh,
-    interval: refreshInterval,
-    setEnabled: setAutoRefresh,
-    setInterval: setRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredClientesAutoRefreshPreference,
-    writePreference: writeStoredClientesAutoRefreshPreference,
-    onRefresh: handleAutoRefresh,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "clientes",
+    toastLabel: "Clientes",
+    manualToastMessage: "Lista actualizada",
+    toastId: CLIENTES_REFRESH_TOAST_ID,
   });
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const message = enabled
-        ? `Auto-refresh activado cada ${REFRESH_INTERVALS.find((interval) => interval.value === refreshInterval)?.label ?? "intervalo actual"}`
-        : "Auto-refresh desactivado";
-
-      if (enabled) {
-        toast.success(message, {
-          id: CLIENTES_AUTO_REFRESH_TOAST_ID,
-          duration: 1800,
-        });
-        return;
-      }
-
-      toast.info(message, {
-        id: CLIENTES_AUTO_REFRESH_TOAST_ID,
-        duration: 1800,
-      });
-    },
-    [refreshInterval],
-  );
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const handleCreate = useCallback(
     (formData: ClienteFormPayload) => {
@@ -840,13 +838,13 @@ export default function ClientesPage() {
           return (
             <div className="flex flex-col min-w-0">
               <span
-                className="block max-w-55 truncate font-medium text-sm"
+                className="block max-w-55 truncate font-semibold text-sm text-foreground"
                 title={text}
               >
-                {text}
+                <HighlightedText text={text} search={search} />
               </span>
               {row.original.esGenerico ? (
-                <span className="text-xs text-amber-600 dark:text-amber-300">
+                <span className="text-xs text-[var(--semantic-warning)]">
                   Registro del sistema
                 </span>
               ) : null}
@@ -857,11 +855,14 @@ export default function ClientesPage() {
       {
         id: "documento",
         header: "Documento",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-            {getDocumento(row.original)}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const doc = getDocumento(row.original);
+          return (
+            <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+              <HighlightedText text={doc} search={search} />
+            </span>
+          );
+        },
       },
       {
         accessorKey: "email",
@@ -870,7 +871,7 @@ export default function ClientesPage() {
           const email = row.original.email;
           return email ? (
             <span className="block max-w-50 truncate text-sm" title={email}>
-              {email}
+              <HighlightedText text={email} search={search} />
             </span>
           ) : (
             <span className="text-muted-foreground/50 text-xs">—</span>
@@ -883,7 +884,9 @@ export default function ClientesPage() {
         cell: ({ row }) => {
           const telefono = getTelefono(row.original);
           return telefono ? (
-            <span className="whitespace-nowrap text-sm">{telefono}</span>
+            <span className="whitespace-nowrap text-sm text-foreground font-medium">
+              <HighlightedText text={telefono} search={search} />
+            </span>
           ) : (
             <span className="text-muted-foreground/50 text-xs">—</span>
           );
@@ -947,7 +950,7 @@ export default function ClientesPage() {
                   type="button"
                   variant="outline"
                   size="icon-sm"
-                  className="rounded-lg"
+                  className="rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
                   title="Abrir ubicación en Google Maps"
                   onClick={(event) => {
                     event.preventDefault();
@@ -966,7 +969,7 @@ export default function ClientesPage() {
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
@@ -984,7 +987,7 @@ export default function ClientesPage() {
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted"
+                      className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                     >
                       <MoreHorizontal className="size-4" />
                       <span className="sr-only">Acciones</span>
@@ -1022,7 +1025,7 @@ export default function ClientesPage() {
         },
       },
     ],
-    [canEdit, canDelete],
+    [canEdit, canDelete, search],
   );
 
   const handleSearchChange = useCallback((value: string) => {
@@ -1082,25 +1085,14 @@ export default function ClientesPage() {
   const activeFilterCount = estadoFilter !== "all" ? 1 : 0;
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
+    <div className="flex flex-col gap-6 w-full min-w-0 flex-1 min-h-0">
       <PageHeader
         title="Clientes"
         description="Gestiona la información de tus clientes"
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefresh}
-              interval={refreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="auto-refresh-clientes"
-              onEnabledChange={(enabled) => {
-                setAutoRefresh(enabled);
-                showAutoRefreshToast(enabled);
-              }}
-              onIntervalChange={setRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               items={[
                 {
@@ -1118,7 +1110,7 @@ export default function ClientesPage() {
             {canEdit ? (
               <Button
                 onClick={() => setOpenCreate(true)}
-                className="erp-page-primary-cta rounded-xl"
+                className="erp-page-primary-cta rounded-xl gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">Nuevo cliente</span>
@@ -1130,7 +1122,7 @@ export default function ClientesPage() {
       />
 
       {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total clientes"
           value={statsTotal && statsGeneric ? totalClientes : undefined}
@@ -1141,21 +1133,21 @@ export default function ClientesPage() {
           label="Empresas"
           value={statsEmpresa?.meta?.total}
           icon={Building2}
-          color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+          color="bg-[var(--semantic-info-soft)] text-[var(--semantic-info)]"
           index={1}
         />
         <StatCard
           label="Personas"
           value={statsNatural && statsGeneric ? totalNaturales : undefined}
           icon={User}
-          color="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
+          color="bg-[var(--accent-soft)] text-[var(--accent)]"
           index={2}
         />
         <StatCard
           label="Activos"
           value={statsActivo && statsGeneric ? totalActivos : undefined}
           icon={CheckCircle2}
-          color="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+          color="bg-[var(--accent-soft)] text-[var(--accent)]"
           index={3}
         />
       </div>
@@ -1168,6 +1160,7 @@ export default function ClientesPage() {
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por nombre, RUC, DNI…"
+            className="sm:w-80 lg:w-96"
             inputClassName="border-border/60 bg-background/40 hover:bg-muted/60"
           />
 
@@ -1177,21 +1170,21 @@ export default function ClientesPage() {
               <TabsList className="h-9 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
                 <TabsTrigger
                   value="all"
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Users className="size-3.5" />
                   <span className="hidden sm:inline">Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.EMPRESA}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Building2 className="size-3.5" />
                   <span className="hidden sm:inline">Empresa</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.NATURAL}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <User className="size-3.5" />
                   <span className="hidden sm:inline">Natural</span>
@@ -1234,9 +1227,9 @@ export default function ClientesPage() {
                           key={option.value}
                           type="button"
                           className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
                             draftEstadoFilter === option.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
+                              ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
                               : "border-border/60 bg-background hover:bg-muted/40",
                           )}
                           onClick={() => setDraftEstadoFilter(option.value)}
@@ -1245,7 +1238,7 @@ export default function ClientesPage() {
                             className={cn(
                               "flex size-4 items-center justify-center rounded-full border transition-colors",
                               draftEstadoFilter === option.value
-                                ? "border-primary"
+                                ? "border-[var(--accent)]"
                                 : "border-muted-foreground/40",
                             )}
                           >
@@ -1253,7 +1246,7 @@ export default function ClientesPage() {
                               className={cn(
                                 "size-2 rounded-full transition-colors",
                                 draftEstadoFilter === option.value
-                                  ? "bg-primary"
+                                  ? "bg-[var(--accent)]"
                                   : "bg-transparent",
                               )}
                             />
@@ -1269,7 +1262,7 @@ export default function ClientesPage() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground"
+                      className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
                       onClick={clearFilterPopover}
                     >
                       Limpiar
@@ -1277,7 +1270,7 @@ export default function ClientesPage() {
                     <Button
                       type="button"
                       size="sm"
-                      className="h-8 rounded-lg text-xs"
+                      className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                       onClick={applyFilterPopover}
                     >
                       Aplicar filtros
@@ -1291,7 +1284,7 @@ export default function ClientesPage() {
               <Button
                 variant={selectionMode ? "secondary" : "outline"}
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg text-xs"
+                className="h-9 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                 onClick={handleSelectionModeToggle}
               >
                 <CheckCircle2 className="size-3.5" />
@@ -1309,7 +1302,7 @@ export default function ClientesPage() {
             >
               <ToggleGroupItem
                 value="list"
-                className="h-8 rounded-md px-2.5"
+                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                 aria-label="Vista tabla"
                 title="Vista tabla"
               >
@@ -1317,7 +1310,7 @@ export default function ClientesPage() {
               </ToggleGroupItem>
               <ToggleGroupItem
                 value="grid"
-                className="h-8 rounded-md px-2.5"
+                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                 aria-label="Vista tarjetas"
                 title="Vista tarjetas"
               >
@@ -1353,7 +1346,7 @@ export default function ClientesPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 gap-1.5 text-xs rounded-xl"
+                      className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                       onClick={() => {
                         const rows = selectedRows as ClienteListItem[];
                         const csv = buildClienteCsvRows(rows);
@@ -1375,7 +1368,7 @@ export default function ClientesPage() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-8 gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10 rounded-xl"
+                      className="h-8 gap-1.5 text-xs text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                       onClick={() => {
                         const ids = (selectedRows as ClienteListItem[])
                           .filter((row) => !isSystemGenericClient(row))
@@ -1401,11 +1394,11 @@ export default function ClientesPage() {
       ) : (
         <div className="min-h-0">
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {Array.from({ length: 8 }).map((_, i) => (
                 <div
                   key={i}
-                  className="rounded-xl border border-border bg-card p-4 space-y-3 animate-pulse"
+                  className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-pulse"
                 >
                   <div className="flex items-center gap-3">
                     <div className="size-11 rounded-xl bg-muted" />
@@ -1433,13 +1426,14 @@ export default function ClientesPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {clientes.map((c, index) => (
                   <ClienteCard
                     key={c.id}
                     cliente={c}
                     canEdit={canEdit}
                     canDelete={canDelete}
+                    search={search}
                     isSelected={selectionMode && selectedCards.has(c.id)}
                     animationDelay={Math.min(index * 55, 440)}
                     onToggleSelect={
@@ -1463,26 +1457,29 @@ export default function ClientesPage() {
                 <div className="flex items-center justify-between mt-5">
                   <p className="text-xs text-muted-foreground">
                     {(page - 1) * limit + 1}–
-                    {Math.min(page * limit, visibleTotal)} de {visibleTotal} clientes
+                    {Math.min(page * limit, visibleTotal)} de {visibleTotal}{" "}
+                    clientes
                   </p>
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8 rounded-lg"
+                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
                       disabled={page <= 1}
                       onClick={() => setPage(1)}
                       title="Primera"
+                      aria-label="Primera página"
                     >
                       <ChevronsLeft className="size-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8 rounded-lg"
+                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
                       disabled={page <= 1}
                       onClick={() => setPage(page - 1)}
                       title="Anterior"
+                      aria-label="Página anterior"
                     >
                       <ChevronLeft className="size-4" />
                     </Button>
@@ -1517,8 +1514,10 @@ export default function ClientesPage() {
                             variant={p === page ? "default" : "ghost"}
                             size="icon"
                             className={cn(
-                              "size-8 rounded-lg text-xs font-medium",
-                              p === page && "pointer-events-none",
+                              "size-8 rounded-lg text-xs font-medium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150",
+                              p === page
+                                ? "pointer-events-none"
+                                : "hover:scale-[1.05]",
                             )}
                             onClick={() => setPage(p as number)}
                           >
@@ -1530,20 +1529,22 @@ export default function ClientesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8 rounded-lg"
+                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
                       disabled={page * limit >= visibleTotal}
                       onClick={() => setPage(page + 1)}
                       title="Siguiente"
+                      aria-label="Página siguiente"
                     >
                       <ChevronRight className="size-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8 rounded-lg"
+                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
                       disabled={page * limit >= visibleTotal}
                       onClick={() => setPage(Math.ceil(visibleTotal / limit))}
                       title="Ultima"
+                      aria-label="Última página"
                     >
                       <ChevronsRight className="size-4" />
                     </Button>
@@ -1569,17 +1570,17 @@ export default function ClientesPage() {
         open={!!deleteId}
         onOpenChange={(o) => (!o ? setDeleteId(null) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-2xl p-6">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogCancel
             variant="ghost"
             size="icon"
             onClick={() => setDeleteId(null)}
-            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10"
+            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-105 active:scale-95 active:duration-150"
           >
             <X className="size-4" />
           </AlertDialogCancel>
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950 ring-1 ring-red-500/10">
               <Trash2 className="size-5 text-destructive" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
@@ -1606,20 +1607,30 @@ export default function ClientesPage() {
                     ) : null;
                   })()}
                   <p>Esta acción no se puede deshacer.</p>
+                  <p className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive/80">
+                    ⚠️ Los registros asociados (equipos, tickets) no se
+                    eliminarán.
+                  </p>
                 </div>
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end w-full">
-            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0">
+            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+              {deleteMutation.isPending ? (
+                "Eliminando..."
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" /> Sí, eliminar
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1630,9 +1641,9 @@ export default function ClientesPage() {
         open={bulkDeleteIds.length > 0}
         onOpenChange={(o) => (!o ? setBulkDeleteIds([]) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-2xl p-6">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950 ring-1 ring-red-500/10">
               <Trash2 className="size-5 text-destructive" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
@@ -1640,6 +1651,9 @@ export default function ClientesPage() {
                 ¿Eliminar {bulkDeleteIds.length} clientes?
               </AlertDialogTitle>
               <AlertDialogDescription>
+                <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+                  {bulkDeleteIds.length}
+                </span>{" "}
                 Esta acción no se puede deshacer. Se eliminarán{" "}
                 {bulkDeleteIds.length} clientes seleccionados.
               </AlertDialogDescription>
@@ -1647,19 +1661,24 @@ export default function ClientesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end w-full">
             <AlertDialogCancel
-              className="w-full sm:w-auto rounded-xl mt-0"
+              className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
               onClick={() => setBulkDeleteIds([])}
             >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending
-                ? "Eliminando..."
-                : `Sí, eliminar ${bulkDeleteIds.length}`}
+              {deleteMutation.isPending ? (
+                "Eliminando..."
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" /> Sí, eliminar{" "}
+                  {bulkDeleteIds.length}
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1667,18 +1686,19 @@ export default function ClientesPage() {
 
       {/* ── Create dialog ── */}
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
+        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/40">
-                <Plus className="size-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent-soft)] to-[var(--accent)]/10 ring-1 ring-[var(--accent)]/10">
+                <Users className="size-4 text-[var(--accent)]" />
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-semibold">
                   Nuevo cliente
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
-                  Completa los datos del nuevo cliente.
+                  Completa la información para registrar un nuevo cliente en el
+                  sistema.
                 </DialogDescription>
               </div>
             </div>
@@ -1698,18 +1718,18 @@ export default function ClientesPage() {
         open={!!editClientId}
         onOpenChange={(open) => !open && setEditClientId(null)}
       >
-        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
+        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
-                <Pencil className="size-4 text-orange-600 dark:text-orange-400" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 ring-1 ring-amber-500/10">
+                <Pencil className="size-4 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-semibold">
                   Editar cliente
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
-                  Modifica los datos del cliente.
+                  Actualiza los datos registrados de este cliente.
                 </DialogDescription>
               </div>
             </div>
@@ -1718,6 +1738,13 @@ export default function ClientesPage() {
             {editClientRes?.data ? (
               <ClienteForm
                 mode="edit"
+                validacionFiscal={
+                  Array.isArray(editClientRes.data.validacionesSunat)
+                    ? (editClientRes.data
+                        .validacionesSunat[0] as ClienteDocumentoValidation | undefined) ??
+                      null
+                    : null
+                }
                 defaultValues={{
                   tipo: editClientRes.data.tipo as TipoCliente,
                   nombre:
@@ -1761,11 +1788,13 @@ export default function ClientesPage() {
                 isLoading={updateMutation.isPending}
               />
             ) : isLoadingEditClient ? (
-              <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+              <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
                 Cargando cliente...
               </div>
             ) : (
-              <div className="flex items-center justify-center py-16 text-sm text-destructive">
+              <div className="flex items-center justify-center gap-2 py-16 text-sm text-destructive">
+                <AlertCircle className="size-4" />
                 No se pudo cargar el cliente para editar.
               </div>
             )}

@@ -1,10 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { Bricolage_Grotesque, Inter, JetBrains_Mono } from 'next/font/google'
+import { Bricolage_Grotesque, Inter, JetBrains_Mono, Playfair_Display, Montserrat, IBM_Plex_Sans, Poppins } from 'next/font/google'
 
 import { Providers } from '@/components/providers'
-import { AccentScript } from '@/lib/accent'
+import { AtmosphereScript } from '@/lib/atmosphere'
 import { getPublicBrandingFromApi } from '@/lib/public-branding'
-import { ToneScript } from '@/lib/tone'
+
 
 import './globals.css'
 
@@ -24,6 +24,34 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   variable: '--font-jetbrains-mono',
   display: 'swap',
+})
+
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-playfair',
+  display: 'swap',
+  weight: ['600', '700'],
+})
+
+const montserrat = Montserrat({
+  subsets: ['latin'],
+  variable: '--font-montserrat',
+  display: 'swap',
+  weight: ['400', '500', '600', '700', '800'],
+})
+
+const ibmPlex = IBM_Plex_Sans({
+  subsets: ['latin'],
+  variable: '--font-ibm-plex',
+  display: 'swap',
+  weight: ['300', '400', '500', '600'],
+})
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  variable: '--font-poppins',
+  display: 'swap',
+  weight: ['300', '400', '500', '600', '700'],
 })
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -63,14 +91,13 @@ export default function RootLayout({
   return (
     <html
       lang="es"
-      className={`${inter.variable} ${bricolage.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${bricolage.variable} ${jetbrainsMono.variable} ${playfair.variable} ${montserrat.variable} ${ibmPlex.variable} ${poppins.variable}`}
       suppressHydrationWarning
     >
       <head>
-        <AccentScript />
-        <ToneScript />
+        <AtmosphereScript />
       </head>
-      <body className="bg-background text-foreground antialiased">
+      <body className="bg-background text-foreground antialiased" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { pdf } from "@react-pdf/renderer";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
+  Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -20,6 +21,8 @@ import {
   Plus,
   Printer,
   RefreshCcw,
+  Search,
+  SlidersHorizontal,
   Tag,
   Trash2,
   X,
@@ -28,12 +31,8 @@ import { toast } from "sonner";
 import { RolUsuario, TipoProducto, type ProductoListItem } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
-import {
-  readStoredProductosAutoRefreshPreference,
-  writeStoredProductosAutoRefreshPreference,
-} from "@/lib/productos-auto-refresh";
 import { useAuth } from "@/hooks/use-auth";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useProductos,
   useDeleteProducto,
@@ -41,7 +40,7 @@ import {
   useMarcas,
 } from "@/hooks/use-productos";
 import { useDebounce } from "@/hooks/use-debounce";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -49,6 +48,7 @@ import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ErpBadge, ErpStatusBadge } from "@/components/erp-badges";
 import { ProductoCard } from "@/components/products/producto-card";
+import { ProductoDetalleModal } from "@/components/modals/producto-detalle-modal";
 import { EtiquetaProductoPdfDocument } from "@/components/products/etiqueta-producto-pdf";
 import { ProductoThumbnail } from "@/components/products/producto-thumbnail";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
@@ -58,11 +58,11 @@ import {
   generateQrDataUrl,
   resolveProductCodeValues,
 } from "@/lib/product-code-utils";
+import { getPrimaryProductImage } from "@/lib/product-images";
 import { usePublicBranding } from "@/hooks/use-public-branding";
 import {
   TIPO_LABELS,
   formatCurrency,
-  formatDecimal,
   formatPercent,
   getProductoMargenPct,
   getProductoRuleLabels,
@@ -88,6 +88,14 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
@@ -101,19 +109,19 @@ import {
 } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const VIEW_MODE_STORAGE_KEY = "erp:productos:view-mode";
-
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-  { label: "15 min", value: 900_000 },
-];
-
-
 
 function getInitialViewMode() {
   if (typeof window === "undefined") return "list" as const;
@@ -126,11 +134,19 @@ function buildEtiquetaFilename(sku: string) {
   return `etiqueta-${safeSku || "producto"}.pdf`;
 }
 
+type EtiquetaPreviewState = {
+  producto: ProductoListItem;
+  url: string;
+  filename: string;
+  qrValue: string | null;
+};
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProductosPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
+
   const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canDelete = hasRole(RolUsuario.ADMIN);
   const { branding } = usePublicBranding();
@@ -147,15 +163,31 @@ export default function ProductosPage() {
 
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [draftEstadoFilter, setDraftEstadoFilter] = useState<string>("all");
+  const [draftCategoriaFilter, setDraftCategoriaFilter] = useState<string>("all");
+  const [draftMarcaFilter, setDraftMarcaFilter] = useState<string>("all");
+  const [categoriaSearch, setCategoriaSearch] = useState("");
+  const [marcaSearch, setMarcaSearch] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "grid">(getInitialViewMode);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [viewDetailId, setViewDetailId] = useState<string | null>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [printingProductId, setPrintingProductId] = useState<string | null>(
     null,
   );
+  const [etiquetaPreview, setEtiquetaPreview] =
+    useState<EtiquetaPreviewState | null>(null);
+  const etiquetaFrameRef = useRef<HTMLIFrameElement | null>(null);
+
+  const closeEtiquetaPreview = useCallback(() => {
+    setEtiquetaPreview(null);
+  }, []);
+
+  useEffect(() => () => {
+    if (etiquetaPreview) URL.revokeObjectURL(etiquetaPreview.url);
+  }, [etiquetaPreview]);
 
   const { data: categoriasRes } = useCategorias(
     tipoFilter === "all" ? undefined : tipoFilter,
@@ -166,6 +198,18 @@ export default function ProductosPage() {
   const categorias = categoriasRes?.data ?? [];
   const marcas = marcasRes?.data ?? [];
 
+  const filteredCategorias = useMemo(() => {
+    return categorias.filter((cat) =>
+      cat.nombre.toLowerCase().includes(categoriaSearch.toLowerCase())
+    );
+  }, [categorias, categoriaSearch]);
+
+  const filteredMarcas = useMemo(() => {
+    return marcas.filter((m) =>
+      m.nombre.toLowerCase().includes(marcaSearch.toLowerCase())
+    );
+  }, [marcas, marcaSearch]);
+
   const filters = useMemo(
     () => ({
       page,
@@ -174,8 +218,7 @@ export default function ProductosPage() {
       tipo: tipoFilter === "all" ? undefined : tipoFilter,
       // Si el usuario no filtró por un tipo específico, ocultamos SERVICIO
       // (se gestiona en su propia pantalla /erp/servicios).
-      excluirTipos:
-        tipoFilter === "all" ? [TipoProducto.SERVICIO] : undefined,
+      excluirTipos: tipoFilter === "all" ? [TipoProducto.SERVICIO] : undefined,
       categoriaId: categoriaFilter !== "all" ? categoriaFilter : undefined,
       marcaId: marcaFilter !== "all" ? marcaFilter : undefined,
       activo: estadoFilter === "all" ? undefined : estadoFilter === "activos",
@@ -212,48 +255,12 @@ export default function ProductosPage() {
     tipo: TipoProducto.EQUIPO,
   });
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", { duration: 2000 });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    void refetch();
-    showRefreshToast();
-  }, [refetch, showRefreshToast]);
-
-  const handleAutoRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
-  const {
-    enabled: autoRefresh,
-    interval: refreshInterval,
-    setEnabled: setAutoRefresh,
-    setInterval: setRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredProductosAutoRefreshPreference,
-    writePreference: writeStoredProductosAutoRefreshPreference,
-    onRefresh: handleAutoRefresh,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "productos",
+    toastLabel: "Productos",
+    manualToastMessage: "Lista actualizada",
   });
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const label =
-        REFRESH_INTERVALS.find((option) => option.value === refreshInterval)
-          ?.label ?? "intervalo actual";
-      const message = enabled
-        ? `Auto-refresh activado cada ${label}`
-        : "Auto-refresh desactivado";
-
-      if (enabled) {
-        toast.success(message, { duration: 2000 });
-        return;
-      }
-
-      toast.info(message, { duration: 2000 });
-    },
-    [refreshInterval],
-  );
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const deleteMutation = useDeleteProducto();
 
@@ -312,14 +319,11 @@ export default function ProductosPage() {
         return;
       }
 
-      const showCatalogQr = !(
-        producto.tipo === TipoProducto.EQUIPO || producto.tieneNumeroSerie
-      );
       const { barcodeValue, qrValue } = resolveProductCodeValues({
         sku: producto.sku,
         barcodeValue: producto.codigoBarras,
         qrValue: producto.codigoQr,
-        showQr: showCatalogQr,
+        showQr: true,
       });
 
       if (!barcodeValue) {
@@ -330,15 +334,6 @@ export default function ProductosPage() {
       const loadingToastId = toast.loading(
         `Generando etiqueta de ${producto.sku}...`,
       );
-      const previewWindow = window.open("", "_blank", "width=980,height=720");
-
-      if (previewWindow) {
-        previewWindow.document.title = `Etiqueta ${producto.sku}`;
-        previewWindow.document.body.style.margin = "0";
-        previewWindow.document.body.style.fontFamily = "system-ui, sans-serif";
-        previewWindow.document.body.innerHTML =
-          '<div style="padding:24px;color:#475569">Generando PDF...</div>';
-      }
 
       setPrintingProductId(producto.id);
 
@@ -346,7 +341,7 @@ export default function ProductosPage() {
         const [barcodeDataUrl, qrDataUrl, imageDataUrl] = await Promise.all([
           generateBarcodeDataUrl(barcodeValue),
           qrValue ? generateQrDataUrl(qrValue) : Promise.resolve(null),
-          fetchAssetAsDataUrl(producto.imagen ?? null),
+          fetchAssetAsDataUrl(getPrimaryProductImage(producto)),
         ]);
         const blob = await pdf(
           <EtiquetaProductoPdfDocument
@@ -363,29 +358,22 @@ export default function ProductosPage() {
           />,
         ).toBlob();
         const url = URL.createObjectURL(blob);
+        const filename = buildEtiquetaFilename(producto.sku);
 
-        if (previewWindow) {
-          previewWindow.location.href = url;
-        } else {
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = buildEtiquetaFilename(producto.sku);
-          a.click();
-        }
-
-        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        setEtiquetaPreview({
+          producto,
+          url,
+          filename,
+          qrValue,
+        });
 
         toast.success(
           qrValue
-            ? `Etiqueta PDF generada para ${producto.sku}`
-            : `Etiqueta PDF generada para ${producto.sku}. El QR se maneja por unidad física.`,
+            ? `Etiqueta lista para revisar: ${producto.sku}`
+            : `Etiqueta lista para revisar: ${producto.sku}. El QR se maneja por unidad física.`,
           { id: loadingToastId },
         );
       } catch (error) {
-        if (previewWindow) {
-          previewWindow.close();
-        }
-
         toast.error(
           error instanceof Error
             ? error.message
@@ -399,29 +387,65 @@ export default function ProductosPage() {
     [printingProductId, brandingIdentity?.displayName, brandingIdentity?.taxId],
   );
 
+  const handlePrintEtiquetaPreview = useCallback(() => {
+    const frameWindow = etiquetaFrameRef.current?.contentWindow;
+    if (!frameWindow) {
+      toast.error("La vista previa aún no está lista.");
+      return;
+    }
+
+    frameWindow.focus();
+    frameWindow.print();
+  }, []);
+
+  const handleDownloadEtiquetaPreview = useCallback(() => {
+    if (!etiquetaPreview) return;
+
+    const a = document.createElement("a");
+    a.href = etiquetaPreview.url;
+    a.download = etiquetaPreview.filename;
+    a.click();
+  }, [etiquetaPreview]);
+
+  const handleOpenEtiquetaPreview = useCallback(() => {
+    if (!etiquetaPreview) return;
+
+    window.open(etiquetaPreview.url, "_blank", "noopener,noreferrer");
+  }, [etiquetaPreview]);
+
   const columns = useMemo<ColumnDef<ProductoListItem>[]>(
     () => [
       {
-        id: "imagen",
-        header: "",
-        enableSorting: false,
+        id: "producto",
+        header: "Producto info",
         cell: ({ row }) => (
-          <ProductoThumbnail
-            src={row.original.imagen}
-            alt={row.original.nombre}
-            fallback={row.original.sku}
-            size={36}
-            rounded="md"
-          />
-        ),
-      },
-      {
-        accessorKey: "sku",
-        header: "SKU",
-        cell: ({ row }) => (
-          <span className="font-mono text-sm whitespace-nowrap">
-            {row.original.sku}
-          </span>
+          <div className="flex items-center gap-3">
+            <ProductoThumbnail
+              src={getPrimaryProductImage(row.original)}
+              alt={row.original.nombre}
+              fallback={row.original.sku}
+              size={40}
+              rounded="lg"
+            />
+            <div className="flex flex-col min-w-0">
+              <span className="font-medium text-sm text-foreground truncate max-w-56" title={row.original.nombre}>
+                {row.original.nombre}
+              </span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {row.original.sku}
+                </span>
+                {row.original.modelo && (
+                  <>
+                    <span className="text-[10px] text-muted-foreground/50">|</span>
+                    <span className="text-[10px] text-muted-foreground truncate max-w-28" title={row.original.modelo}>
+                      {row.original.modelo}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         ),
       },
       {
@@ -431,22 +455,6 @@ export default function ProductosPage() {
           <ErpBadge tone="neutral" className="whitespace-nowrap">
             {TIPO_LABELS[row.original.tipo]}
           </ErpBadge>
-        ),
-      },
-      {
-        accessorKey: "nombre",
-        header: "Nombre",
-        cell: ({ row }) => (
-          <div className="flex flex-col max-w-55">
-            <span className="font-medium truncate" title={row.original.nombre}>
-              {row.original.nombre}
-            </span>
-            {row.original.modelo && (
-              <span className="text-xs text-muted-foreground truncate">
-                {row.original.modelo}
-              </span>
-            )}
-          </div>
         ),
       },
       {
@@ -502,8 +510,7 @@ export default function ProductosPage() {
           if (pct == null) {
             return <span className="text-muted-foreground">—</span>;
           }
-          const tone =
-            pct >= 30 ? "success" : pct >= 10 ? "warning" : "danger";
+          const tone = pct >= 30 ? "success" : pct >= 10 ? "warning" : "danger";
           return (
             <ErpBadge tone={tone} className="tabular-nums whitespace-nowrap">
               {formatPercent(pct)}
@@ -512,28 +519,26 @@ export default function ProductosPage() {
         },
       },
       {
-        id: "stockActual",
+        id: "stock",
         header: "Stock",
-        cell: ({ row }) =>
-          row.original.tipo === TipoProducto.SERVICIO ? (
-            <span className="text-xs text-muted-foreground">No aplica</span>
-          ) : (
-            <span className="font-mono text-sm font-semibold">
-              {row.original.stockActual}
-            </span>
-          ),
-      },
-      {
-        id: "stockMinimo",
-        header: "Stock mín.",
-        cell: ({ row }) =>
-          row.original.tipo === TipoProducto.SERVICIO ? (
-            <span className="text-xs text-muted-foreground">No aplica</span>
-          ) : (
-            <span className="font-mono text-sm text-muted-foreground">
-              {row.original.stockMinimo}
-            </span>
-          ),
+        cell: ({ row }) => {
+          if (row.original.tipo === TipoProducto.SERVICIO) {
+            return <span className="text-xs text-muted-foreground">No aplica</span>;
+          }
+          const stock = row.original.stockActual;
+          const min = row.original.stockMinimo;
+          const isLow = stock <= min;
+          return (
+            <div className="flex flex-col">
+              <span className={cn("font-mono text-sm font-semibold", isLow ? "text-destructive" : "text-foreground")}>
+                {stock}
+              </span>
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                mín: {min}
+              </span>
+            </div>
+          );
+        },
       },
       {
         id: "reglas",
@@ -567,8 +572,8 @@ export default function ProductosPage() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
-              onClick={() => router.push(`/productos/${row.original.id}`)}
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+              onClick={() => setViewDetailId(row.original.id)}
             >
               <Eye className="size-3.5" />
               Ver
@@ -598,7 +603,7 @@ export default function ProductosPage() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted"
+                    className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                   >
                     <MoreHorizontal className="size-4" />
                     <span className="sr-only">Acciones</span>
@@ -608,9 +613,9 @@ export default function ProductosPage() {
                   <DropdownMenuGroup>
                     {canEdit && (
                       <DropdownMenuItem
-                        onClick={() =>
-                          router.push(`/productos/${row.original.id}/editar`)
-                        }
+                        onClick={() => {
+                          router.push(`/productos/${row.original.id}/editar`);
+                        }}
                       >
                         <Pencil className="size-4" /> Editar
                       </DropdownMenuItem>
@@ -670,49 +675,68 @@ export default function ProductosPage() {
     window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, value);
   }, []);
 
+  const handleClearAllFilters = useCallback(() => {
+    setSearch("");
+    setTipoFilter("all");
+    setCategoriaFilter("all");
+    setMarcaFilter("all");
+    setEstadoFilter("all");
+    setDraftEstadoFilter("all");
+    setDraftCategoriaFilter("all");
+    setDraftMarcaFilter("all");
+    setCategoriaSearch("");
+    setMarcaSearch("");
+    setPage(1);
+  }, []);
+
   const openFilterPopover = useCallback(
     (open: boolean) => {
       setFilterPopoverOpen(open);
-      if (open) setDraftEstadoFilter(estadoFilter);
+      if (open) {
+        setDraftEstadoFilter(estadoFilter);
+        setDraftCategoriaFilter(categoriaFilter);
+        setDraftMarcaFilter(marcaFilter);
+        setCategoriaSearch("");
+        setMarcaSearch("");
+      }
     },
-    [estadoFilter],
+    [estadoFilter, categoriaFilter, marcaFilter],
   );
 
   const applyFilterPopover = useCallback(() => {
     setEstadoFilter(draftEstadoFilter);
+    setCategoriaFilter(draftCategoriaFilter);
+    setMarcaFilter(draftMarcaFilter);
     setPage(1);
     setFilterPopoverOpen(false);
-  }, [draftEstadoFilter]);
+  }, [draftEstadoFilter, draftCategoriaFilter, draftMarcaFilter]);
 
   const clearFilterPopover = useCallback(() => {
     setDraftEstadoFilter("all");
+    setDraftCategoriaFilter("all");
+    setDraftMarcaFilter("all");
     setEstadoFilter("all");
+    setCategoriaFilter("all");
+    setMarcaFilter("all");
+    setCategoriaSearch("");
+    setMarcaSearch("");
     setPage(1);
     setFilterPopoverOpen(false);
   }, []);
 
-  const activeFilterCount = estadoFilter !== "all" ? 1 : 0;
+  const activeFilterCount =
+    (estadoFilter !== "all" ? 1 : 0) +
+    (categoriaFilter !== "all" ? 1 : 0) +
+    (marcaFilter !== "all" ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
+    <div className="flex flex-col gap-3.5 w-full min-w-0 flex-1 min-h-0">
       <PageHeader
         title="Productos"
-        description="Gestiona el catálogo de productos, repuestos y consumibles"
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefresh}
-              interval={refreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="auto-refresh-productos"
-              onEnabledChange={(enabled) => {
-                setAutoRefresh(enabled);
-                showAutoRefreshToast(enabled);
-              }}
-              onIntervalChange={setRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               items={[
                 {
@@ -730,7 +754,7 @@ export default function ProductosPage() {
             {canEdit ? (
               <Button
                 onClick={() => router.push("/productos/nuevo")}
-                className="erp-page-primary-cta rounded-xl"
+                className="erp-page-primary-cta rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">Nuevo producto</span>
@@ -741,188 +765,48 @@ export default function ProductosPage() {
         }
       />
 
-      {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          label="Total productos"
-          value={statsTotal?.meta?.total}
-          icon={Package}
-          index={0}
-        />
-        <StatCard
-          label="Activos"
-          value={statsActivo?.meta?.total}
-          icon={CheckCircle2}
-          color="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-          index={1}
-        />
-        <StatCard
-          label="Repuestos"
-          value={statsRepuestos?.meta?.total}
-          icon={Tag}
-          color="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
-          index={2}
-        />
-        <StatCard
-          label="Equipos"
-          value={statsEquipos?.meta?.total}
-          icon={Package}
-          color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-          index={3}
-        />
-      </div>
+      {/* ── Toolbar & Filters Panel (Shodai-style on top, compact) ── */}
+      <div className="rounded-xl border border-border/60 bg-card p-3 shadow-xs">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-1 flex-wrap items-center gap-3 min-w-0">
+            <ToolbarSearchInput
+              value={search}
+              onChange={handleSearchChange}
+              placeholder="Buscar por SKU, nombre, modelo…"
+              className="shrink sm:w-auto lg:w-auto flex-1 max-w-sm"
+              inputClassName="border-border/80 bg-muted/35 hover:bg-muted/55 w-full h-9 text-xs"
+            />
 
-      {/* ── Toolbar ── */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {/* Search */}
-          <ToolbarSearchInput
-            value={search}
-            onChange={handleSearchChange}
-            placeholder="Buscar por SKU, nombre, modelo…"
-            inputClassName="border-border/80 bg-muted/55 hover:bg-muted/80"
-          />
-
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
-            {/* Type tabs */}
-            <Tabs value={tipoFilter} onValueChange={handleTipoChange}>
-              <TabsList className="scrollbar-none h-9 gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-muted/65 p-0.5">
-                <TabsTrigger
-                  value="all"
-                  className="h-8 shrink-0 rounded-md px-3 text-xs"
-                >
+            <Tabs value={tipoFilter} onValueChange={handleTipoChange} className="shrink-0">
+              <TabsList className="scrollbar-none h-9 gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-muted/35 p-0.5">
+                <TabsTrigger value="all" className="h-8 shrink-0 rounded-md px-3 text-xs">
                   Todos
                 </TabsTrigger>
                 {Object.values(TipoProducto)
                   .filter((tipo) => tipo !== TipoProducto.SERVICIO)
                   .map((tipo) => (
-                    <TabsTrigger
-                      key={tipo}
-                      value={tipo}
-                      className="h-8 shrink-0 rounded-md px-3 text-xs"
-                    >
+                    <TabsTrigger key={tipo} value={tipo} className="h-8 shrink-0 rounded-md px-3 text-xs">
                       {TIPO_LABELS[tipo]}
                     </TabsTrigger>
                   ))}
               </TabsList>
             </Tabs>
 
-            {/* Marca select */}
-            <Select value={marcaFilter} onValueChange={handleMarcaChange}>
-              <SelectTrigger className="h-9 w-37.5 rounded-lg border-border/80 bg-muted/55 text-xs shadow-none transition-colors hover:bg-muted/80">
-                <SelectValue placeholder="Marca" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="all">Todas las marcas</SelectItem>
-                  {marcas.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-
-            {/* Filtros popover */}
-            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-              <PopoverTrigger asChild>
-                <ToolbarFiltersButton
-                  open={filterPopoverOpen}
-                  activeCount={activeFilterCount}
-                />
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-70 rounded-xl border border-border/80 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-              >
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="text-sm font-semibold">Filtros</p>
-                  <p className="text-xs text-muted-foreground">
-                    Refina la lista visible
-                  </p>
-                </div>
-                <div className="space-y-4 px-4 py-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Estado
-                    </p>
-                    <div className="grid gap-2">
-                      {[
-                        { value: "all", label: "Todos" },
-                        { value: "activos", label: "Activos" },
-                        { value: "inactivos", label: "Inactivos" },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                            draftEstadoFilter === option.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
-                              : "border-border/70 bg-card hover:bg-muted/50",
-                          )}
-                          onClick={() => setDraftEstadoFilter(option.value)}
-                        >
-                          <span
-                            className={cn(
-                              "flex size-4 items-center justify-center rounded-full border transition-colors",
-                              draftEstadoFilter === option.value
-                                ? "border-primary"
-                                : "border-muted-foreground/40",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "size-2 rounded-full transition-colors",
-                                draftEstadoFilter === option.value
-                                  ? "bg-primary"
-                                  : "bg-transparent",
-                              )}
-                            />
-                          </span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground"
-                      onClick={clearFilterPopover}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs"
-                      onClick={applyFilterPopover}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Seleccionar */}
-            {canDelete && (
+            {/* Clear Filters Link */}
+            {(tipoFilter !== "all" || categoriaFilter !== "all" || marcaFilter !== "all" || estadoFilter !== "all" || search !== "") && (
               <Button
-                variant={selectionMode ? "secondary" : "outline"}
+                variant="ghost"
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg border-border/80 bg-muted/45 text-xs hover:bg-muted/80"
-                onClick={handleSelectionModeToggle}
+                onClick={handleClearAllFilters}
+                className="h-8 text-xs text-destructive hover:text-destructive hover:bg-destructive/5 rounded-lg px-2"
               >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar" : "Seleccionar"}
+                Limpiar filtros
               </Button>
             )}
+          </div>
 
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* View Mode Toggle */}
             <ToggleGroup
               type="single"
               value={viewMode}
@@ -948,34 +832,42 @@ export default function ProductosPage() {
                 <LayoutGrid className="size-3.5" />
               </ToggleGroupItem>
             </ToggleGroup>
-          </div>
-        </div>
 
-        {/* ── Category tabs (second row) ── */}
-        <div className="flex w-full items-center justify-end">
-          <Tabs
-            value={categoriaFilter}
-            onValueChange={handleCategoriaChange}
-            className="max-w-full"
-          >
-            <TabsList className="scrollbar-none h-9 max-w-full gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-muted/65 p-0.5">
-              <TabsTrigger
-                value="all"
-                className="h-8 shrink-0 rounded-md px-3 text-xs"
+            {/* Selection Mode Button */}
+            {canDelete && (
+              <Button
+                variant={selectionMode ? "secondary" : "outline"}
+                size="sm"
+                className="h-9 gap-1.5 rounded-lg border-border/80 bg-muted/30 text-xs hover:bg-muted/50"
+                onClick={handleSelectionModeToggle}
               >
-                Todas
-              </TabsTrigger>
-              {categorias.map((cat) => (
-                <TabsTrigger
-                  key={cat.id}
-                  value={cat.id}
-                  className="h-8 shrink-0 whitespace-nowrap rounded-md px-3 text-xs"
-                >
-                  {cat.nombre}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+                <CheckCircle2 className="size-3.5" />
+                {selectionMode ? "Cancelar" : "Seleccionar"}
+              </Button>
+            )}
+
+            {/* Advanced Filters Button */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => openFilterPopover(true)}
+              className={cn(
+                "h-9 gap-1.5 rounded-lg border-border/80 text-xs transition-colors",
+                activeFilterCount > 0
+                  ? "bg-primary/5 text-primary border-primary/30 font-medium"
+                  : "bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <SlidersHorizontal className="size-3.5" />
+              Filtros
+              {activeFilterCount > 0 && (
+                <span className="inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -991,12 +883,13 @@ export default function ProductosPage() {
           isError={isError}
           errorMessage="No se pudo cargar la lista de productos."
           onRetry={() => void refetch()}
+          enableColumnResizing={true}
           onPageChange={setPage}
           onLimitChange={handleLimitChange}
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           enableRowSelection={canDelete && selectionMode}
           enableColumnVisibility
-          fillAvailableHeight
+          fillAvailableHeight={true}
           columnVisibilityStorageKey="erp:productos:table-columns"
           bulkActionsBar={
             canDelete
@@ -1042,32 +935,27 @@ export default function ProductosPage() {
           }
         />
       ) : (
-        <div className="min-h-0">
+        <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 flex-1">
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-border bg-card p-4 space-y-3 animate-pulse"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-11 rounded-xl bg-muted" />
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                {Array.from({ length: 10 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-border bg-card p-3 space-y-3 animate-pulse"
+                  >
+                    <div className="aspect-square w-full rounded-lg bg-muted" />
                     <div className="space-y-1.5 flex-1">
-                      <div className="h-3.5 rounded bg-muted w-3/4" />
-                      <div className="h-3 rounded bg-muted w-1/2" />
+                      <div className="h-3 rounded bg-muted w-3/4" />
+                      <div className="h-2 rounded bg-muted w-1/2" />
                     </div>
+                    <div className="h-3 rounded bg-muted w-2/3" />
                   </div>
-                  <div className="h-3 rounded bg-muted w-full" />
-                  <div className="h-3 rounded bg-muted w-2/3" />
-                  <div className="flex gap-2 pt-2">
-                    <div className="h-8 flex-1 rounded-lg bg-muted" />
-                    <div className="h-8 flex-1 rounded-lg bg-muted" />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : !data?.data?.length ? (
-            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+            <div className="flex flex-col items-center justify-center flex-1 py-20 text-muted-foreground gap-3 border border-border/70 rounded-2xl bg-card shadow-xs">
               <Package className="size-12 opacity-20" />
               <p className="text-sm font-medium">No se encontraron productos</p>
               <p className="text-xs opacity-70">
@@ -1076,124 +964,153 @@ export default function ProductosPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {data.data.map((p, index) => {
-                  const CardComponent = ProductoCard;
-                  return (
-                  <CardComponent
-                    key={p.id}
-                    producto={p}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    isSelected={selectionMode && selectedCards.has(p.id)}
-                    animationDelay={Math.min(index * 55, 440)}
-                    onToggleSelect={
-                      selectionMode
-                        ? () =>
-                            setSelectedCards((prev) => {
-                              const next = new Set(prev);
-                              if (next.has(p.id)) next.delete(p.id);
-                              else next.add(p.id);
-                              return next;
-                            })
-                        : undefined
-                    }
-                    onView={() => router.push(`/productos/${p.id}`)}
-                    onEdit={() => router.push(`/productos/${p.id}/editar`)}
-                    onDelete={() => setDeleteId(p.id)}
-                  />
-                  );
-                })}
+              <div className="flex-1 overflow-y-auto pr-1 min-h-0">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                  {data.data.map((p, index) => {
+                    const CardComponent = ProductoCard;
+                    return (
+                      <CardComponent
+                        key={p.id}
+                        producto={p}
+                        canEdit={canEdit}
+                        canDelete={canDelete}
+                        isSelected={selectionMode && selectedCards.has(p.id)}
+                        animationDelay={Math.min(index * 55, 440)}
+                        onToggleSelect={
+                          selectionMode
+                            ? () =>
+                                setSelectedCards((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(p.id)) next.delete(p.id);
+                                  else next.add(p.id);
+                                  return next;
+                                })
+                            : undefined
+                        }
+                        onView={() => setViewDetailId(p.id)}
+                        onEdit={() => router.push(`/productos/${p.id}/editar`)}
+                        onDelete={() => setDeleteId(p.id)}
+                      />
+                    );
+                  })}
+                </div>
               </div>
-              {data.meta.total > limit && (
-                <div className="flex items-center justify-between mt-5">
-                  <p className="text-xs text-muted-foreground">
-                    {(page - 1) * limit + 1}–
-                    {Math.min(page * limit, data.meta.total)} de{" "}
-                    {data.meta.total} productos
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page <= 1}
-                      onClick={() => setPage(1)}
-                      title="Primera"
-                    >
-                      <ChevronsLeft className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page <= 1}
-                      onClick={() => setPage(page - 1)}
-                      title="Anterior"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    {(() => {
-                      const totalPages = Math.ceil(data.meta.total / limit);
-                      const pages: (number | "...")[] = [];
-                      if (totalPages <= 7) {
-                        for (let i = 1; i <= totalPages; i++) pages.push(i);
-                      } else {
-                        pages.push(1);
-                        if (page > 3) pages.push("...");
-                        for (
-                          let i = Math.max(2, page - 1);
-                          i <= Math.min(totalPages - 1, page + 1);
-                          i++
-                        )
-                          pages.push(i);
-                        if (page < totalPages - 2) pages.push("...");
-                        pages.push(totalPages);
-                      }
-                      return pages.map((pg, i) =>
-                        pg === "..." ? (
-                          <span
-                            key={`ellipsis-${i}`}
-                            className="px-1 text-muted-foreground text-xs"
-                          >
-                            …
-                          </span>
-                        ) : (
-                          <Button
-                            key={pg}
-                            variant={page === pg ? "default" : "ghost"}
-                            size="icon"
-                            className="size-8 rounded-lg text-xs"
-                            onClick={() => setPage(pg as number)}
-                          >
-                            {pg}
-                          </Button>
-                        ),
-                      );
-                    })()}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page >= Math.ceil(data.meta.total / limit)}
-                      onClick={() => setPage(page + 1)}
-                      title="Siguiente"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page >= Math.ceil(data.meta.total / limit)}
-                      onClick={() =>
-                        setPage(Math.ceil(data.meta.total / limit))
-                      }
-                      title="Última"
-                    >
-                      <ChevronsRight className="size-4" />
-                    </Button>
+              {(data?.meta?.total ?? 0) > 0 && (
+                <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between shrink-0">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        Filas por página
+                      </span>
+                      <Select
+                        value={String(limit)}
+                        onValueChange={(value) => handleLimitChange(Number(value))}
+                      >
+                        <SelectTrigger className="h-8 min-w-22 rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={String(option)}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {(page - 1) * limit + 1}–{Math.min(page * limit, data.meta.total)} de {data.meta.total} productos
+                    </p>
                   </div>
+
+                  {Math.ceil(data.meta.total / limit) > 1 && (
+                    <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(1)}
+                        disabled={page <= 1}
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                        title="Primera página"
+                      >
+                        <ChevronsLeft className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(page - 1)}
+                        disabled={page <= 1}
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                      >
+                        <ChevronLeft className="size-3.5" />
+                        Anterior
+                      </Button>
+                      {(() => {
+                        const totalPages = Math.ceil(data.meta.total / limit);
+                        const pages: (number | "ellipsis")[] = [];
+                        if (totalPages <= 7) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          if (page > 3) pages.push("ellipsis");
+                          for (
+                            let i = Math.max(2, page - 1);
+                            i <= Math.min(totalPages - 1, page + 1);
+                            i++
+                          )
+                            pages.push(i);
+                          if (page < totalPages - 2) pages.push("ellipsis");
+                          pages.push(totalPages);
+                        }
+                        return pages.map((pg, i) =>
+                          pg === "ellipsis" ? (
+                            <span
+                              key={`ellipsis-${i}`}
+                              className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground"
+                            >
+                              ...
+                            </span>
+                          ) : (
+                            <Button
+                              key={pg}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setPage(pg as number)}
+                              className={cn(
+                                "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
+                                pg === page
+                                  ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
+                                  : "bg-muted/55 hover:bg-muted/80",
+                              )}
+                            >
+                              {pg}
+                            </Button>
+                          ),
+                        );
+                      })()}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(page + 1)}
+                        disabled={page >= Math.ceil(data.meta.total / limit)}
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                      >
+                        Siguiente
+                        <ChevronRight className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage(Math.ceil(data.meta.total / limit))}
+                        disabled={page >= Math.ceil(data.meta.total / limit)}
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                        title="Última página"
+                      >
+                        <ChevronsRight className="size-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -1201,12 +1118,284 @@ export default function ProductosPage() {
         </div>
       )}
 
+      {/* ── Advanced Filters Sheet ── */}
+      <Sheet open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col h-full rounded-l-3xl border-l p-0 border-border/80 shadow-2xl">
+          <SheetHeader className="border-b px-5 py-4 text-left bg-muted/5">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="size-4 text-primary" />
+              <SheetTitle className="text-base font-bold text-foreground">Filtros avanzados</SheetTitle>
+            </div>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
+              Ajusta los filtros adicionales para afinar el catálogo de productos.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            {/* Estado Filter (Premium Segmented Control) */}
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Estado del Producto
+              </label>
+              <div className="flex w-full gap-1 p-1 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/40">
+                {[
+                  { value: "all", label: "Todos" },
+                  { value: "activos", label: "Activos" },
+                  { value: "inactivos", label: "Inactivos" },
+                ].map((option) => {
+                  const isActive = draftEstadoFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex flex-1 items-center justify-center rounded-lg py-1.5 px-3 text-xs font-semibold transition-all duration-300 relative select-none",
+                        isActive
+                          ? "bg-background text-primary shadow-xs border border-border/80 font-bold scale-[1.01]"
+                          : "text-muted-foreground hover:bg-muted/45 hover:text-foreground active:scale-[0.99]"
+                      )}
+                      onClick={() => setDraftEstadoFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Categoría Filter */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Categoría
+                </label>
+                {draftCategoriaFilter !== "all" && (
+                  <button
+                    onClick={() => setDraftCategoriaFilter("all")}
+                    className="text-[10px] text-destructive hover:underline font-semibold font-normal normal-case"
+                  >
+                    Restablecer
+                  </button>
+                )}
+              </div>
+              
+              <div className="rounded-2xl border border-border/70 bg-card p-3.5 space-y-3 shadow-3xs">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                  <input
+                    type="text"
+                    placeholder="Buscar categoría..."
+                    value={categoriaSearch}
+                    onChange={(e) => setCategoriaSearch(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-xs rounded-xl border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                  />
+                </div>
+                <div className="max-h-44 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                  <button
+                    type="button"
+                    onClick={() => setDraftCategoriaFilter("all")}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs text-left transition-all duration-200 border",
+                      draftCategoriaFilter === "all"
+                        ? "bg-primary/10 border-primary/20 text-primary font-bold shadow-3xs"
+                        : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span>Todas las categorías</span>
+                    {draftCategoriaFilter === "all" && <Check className="size-3.5" />}
+                  </button>
+                  {filteredCategorias.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setDraftCategoriaFilter(cat.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs text-left transition-all duration-200 border",
+                        draftCategoriaFilter === cat.id
+                          ? "bg-primary/10 border-primary/20 text-primary font-bold shadow-3xs"
+                          : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span>{cat.nombre}</span>
+                      {draftCategoriaFilter === cat.id && <Check className="size-3.5" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Marca Filter */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Marca
+                </label>
+                {draftMarcaFilter !== "all" && (
+                  <button
+                    onClick={() => setDraftMarcaFilter("all")}
+                    className="text-[10px] text-destructive hover:underline font-semibold font-normal normal-case"
+                  >
+                    Restablecer
+                  </button>
+                )}
+              </div>
+              
+              <div className="rounded-2xl border border-border/70 bg-card p-3.5 space-y-3 shadow-3xs">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground/50" />
+                  <input
+                    type="text"
+                    placeholder="Buscar marca..."
+                    value={marcaSearch}
+                    onChange={(e) => setMarcaSearch(e.target.value)}
+                    className="w-full h-9 pl-9 pr-3 text-xs rounded-xl border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
+                  />
+                </div>
+                <div className="max-h-44 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                  <button
+                    type="button"
+                    onClick={() => setDraftMarcaFilter("all")}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs text-left transition-all duration-200 border",
+                      draftMarcaFilter === "all"
+                        ? "bg-primary/10 border-primary/20 text-primary font-bold shadow-3xs"
+                        : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span>Todas las marcas</span>
+                    {draftMarcaFilter === "all" && <Check className="size-3.5" />}
+                  </button>
+                  {filteredMarcas.map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setDraftMarcaFilter(m.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs text-left transition-all duration-200 border",
+                        draftMarcaFilter === m.id
+                          ? "bg-primary/10 border-primary/20 text-primary font-bold shadow-3xs"
+                          : "border-transparent hover:bg-muted/40 text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <span>{m.nombre}</span>
+                      {draftMarcaFilter === m.id && <Check className="size-3.5" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <SheetFooter className="border-t px-5 py-4 bg-muted/10 gap-2 sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 rounded-xl text-xs text-muted-foreground hover:bg-muted/50 active:scale-95 transition-all duration-300"
+              onClick={clearFilterPopover}
+            >
+              Limpiar filtros
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 rounded-xl text-xs gap-1.5 hover:scale-[1.02] hover:shadow-xs active:scale-95 transition-all duration-300 font-semibold"
+              onClick={applyFilterPopover}
+            >
+              <Check className="size-3.5" />
+              Aplicar filtros
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+
+      <ProductoDetalleModal
+        id={viewDetailId}
+        onClose={() => setViewDetailId(null)}
+        canEdit={canEdit}
+        onEdit={(producto) => {
+          setViewDetailId(null);
+          router.push(`/productos/${producto.id}/editar`);
+        }}
+      />
+
+      <Dialog
+        open={!!etiquetaPreview}
+        onOpenChange={(open) => {
+          if (!open) closeEtiquetaPreview();
+        }}
+      >
+        <DialogContent className="flex max-h-[94vh] w-[min(96vw,980px)] max-w-[980px] flex-col overflow-hidden rounded-2xl p-0 sm:max-w-[980px]">
+          <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
+            <DialogTitle>Vista previa de etiqueta</DialogTitle>
+            <DialogDescription>
+              {etiquetaPreview
+                ? `${etiquetaPreview.producto.sku} · ${etiquetaPreview.producto.nombre}`
+                : "Revisa la etiqueta antes de imprimir."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 bg-muted/35 p-4">
+            {etiquetaPreview ? (
+              <iframe
+                ref={etiquetaFrameRef}
+                src={etiquetaPreview.url}
+                title={`Etiqueta ${etiquetaPreview.producto.sku}`}
+                className="h-[min(70vh,760px)] w-full rounded-xl border border-border bg-background shadow-sm"
+              />
+            ) : null}
+          </div>
+
+          <DialogFooter className="gap-2 border-t border-border/70 px-5 py-4 sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={closeEtiquetaPreview}
+              className="rounded-xl"
+            >
+              Cerrar
+            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDownloadEtiquetaPreview}
+                className="gap-2 rounded-xl"
+                disabled={!etiquetaPreview}
+              >
+                <Download className="size-4" />
+                Descargar PDF
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleOpenEtiquetaPreview}
+                className="gap-2 rounded-xl"
+                disabled={!etiquetaPreview}
+              >
+                <Eye className="size-4" />
+                Abrir PDF
+              </Button>
+              <Button
+                type="button"
+                onClick={handlePrintEtiquetaPreview}
+                className="gap-2 rounded-xl"
+                disabled={!etiquetaPreview}
+              >
+                <Printer className="size-4" />
+                Imprimir
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* AlertDialog: Bulk delete */}
       <AlertDialog
         open={bulkDeleteIds.length > 0}
         onOpenChange={(o) => (!o ? setBulkDeleteIds([]) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-2xl p-6">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10 mt-0.5">
               <Trash2 className="size-5 text-destructive" />
@@ -1222,12 +1411,12 @@ export default function ProductosPage() {
             </div>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0 w-full">
-            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0">
+            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending
@@ -1243,12 +1432,12 @@ export default function ProductosPage() {
         open={!!deleteId}
         onOpenChange={(o) => (!o ? setDeleteId(null) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-2xl p-6">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogCancel
             variant="ghost"
             size="icon"
             onClick={() => setDeleteId(null)}
-            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10"
+            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-105 active:scale-95 active:duration-150"
           >
             <X className="size-4" />
           </AlertDialogCancel>
@@ -1269,12 +1458,12 @@ export default function ProductosPage() {
           </AlertDialogHeader>
 
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0 w-full">
-            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0">
+            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? "Eliminando..." : "Sí, eliminar"}

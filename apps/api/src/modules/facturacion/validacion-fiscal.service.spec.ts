@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import {
+  EstadoVenta,
   NivelValidacion,
   ReglaConfigurableId,
   TipoDocumento,
@@ -16,6 +17,9 @@ interface ClienteFixture {
   dni: string | null;
   direccion: string | null;
   email: string | null;
+  telefono: string | null;
+  celular: string | null;
+  contactos?: Array<{ id: string }>;
 }
 
 const baseCliente: ClienteFixture = {
@@ -27,6 +31,9 @@ const baseCliente: ClienteFixture = {
   dni: null,
   direccion: 'Av. Cliente 123',
   email: 'cliente@example.com',
+  telefono: null,
+  celular: null,
+  contactos: [],
 };
 
 const baseDetalle = {
@@ -36,16 +43,23 @@ const baseDetalle = {
   producto: {
     id: 'prod-1',
     nombre: 'Producto prueba',
+    tipo: 'REPUESTO',
     manejaInventario: false,
     unidadMedida: { codigo: 'NIU' },
-    almacenStocks: [],
+    almacenStocks: [] as Array<{ cantidad: number }>,
   },
 };
 
 function buildPrisma(overrides: {
+  ventaEstado?: EstadoVenta;
   ventaSubtotal?: number;
+  ventaTotal?: number;
   cliente?: Partial<ClienteFixture> | null;
-  detalles?: Array<Partial<typeof baseDetalle>>;
+  detalles?: Array<
+    Partial<Omit<typeof baseDetalle, 'producto'>> & {
+      producto?: Partial<typeof baseDetalle.producto>;
+    }
+  >;
   configReglas?: Record<string, NivelValidacion> | null;
   validacionSunat?: {
     estado: string;
@@ -58,7 +72,9 @@ function buildPrisma(overrides: {
     venta: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'venta-1',
+        estado: overrides.ventaEstado ?? EstadoVenta.ORDEN_CONFIRMADA,
         subtotal: overrides.ventaSubtotal ?? 200,
+        total: overrides.ventaTotal ?? overrides.ventaSubtotal ?? 200,
         cliente:
           overrides.cliente === null
             ? null
@@ -66,6 +82,10 @@ function buildPrisma(overrides: {
         detalles: (overrides.detalles ?? [baseDetalle]).map((d) => ({
           ...baseDetalle,
           ...d,
+          producto: {
+            ...baseDetalle.producto,
+            ...(d.producto ?? {}),
+          },
         })),
       }),
     },
@@ -90,8 +110,8 @@ function buildPrisma(overrides: {
       findMany: jest
         .fn()
         .mockResolvedValue([
-          { name: 'sol_username' },
-          { name: 'sol_password' },
+          { name: 'sol-username' },
+          { name: 'sol-password' },
         ]),
     },
   } as unknown as PrismaService;
@@ -173,7 +193,9 @@ describe('ValidacionFiscalService — Doc 10 §6/§7', () => {
   });
 
   it('cliente sin email → advertencia (default ADVERTENCIA)', async () => {
-    const prisma = buildPrisma({ cliente: { email: null } });
+    const prisma = buildPrisma({
+      cliente: { email: null, telefono: null, celular: null, contactos: [] },
+    });
     const svc = await buildService(prisma);
     const r = await svc.validar({
       ventaId: 'venta-1',
@@ -186,9 +208,25 @@ describe('ValidacionFiscalService — Doc 10 §6/§7', () => {
     ).toBe(true);
   });
 
+  it('cliente sin email pero con teléfono → no advierte por contacto', async () => {
+    const prisma = buildPrisma({
+      cliente: { email: null, telefono: '908908889' },
+    });
+    const svc = await buildService(prisma);
+    const r = await svc.validar({
+      ventaId: 'venta-1',
+      tipo: TipoDocumento.BOLETA,
+    });
+    expect(
+      r.advertencias.some(
+        (a) => a.reglaId === ReglaConfigurableId.CLIENTE_CON_EMAIL,
+      ),
+    ).toBe(false);
+  });
+
   it('override de reglasValidacion convierte advertencia en bloqueante', async () => {
     const prisma = buildPrisma({
-      cliente: { email: null },
+      cliente: { email: null, telefono: null, celular: null, contactos: [] },
       configReglas: {
         [ReglaConfigurableId.CLIENTE_CON_EMAIL]: NivelValidacion.BLOQUEANTE,
       },
@@ -317,5 +355,109 @@ describe('ValidacionFiscalService — Doc 10 §6/§7', () => {
     });
     expect(r.bloqueantes).toHaveLength(0);
     expect(r.advertencias).toHaveLength(0);
+  });
+
+  it('advierte cuando una unidad legacy se normalizará a código SUNAT', async () => {
+    const prisma = buildPrisma({
+      detalles: [
+        {
+          producto: {
+            id: 'prod-1',
+            nombre: 'Producto prueba',
+            manejaInventario: false,
+            unidadMedida: { codigo: 'UND' },
+            almacenStocks: [],
+          },
+        },
+      ],
+    });
+    const svc = await buildService(prisma);
+    const r = await svc.validar({
+      ventaId: 'venta-1',
+      tipo: TipoDocumento.BOLETA,
+    });
+
+    expect(
+      r.advertencias.some((b) => b.reglaId === 'producto_unidad_sunat_valida'),
+    ).toBe(true);
+  });
+
+  it('bloquea una unidad desconocida que SUNAT no acepta', async () => {
+    const prisma = buildPrisma({
+      detalles: [
+        {
+          producto: {
+            id: 'prod-1',
+            nombre: 'Producto prueba',
+            manejaInventario: false,
+            unidadMedida: { codigo: 'XYZ' },
+            almacenStocks: [],
+          },
+        },
+      ],
+    });
+    const svc = await buildService(prisma);
+    const r = await svc.validar({
+      ventaId: 'venta-1',
+      tipo: TipoDocumento.BOLETA,
+    });
+
+    expect(
+      r.bloqueantes.some((b) => b.reglaId === 'producto_unidad_sunat_valida'),
+    ).toBe(true);
+  });
+
+  it('venta ya confirmada no bloquea emisión por stock ya descontado', async () => {
+    const prisma = buildPrisma({
+      ventaEstado: EstadoVenta.ORDEN_CONFIRMADA,
+      detalles: [
+        {
+          producto: {
+            id: 'prod-1',
+            nombre: 'Producto prueba',
+            manejaInventario: true,
+            unidadMedida: { codigo: 'NIU' },
+            almacenStocks: [{ cantidad: 0 }],
+          },
+        },
+      ],
+    });
+    const svc = await buildService(prisma);
+    const r = await svc.validar({
+      ventaId: 'venta-1',
+      tipo: TipoDocumento.BOLETA,
+    });
+    expect(
+      r.bloqueantes.some(
+        (b) => b.reglaId === ReglaConfigurableId.STOCK_DISPONIBLE_AL_EMITIR,
+      ),
+    ).toBe(false);
+  });
+
+  it('venta no confirmada mantiene bloqueo por stock insuficiente', async () => {
+    const prisma = buildPrisma({
+      ventaEstado: EstadoVenta.COTIZACION,
+      detalles: [
+        {
+          producto: {
+            id: 'prod-1',
+            nombre: 'Producto prueba',
+            manejaInventario: true,
+            unidadMedida: { codigo: 'NIU' },
+            almacenStocks: [{ cantidad: 0 }],
+          },
+        },
+      ],
+    });
+    const svc = await buildService(prisma);
+    const r = await svc.validar({
+      ventaId: 'venta-1',
+      tipo: TipoDocumento.BOLETA,
+    });
+    expect(
+      r.bloqueantes.some(
+        (b) => b.reglaId === ReglaConfigurableId.STOCK_DISPONIBLE_AL_EMITIR,
+      ),
+    ).toBe(true);
   });
 });

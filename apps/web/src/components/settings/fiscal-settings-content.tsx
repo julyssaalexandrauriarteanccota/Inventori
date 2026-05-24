@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useMemo, useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -127,6 +127,12 @@ import {
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/searchable-select";
+import {
+  getDepartamentos,
+  getProvinciasByDepartamentoName,
+  getDistritosByDepartamentoAndProvinciaName,
+  findUbigeoByCode,
+} from "@/lib/ubigeo";
 import {
   SettingsDataTable,
   SettingsStatCard,
@@ -262,6 +268,7 @@ const ESTADO_VALIDACION_OPTIONS: Array<{
 }> = [
   { value: "PENDIENTE", label: "Pendiente" },
   { value: "VALIDO", label: "Válido" },
+  { value: "ACTIVO", label: "Activo SUNAT" },
   { value: "INVALIDO", label: "Inválido" },
   { value: "ERROR", label: "Error" },
 ];
@@ -355,9 +362,9 @@ function formatDateTime(value?: string | null) {
 }
 
 function estadoValidacionMeta(estado: EstadoValidacionSunat) {
-  if (estado === "VALIDO") {
+  if (estado === "VALIDO" || estado === "ACTIVO") {
     return {
-      label: "Válido",
+      label: estado === "ACTIVO" ? "Activo SUNAT" : "Válido",
       className:
         "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
     };
@@ -415,7 +422,6 @@ type FiscalSettingsTab =
   | "certificado"
   | "credenciales-sol"
   | "reglas"
-  | "validaciones"
   | "feriados"
   | "logs";
 
@@ -444,7 +450,7 @@ export function FiscalSettingsContent({
               </h2>
               <p className="text-xs text-muted-foreground">
                 Administra emisor fiscal/SUNAT, series documentales,
-                validaciones SUNAT y logs.
+                certificados, reglas y feriados fiscales.
               </p>
             </div>
           </div>
@@ -466,14 +472,13 @@ export function FiscalSettingsContent({
       </div>
 
       <Tabs defaultValue={initialTab} className="min-h-0 flex-1">
-        <TabsList className="grid w-full grid-cols-2 rounded-2xl lg:grid-cols-7">
+        <TabsList className="grid w-full grid-cols-2 rounded-2xl lg:grid-cols-6">
           <TabsTrigger value="config">Datos fiscales</TabsTrigger>
           <TabsTrigger value="series">Series</TabsTrigger>
           <TabsTrigger value="certificado">Certificado</TabsTrigger>
           <TabsTrigger value="credenciales-sol">SOL</TabsTrigger>
           <TabsTrigger value="reglas">Reglas</TabsTrigger>
           <TabsTrigger value="feriados">Feriados</TabsTrigger>
-          <TabsTrigger value="validaciones">Padrón</TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-4 min-h-0">
@@ -493,9 +498,6 @@ export function FiscalSettingsContent({
         </TabsContent>
         <TabsContent value="feriados" className="mt-4 min-h-0">
           <FeriadosNacionalesSection />
-        </TabsContent>
-        <TabsContent value="validaciones" className="mt-4 min-h-0">
-          <ClienteValidacionesSection />
         </TabsContent>
       </Tabs>
     </div>
@@ -527,6 +529,9 @@ const configFiscalSchema = z.object({
       (value) => !value || /^\d{6}$/.test(value),
       "El ubigeo debe tener 6 dígitos",
     ),
+  departamentoFiscal: z.string().trim().optional(),
+  provinciaFiscal: z.string().trim().optional(),
+  distritoFiscal: z.string().trim().optional(),
   codigoEstablecimiento: z
     .string()
     .trim()
@@ -556,12 +561,28 @@ type ConfigFiscalForm = z.infer<typeof configFiscalSchema>;
 type ConfigFiscalSource = ConfigEmpresaFiscalItem | null | undefined;
 
 function toConfigFiscalForm(config: ConfigFiscalSource): ConfigFiscalForm {
+  let departamento = config?.departamentoFiscal ?? "";
+  let provincia = config?.provinciaFiscal ?? "";
+  let distrito = config?.distritoFiscal ?? "";
+
+  if (config?.ubigeoFiscal && (!departamento || !provincia || !distrito)) {
+    const resolved = findUbigeoByCode(config.ubigeoFiscal);
+    if (resolved) {
+      departamento = resolved.departamento;
+      provincia = resolved.provincia;
+      distrito = resolved.distrito;
+    }
+  }
+
   return {
     ruc: config?.ruc ?? "",
     razonSocial: config?.razonSocial ?? "",
     nombreComercial: config?.nombreComercial ?? "",
     direccionFiscal: config?.direccionFiscal ?? "",
     ubigeoFiscal: config?.ubigeoFiscal ?? "",
+    departamentoFiscal: departamento,
+    provinciaFiscal: provincia,
+    distritoFiscal: distrito,
     codigoEstablecimiento:
       config?.codigoEstablecimiento ?? DEFAULT_CODIGO_ESTABLECIMIENTO,
     correoSee: config?.correoSee ?? "",
@@ -582,6 +603,9 @@ function buildConfigFiscalPayload(values: ConfigFiscalForm) {
   const optionalFields: Array<keyof UpdateConfigEmpresaFiscalPayload> = [
     "nombreComercial",
     "ubigeoFiscal",
+    "departamentoFiscal",
+    "provinciaFiscal",
+    "distritoFiscal",
     "codigoEstablecimiento",
     "correoSee",
     "regimenTributario",
@@ -631,6 +655,82 @@ function ConfigFiscalSection() {
 
   const formato = watch("formatoImpresionDefault");
   const ambienteDefault = watch("ambienteDefault");
+  const departamentoFiscal = watch("departamentoFiscal");
+  const provinciaFiscal = watch("provinciaFiscal");
+  const distritoFiscal = watch("distritoFiscal");
+  const ubigeoFiscal = watch("ubigeoFiscal");
+
+  const departamentoOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getDepartamentos().map((option) => ({
+        value: option.name,
+        label: option.name,
+      })),
+    [],
+  );
+
+  const provinciaOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getProvinciasByDepartamentoName(departamentoFiscal).map((option) => ({
+        value: option.name,
+        label: option.name,
+      })),
+    [departamentoFiscal],
+  );
+
+  const distritoOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getDistritosByDepartamentoAndProvinciaName(departamentoFiscal, provinciaFiscal).map((option) => ({
+        value: option.name,
+        label: option.name,
+      })),
+    [departamentoFiscal, provinciaFiscal],
+  );
+
+  function handleDepartamentoChange(nextDepartamento: string) {
+    if (nextDepartamento === departamentoFiscal) {
+      return;
+    }
+    setValue("departamentoFiscal", nextDepartamento, { shouldDirty: true, shouldValidate: true });
+    setValue("provinciaFiscal", "", { shouldDirty: true, shouldValidate: true });
+    setValue("distritoFiscal", "", { shouldDirty: true, shouldValidate: true });
+    setValue("ubigeoFiscal", "", { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleProvinciaChange(nextProvincia: string) {
+    if (nextProvincia === provinciaFiscal) {
+      return;
+    }
+    setValue("provinciaFiscal", nextProvincia, { shouldDirty: true, shouldValidate: true });
+    setValue("distritoFiscal", "", { shouldDirty: true, shouldValidate: true });
+    setValue("ubigeoFiscal", "", { shouldDirty: true, shouldValidate: true });
+  }
+
+  function handleDistritoChange(nextDistrito: string) {
+    setValue("distritoFiscal", nextDistrito, { shouldDirty: true, shouldValidate: true });
+    const distOpt = getDistritosByDepartamentoAndProvinciaName(departamentoFiscal, provinciaFiscal)
+      .find((d) => d.name === nextDistrito);
+    if (distOpt) {
+      setValue("ubigeoFiscal", distOpt.code, { shouldDirty: true, shouldValidate: true });
+    }
+  }
+
+  useEffect(() => {
+    if (ubigeoFiscal && ubigeoFiscal.length === 6) {
+      const resolved = findUbigeoByCode(ubigeoFiscal);
+      if (resolved) {
+        if (resolved.departamento !== departamentoFiscal) {
+          setValue("departamentoFiscal", resolved.departamento, { shouldDirty: true, shouldValidate: true });
+        }
+        if (resolved.provincia !== provinciaFiscal) {
+          setValue("provinciaFiscal", resolved.provincia, { shouldDirty: true, shouldValidate: true });
+        }
+        if (resolved.distrito !== distritoFiscal) {
+          setValue("distritoFiscal", resolved.distrito, { shouldDirty: true, shouldValidate: true });
+        }
+      }
+    }
+  }, [ubigeoFiscal, departamentoFiscal, provinciaFiscal, distritoFiscal, setValue]);
 
   const copyEmpresaToFiscal = () => {
     if (!empresa) {
@@ -747,6 +847,74 @@ function ConfigFiscalSection() {
             <Input placeholder="Opcional" {...register("nombreComercial")} />
           </Field>
 
+          <Field data-invalid={errors.departamentoFiscal ? true : undefined}>
+            <FieldLabel>Departamento fiscal</FieldLabel>
+            <SearchableSelect
+              value={departamentoFiscal}
+              onChange={handleDepartamentoChange}
+              options={departamentoOptions}
+              placeholder="Seleccionar departamento"
+              searchPlaceholder="Buscar departamento..."
+              emptyLabel="No se encontraron departamentos."
+              ariaLabel="Departamento fiscal"
+              invalid={!!errors.departamentoFiscal}
+              clearable
+              clearLabel="Limpiar departamento"
+            />
+            <FieldError>{errors.departamentoFiscal?.message}</FieldError>
+          </Field>
+
+          <Field data-invalid={errors.provinciaFiscal ? true : undefined}>
+            <FieldLabel>Provincia fiscal</FieldLabel>
+            <SearchableSelect
+              value={provinciaFiscal}
+              onChange={handleProvinciaChange}
+              options={provinciaOptions}
+              placeholder="Seleccionar provincia"
+              searchPlaceholder="Buscar provincia..."
+              emptyLabel="No se encontraron provincias."
+              ariaLabel="Provincia fiscal"
+              disabled={!departamentoFiscal}
+              invalid={!!errors.provinciaFiscal}
+              clearable
+              clearLabel="Limpiar provincia"
+            />
+            <FieldError>{errors.provinciaFiscal?.message}</FieldError>
+          </Field>
+
+          <Field data-invalid={errors.distritoFiscal ? true : undefined}>
+            <FieldLabel>Distrito fiscal</FieldLabel>
+            <SearchableSelect
+              value={distritoFiscal}
+              onChange={handleDistritoChange}
+              options={distritoOptions}
+              placeholder="Seleccionar distrito"
+              searchPlaceholder="Buscar distrito..."
+              emptyLabel="No se encontraron distritos."
+              ariaLabel="Distrito fiscal"
+              disabled={!provinciaFiscal}
+              invalid={!!errors.distritoFiscal}
+              clearable
+              clearLabel="Limpiar distrito"
+            />
+            <FieldError>{errors.distritoFiscal?.message}</FieldError>
+          </Field>
+
+          <Field data-invalid={errors.ubigeoFiscal ? true : undefined}>
+            <FieldLabel>Ubigeo fiscal (código de 6 dígitos)</FieldLabel>
+            <Input
+              placeholder="Auto-calculado"
+              maxLength={6}
+              readOnly
+              className="bg-muted/40 font-mono"
+              {...register("ubigeoFiscal")}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Código de ubigeo auto-calculado a partir de la selección anterior.
+            </p>
+            <FieldError>{errors.ubigeoFiscal?.message}</FieldError>
+          </Field>
+
           <Field data-invalid={errors.direccionFiscal ? true : undefined}>
             <FieldLabel>Dirección fiscal</FieldLabel>
             <Input
@@ -754,16 +922,6 @@ function ConfigFiscalSection() {
               {...register("direccionFiscal")}
             />
             <FieldError>{errors.direccionFiscal?.message}</FieldError>
-          </Field>
-
-          <Field data-invalid={errors.ubigeoFiscal ? true : undefined}>
-            <FieldLabel>Ubigeo fiscal</FieldLabel>
-            <Input
-              placeholder="150101"
-              maxLength={6}
-              {...register("ubigeoFiscal")}
-            />
-            <FieldError>{errors.ubigeoFiscal?.message}</FieldError>
           </Field>
 
           <Field data-invalid={errors.codigoEstablecimiento ? true : undefined}>
@@ -2053,7 +2211,7 @@ const clienteValidacionSchema = z
       .trim()
       .max(220, "Máximo 220 caracteres")
       .optional(),
-    estado: z.enum(["PENDIENTE", "VALIDO", "INVALIDO", "ERROR"]),
+    estado: z.enum(["PENDIENTE", "VALIDO", "ACTIVO", "INVALIDO", "ERROR"]),
     condicionDomicilio: z
       .string()
       .trim()
@@ -2122,7 +2280,7 @@ function buildClienteValidacionPayload(
   return payload;
 }
 
-function ClienteValidacionesSection() {
+export function ClienteValidacionesSection() {
   const [search, setSearch] = useState("");
   const [estadoFilter, setEstadoFilter] = useState<
     EstadoValidacionSunat | "ALL"
@@ -2324,8 +2482,8 @@ function ClienteValidacionesSection() {
       </div>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-xl rounded-2xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl rounded-2xl max-h-[90vh] !flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 pb-1">
             <DialogTitle>Nueva validación documental</DialogTitle>
             <DialogDescription>
               Registra un resultado manual o cacheado para RUC, DNI o público
@@ -2343,8 +2501,8 @@ function ClienteValidacionesSection() {
         open={!!editingItem}
         onOpenChange={(open) => !open && setEditingItem(null)}
       >
-        <DialogContent className="sm:max-w-xl rounded-2xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl rounded-2xl max-h-[90vh] !flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0 pb-1">
             <DialogTitle>Editar validación documental</DialogTitle>
             <DialogDescription>
               Actualiza el estado cacheado del documento de cliente.
@@ -2392,7 +2550,8 @@ function ClienteValidacionFormContent({
     limit: 100,
     activo: true,
   });
-  const isEditing = !!item;
+  const [selectedExistingValidationId, setSelectedExistingValidationId] =
+    useState<string | null>(item?.id ?? null);
 
   const form = useForm<ClienteValidacionForm>({
     resolver: zodResolver(clienteValidacionSchema),
@@ -2430,6 +2589,8 @@ function ClienteValidacionFormContent({
   const isRucDocumento = tipoDocumentoSunat === "6";
   const isSinDocumento = tipoDocumentoSunat === "0";
   const isPending = createMutation.isPending || updateMutation.isPending;
+  const isUpdatingExisting = Boolean(item || selectedExistingValidationId);
+  const documentLocked = Boolean(clienteId || item);
 
   const handleTipoDocumentoChange = (value: string) => {
     const nextTipo = value as DocumentoSunatClienteCode;
@@ -2466,6 +2627,7 @@ function ClienteValidacionFormContent({
 
   const handleClienteChange = (value: string) => {
     setValue("clienteId", value, { shouldDirty: true, shouldValidate: true });
+    setSelectedExistingValidationId(null);
     const cliente = clientes.find((item) => item.id === value);
     if (!cliente) return;
 
@@ -2515,6 +2677,44 @@ function ClienteValidacionFormContent({
         shouldValidate: true,
       });
     }
+
+    const existingValidation = Array.isArray(cliente.validacionesSunat)
+      ? cliente.validacionesSunat[0]
+      : null;
+
+    if (existingValidation) {
+      setSelectedExistingValidationId(existingValidation.id);
+      if (isDocumentoSunatClienteCode(existingValidation.tipoDocumentoSunat)) {
+        setValue("tipoDocumentoSunat", existingValidation.tipoDocumentoSunat, {
+          shouldDirty: true,
+          shouldValidate: true,
+        });
+      }
+      setValue("numeroDocumento", existingValidation.numeroDocumento, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      setValue(
+        "nombreNormalizado",
+        existingValidation.nombreNormalizado ?? nombreNormalizado.toUpperCase(),
+        { shouldDirty: true, shouldValidate: true },
+      );
+      setValue(
+        "direccionFiscal",
+        existingValidation.direccionFiscal ?? cliente.direccion ?? "",
+        { shouldDirty: true, shouldValidate: true },
+      );
+      setValue("estado", existingValidation.estado, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      setValue(
+        "condicionDomicilio",
+        existingValidation.condicionDomicilio ?? "",
+        { shouldDirty: true, shouldValidate: true },
+      );
+      toast.info("El cliente ya tenía validación; se actualizará ese registro.");
+    }
   };
 
   const onSubmit = (values: ClienteValidacionForm) => {
@@ -2522,7 +2722,7 @@ function ClienteValidacionFormContent({
     const mutationOptions = {
       onSuccess: () => {
         toast.success(
-          isEditing ? "Validación actualizada" : "Validación registrada",
+          isUpdatingExisting ? "Validación actualizada" : "Validación registrada",
         );
         onSuccess();
       },
@@ -2530,9 +2730,11 @@ function ClienteValidacionFormContent({
         toast.error(error.message || "No se pudo guardar la validación"),
     };
 
-    if (item) {
+    const targetValidationId = item?.id ?? selectedExistingValidationId;
+
+    if (targetValidationId) {
       updateMutation.mutate(
-        { id: item.id, data: payload as UpdateClienteValidacionSunatPayload },
+        { id: targetValidationId, data: payload as UpdateClienteValidacionSunatPayload },
         mutationOptions,
       );
       return;
@@ -2545,13 +2747,10 @@ function ClienteValidacionFormContent({
     <form
       onSubmit={handleSubmit(onSubmit)}
       noValidate
-      className="flex flex-col gap-4"
+      className="flex flex-col min-h-0 flex-1 overflow-hidden"
     >
-      <FieldGroup className="grid gap-3 sm:grid-cols-2">
-        <Field
-          className="sm:col-span-2"
-          data-invalid={errors.clienteId ? true : undefined}
-        >
+      <div className="flex-1 overflow-y-auto pr-1.5 -mr-1.5 py-1 flex flex-col gap-4">
+        <Field data-invalid={errors.clienteId ? true : undefined}>
           <FieldLabel>Cliente vinculado opcional</FieldLabel>
           <SearchableSelect
             value={clienteId}
@@ -2569,7 +2768,7 @@ function ClienteValidacionFormContent({
             clearable
             clearLabel="Sin cliente vinculado"
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground mt-0.5 leading-normal">
             Al elegir un cliente se completa automáticamente tipo y número de
             documento según los campos reales de Clientes: RUC para empresa, DNI
             para natural o sin documento para Público en General.
@@ -2577,130 +2776,150 @@ function ClienteValidacionFormContent({
           <FieldError>{errors.clienteId?.message}</FieldError>
         </Field>
 
-        <Field data-invalid={errors.tipoDocumentoSunat ? true : undefined}>
-          <FieldLabel>Tipo documento SUNAT</FieldLabel>
-          <Select
-            value={tipoDocumentoSunat}
-            onValueChange={handleTipoDocumentoChange}
-          >
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Seleccionar tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              {DOCUMENTO_SUNAT_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label} · código {option.value}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {documentoSunatInfo ? (
-            <p className="text-[11px] text-muted-foreground">
-              {documentoSunatInfo.helper}
-            </p>
-          ) : null}
-          <FieldError>{errors.tipoDocumentoSunat?.message}</FieldError>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field data-invalid={errors.tipoDocumentoSunat ? true : undefined}>
+            <FieldLabel>Tipo documento SUNAT</FieldLabel>
+            <Select
+              value={tipoDocumentoSunat}
+              onValueChange={handleTipoDocumentoChange}
+              disabled={documentLocked}
+            >
+              <SelectTrigger className="rounded-xl transition-all duration-250 hover:bg-muted/10">
+                <SelectValue placeholder="Seleccionar tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENTO_SUNAT_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label} · código {option.value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError>{errors.tipoDocumentoSunat?.message}</FieldError>
+          </Field>
 
-        <Field data-invalid={errors.numeroDocumento ? true : undefined}>
-          <FieldLabel>Número de documento</FieldLabel>
-          <Input
-            placeholder={documentoSunatInfo?.placeholder ?? "20123456789"}
-            maxLength={documentoSunatInfo?.maxLength}
-            inputMode="numeric"
-            disabled={isSinDocumento}
-            {...register("numeroDocumento", {
-              setValueAs: sanitizeDocumentoNumber,
-            })}
-          />
-          <FieldError>{errors.numeroDocumento?.message}</FieldError>
-        </Field>
+          <Field data-invalid={errors.numeroDocumento ? true : undefined}>
+            <FieldLabel>Número de documento</FieldLabel>
+            <Input
+              placeholder={documentoSunatInfo?.placeholder ?? "20123456789"}
+              maxLength={documentoSunatInfo?.maxLength}
+              inputMode="numeric"
+              readOnly={documentLocked || isSinDocumento}
+              className="transition-all duration-250"
+              {...register("numeroDocumento", {
+                setValueAs: sanitizeDocumentoNumber,
+              })}
+            />
+            <FieldError>{errors.numeroDocumento?.message}</FieldError>
+          </Field>
+        </div>
 
-        <Field data-invalid={errors.nombreNormalizado ? true : undefined}>
-          <FieldLabel>Nombre normalizado</FieldLabel>
-          <Input
-            placeholder="CLIENTE DEMO SAC"
-            {...register("nombreNormalizado")}
-          />
-          <FieldError>{errors.nombreNormalizado?.message}</FieldError>
-        </Field>
+        {documentoSunatInfo?.helper ? (
+          <div className="text-[11px] text-muted-foreground bg-muted/35 dark:bg-muted/10 p-2.5 rounded-xl border border-border/50 -mt-1 leading-normal transition-all duration-300">
+            {documentoSunatInfo.helper}
+            {documentLocked
+              ? " Tipo y número quedan bloqueados porque deben coincidir con el cliente vinculado."
+              : null}
+          </div>
+        ) : null}
 
-        <Field>
-          <FieldLabel>Estado</FieldLabel>
-          <Select
-            value={estado}
-            onValueChange={(value) =>
-              setValue("estado", value as EstadoValidacionSunat, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          >
-            <SelectTrigger className="rounded-xl">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ESTADO_VALIDACION_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field data-invalid={errors.nombreNormalizado ? true : undefined}>
+            <FieldLabel>Nombre normalizado</FieldLabel>
+            <Input
+              placeholder="CLIENTE DEMO SAC"
+              className="transition-all duration-250"
+              {...register("nombreNormalizado")}
+            />
+            <FieldError>{errors.nombreNormalizado?.message}</FieldError>
+          </Field>
 
-        <Field className="sm:col-span-2">
-          <FieldLabel>Dirección fiscal</FieldLabel>
-          <Input
-            placeholder="Av. Cliente 123"
-            {...register("direccionFiscal")}
-          />
-        </Field>
+          <Field data-invalid={errors.estado ? true : undefined}>
+            <FieldLabel>Estado</FieldLabel>
+            <Select
+              value={estado}
+              onValueChange={(value) =>
+                setValue("estado", value as EstadoValidacionSunat, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+            >
+              <SelectTrigger className="rounded-xl transition-all duration-250 hover:bg-muted/10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ESTADO_VALIDACION_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldError>{errors.estado?.message}</FieldError>
+          </Field>
+        </div>
 
-        <Field className="sm:col-span-2">
-          <FieldLabel>Condición de domicilio</FieldLabel>
-          <Select
-            value={isRucDocumento ? condicionDomicilio : "__none"}
-            disabled={!isRucDocumento}
-            onValueChange={(value) =>
-              setValue("condicionDomicilio", value === "__none" ? "" : value, {
-                shouldDirty: true,
-                shouldValidate: true,
-              })
-            }
-          >
-            <SelectTrigger className="rounded-xl">
-              <SelectValue placeholder="Sin condición" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__none">Sin consulta / no aplica</SelectItem>
-              {CONDICION_DOMICILIO_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[11px] text-muted-foreground">
-            {isRucDocumento
-              ? "La condición de domicilio aplica a consultas RUC en SUNAT."
-              : "Para DNI o público general sin documento no aplica condición de domicilio SUNAT; se guarda como sin consulta."}
-          </p>
-        </Field>
-      </FieldGroup>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field>
+            <FieldLabel>Dirección fiscal</FieldLabel>
+            <Input
+              placeholder="Av. Cliente 123"
+              className="transition-all duration-250"
+              {...register("direccionFiscal")}
+            />
+          </Field>
 
-      <div className="flex justify-end gap-2">
+          <Field>
+            <FieldLabel>Condición de domicilio</FieldLabel>
+            <Select
+              value={isRucDocumento ? condicionDomicilio : "__none"}
+              disabled={!isRucDocumento}
+              onValueChange={(value) =>
+                setValue("condicionDomicilio", value === "__none" ? "" : value, {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+            >
+              <SelectTrigger className="rounded-xl transition-all duration-250 hover:bg-muted/10 disabled:opacity-50">
+                <SelectValue placeholder="Sin condición" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none">Sin consulta / no aplica</SelectItem>
+                {CONDICION_DOMICILIO_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+
+        {!isRucDocumento ? (
+          <div className="text-[11px] text-muted-foreground bg-muted/20 dark:bg-muted/5 p-2 rounded-xl border border-border/30 -mt-1 leading-normal transition-all duration-300">
+            Para DNI o público general sin documento no aplica condición de domicilio SUNAT; se guarda como sin consulta.
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex justify-end gap-2.5 pt-3 border-t border-border/40 mt-4 shrink-0">
         <Button
           type="button"
           variant="outline"
-          className="rounded-xl"
+          className="rounded-xl px-4 transition-all duration-200"
           onClick={onCancel}
         >
           Cancelar
         </Button>
-        <Button type="submit" disabled={isPending} className="rounded-xl">
-          {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-          {isEditing ? "Guardar cambios" : "Registrar validación"}
+        <Button
+          type="submit"
+          disabled={isPending}
+          className="rounded-xl px-5 transition-all duration-250 active:scale-[0.98]"
+        >
+          {isPending ? <Loader2 className="size-4 animate-spin mr-1.5" /> : null}
+          {isUpdatingExisting ? "Guardar cambios" : "Registrar validación"}
         </Button>
       </div>
     </form>

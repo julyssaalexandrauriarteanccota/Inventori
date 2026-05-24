@@ -43,6 +43,39 @@ function buildParams(filters: Record<string, QueryParamValue>) {
   return params.toString();
 }
 
+function toMoneyNumber(value: unknown) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function normalizeComprobantesResponse(
+  response: ComprobantesPaginatedResponse,
+): ComprobantesPaginatedResponse {
+  return {
+    ...response,
+    data: response.data.map((item) => ({
+      ...item,
+      subtotal: toMoneyNumber(item.subtotal),
+      igv: toMoneyNumber(item.igv),
+      total: toMoneyNumber(item.total),
+    })),
+  };
+}
+
+function normalizeVentasPendientesResponse(
+  response: VentasPendientesFacturacionPaginatedResponse,
+): VentasPendientesFacturacionPaginatedResponse {
+  return {
+    ...response,
+    data: response.data.map((item) => ({
+      ...item,
+      subtotal: toMoneyNumber(item.subtotal),
+      igv: toMoneyNumber(item.igv),
+      total: toMoneyNumber(item.total),
+    })),
+  };
+}
+
 export interface ConfigEmpresaFiscalItem extends ConfigEmpresaFiscalPayload {
   id: string;
   createdAt: string;
@@ -55,6 +88,9 @@ export type UpdateConfigEmpresaFiscalPayload = Partial<{
   nombreComercial: string;
   direccionFiscal: string;
   ubigeoFiscal: string;
+  departamentoFiscal: string;
+  provinciaFiscal: string;
+  distritoFiscal: string;
   codigoEstablecimiento: string;
   correoSee: string;
   regimenTributario: string;
@@ -198,15 +234,25 @@ export interface SunatDirectTestConnectionResult {
 export interface ClienteValidacionSunatItem extends Omit<
   ClienteValidacionSunatPayload,
   | "clienteId"
+  | "proveedor"
   | "nombreNormalizado"
   | "direccionFiscal"
+  | "ubigeo"
+  | "departamento"
+  | "provincia"
+  | "distrito"
   | "condicionDomicilio"
   | "ultimaValidacionAt"
 > {
   id: string;
   clienteId?: string | null;
+  proveedor?: ClienteValidacionSunatPayload["proveedor"] | null;
   nombreNormalizado?: string | null;
   direccionFiscal?: string | null;
+  ubigeo?: string | null;
+  departamento?: string | null;
+  provincia?: string | null;
+  distrito?: string | null;
   condicionDomicilio?: string | null;
   ultimaValidacionAt?: string | null;
   createdAt: string;
@@ -235,6 +281,38 @@ export interface QueryClienteValidacionSunatFilters {
   clienteId?: string;
   estado?: EstadoValidacionSunat;
   search?: string;
+}
+
+export interface ImportPadronSunatRucResult {
+  status:
+    | "IDLE"
+    | "RUNNING"
+    | "CANCEL_REQUESTED"
+    | "CANCELLED"
+    | "SUCCESS"
+    | "ERROR";
+  stage:
+    | "IDLE"
+    | "DOWNLOADING"
+    | "DECOMPRESSING"
+    | "CLEANING"
+    | "IMPORTING"
+    | "PUBLISHING"
+    | "COMPLETED"
+    | "CANCELLED"
+    | "ERROR";
+  sourceUrl: string | null;
+  message: string;
+  processed: number;
+  inserted: number;
+  discarded: number;
+  totalLines: number | null;
+  currentRecords: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  importedAt: string | null;
+  error: string | null;
 }
 
 export interface FeriadoNacionalItem {
@@ -300,11 +378,12 @@ export interface QueryComprobanteEnvioLogFilters {
 export function useComprobantes(filters: QueryComprobanteFilters = {}) {
   return useQuery({
     queryKey: [FACTURACION_KEY, filters],
-    queryFn: () => {
+    queryFn: async () => {
       const qs = buildParams(filters as Record<string, QueryParamValue>);
-      return api.get<ComprobantesPaginatedResponse>(
+      const response = await api.get<ComprobantesPaginatedResponse>(
         `/facturacion/comprobantes${qs ? `?${qs}` : ""}`,
       );
+      return normalizeComprobantesResponse(response);
     },
   });
 }
@@ -326,11 +405,13 @@ export function useVentasPendientesFacturacion(
 ) {
   return useQuery({
     queryKey: [FACTURACION_KEY, "ventas-pendientes", filters],
-    queryFn: () => {
+    queryFn: async () => {
       const qs = buildParams(filters as Record<string, QueryParamValue>);
-      return api.get<VentasPendientesFacturacionPaginatedResponse>(
-        `/facturacion/ventas-pendientes${qs ? `?${qs}` : ""}`,
-      );
+      const response =
+        await api.get<VentasPendientesFacturacionPaginatedResponse>(
+          `/facturacion/ventas-pendientes${qs ? `?${qs}` : ""}`,
+        );
+      return normalizeVentasPendientesResponse(response);
     },
   });
 }
@@ -1004,6 +1085,57 @@ export function useDeleteClienteValidacionSunat() {
         queryKey: [FACTURACION_KEY, "clientes-validaciones"],
       });
     },
+  });
+}
+
+export function useImportPadronSunatRuc() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<ApiEnvelope<ImportPadronSunatRucResult>>(
+        "/facturacion/padron-sunat-ruc/importar",
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: [FACTURACION_KEY, "padron-sunat-ruc"],
+      });
+      qc.invalidateQueries({
+        queryKey: [FACTURACION_KEY, "clientes-validaciones"],
+      });
+    },
+  });
+}
+
+export function useCancelPadronSunatRucImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<ApiEnvelope<ImportPadronSunatRucResult>>(
+        "/facturacion/padron-sunat-ruc/importar/cancelar",
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: [FACTURACION_KEY, "padron-sunat-ruc"],
+      });
+      qc.invalidateQueries({
+        queryKey: [FACTURACION_KEY, "padron-sunat-ruc", "import-status"],
+      });
+    },
+  });
+}
+
+export function usePadronSunatRucImportStatus() {
+  return useQuery({
+    queryKey: [FACTURACION_KEY, "padron-sunat-ruc", "import-status"],
+    queryFn: () =>
+      api.get<ApiEnvelope<ImportPadronSunatRucResult>>(
+        "/facturacion/padron-sunat-ruc/importar/status",
+      ),
+    refetchInterval: (query) =>
+      query.state.data?.data.status === "RUNNING" ||
+      query.state.data?.data.status === "CANCEL_REQUESTED"
+        ? 2000
+        : false,
   });
 }
 

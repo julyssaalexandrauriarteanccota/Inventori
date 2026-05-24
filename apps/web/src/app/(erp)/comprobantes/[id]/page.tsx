@@ -10,8 +10,10 @@ import {
   FileMinus,
   FilePlus,
   Loader2,
+  Printer,
   RefreshCw,
 } from "lucide-react";
+import type { FormatoImpresionDocumento } from "@erp/shared";
 import { toast } from "sonner";
 import { EstadoComprobante, TipoDocumento } from "@erp/shared";
 
@@ -36,13 +38,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  ThermalReceiptDialog,
+  type ThermalReceiptData,
+} from "@/components/pos/thermal-receipt";
+import {
   useAnularComprobante,
   useComprobante,
   useComprobanteEnvios,
+  useConfigFiscal,
   useConsultarSunatComprobante,
   useReintentarComprobante,
   useSaldoNoAcreditado,
 } from "@/hooks/use-facturacion";
+import { usePublicBranding } from "@/hooks/use-public-branding";
+import { api } from "@/lib/api";
+import {
+  buildEmpresaPrintData,
+  comprobanteToPrintData,
+} from "@/app/(erp)/comprobantes/_components/comprobante-print-utils";
 
 interface ComprobanteDetalleData {
   id: string;
@@ -111,6 +124,9 @@ interface ComprobanteDetalleData {
   } | null;
 }
 
+type MoneyValue = number | string | null | undefined;
+type ArtifactKind = "pdf" | "xml" | "cdr";
+
 const ESTADO_TONE: Record<string, string> = {
   [EstadoComprobante.PENDIENTE_ENVIO]:
     "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
@@ -127,9 +143,35 @@ const ESTADO_TONE: Record<string, string> = {
     "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400",
 };
 
-function fmtMoney(n: number, moneda = "PEN") {
+function toMoneyNumber(value: MoneyValue) {
+  const amount = Number(value ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function fmtMoney(n: MoneyValue, moneda = "PEN") {
   const symbol = moneda === "PEN" ? "S/" : moneda;
-  return `${symbol} ${(n ?? 0).toFixed(2)}`;
+  return `${symbol} ${toMoneyNumber(n).toFixed(2)}`;
+}
+
+function isComprobanteAceptadoSunat(estado?: EstadoComprobante) {
+  return (
+    estado === EstadoComprobante.ACEPTADO ||
+    estado === EstadoComprobante.ACEPTADO_CON_OBSERVACIONES
+  );
+}
+
+function explainSunatRejectMessage(message?: string | null) {
+  const text = message ?? "";
+  if (/unitCode.+invalid value 'UND'|invalid value 'UND'.+unitCode/i.test(text)) {
+    return "Motivo: unidad de medida SUNAT inválida. Se envió UND; para bienes usa NIU y para servicios ZZ.";
+  }
+  if (/undefined attribute Id/i.test(text)) {
+    return "Motivo: XML firmado con atributo Id no permitido en el nodo Invoice. Reintenta para regenerar el XML.";
+  }
+  if (/No se puede leer \(parsear\) el archivo XML/i.test(text)) {
+    return "Motivo: SUNAT no pudo leer el XML. Revisa los campos fiscales del comprobante antes de reintentar.";
+  }
+  return null;
 }
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -140,6 +182,112 @@ function JsonBlock({ value }: { value: unknown }) {
     <pre className="max-h-[600px] overflow-auto rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed">
       {JSON.stringify(value, null, 2)}
     </pre>
+  );
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getSunatDiagnostics(log: {
+  requestPayload?: unknown | null;
+  responsePayload?: unknown | null;
+}) {
+  const request = asRecord(log.requestPayload);
+  const response = asRecord(log.responsePayload);
+  const diagnostics = asRecord(request?.diagnostics);
+  if (!diagnostics && !response?.responseSnippet) return null;
+
+  return {
+    fileName: request?.fileName,
+    xmlFileName: request?.xmlFileName,
+    zipSha256: request?.zipSha256,
+    endpoint: request?.endpoint,
+    credentialsSource: request?.credentialsSource,
+    usernameMode: request?.usernameMode,
+    diagnostics,
+    responseSnippet: response?.responseSnippet,
+  };
+}
+
+function DiagnosticValue({ label, value }: { label: string; value: unknown }) {
+  if (value === null || value === undefined || value === "") return null;
+  const text = Array.isArray(value) ? value.join(", ") : String(value);
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-normal text-muted-foreground">
+        {label}
+      </p>
+      <p className="break-words font-mono text-[11px] text-foreground">
+        {text}
+      </p>
+    </div>
+  );
+}
+
+function SunatDiagnostics({
+  log,
+}: {
+  log: { requestPayload?: unknown | null; responsePayload?: unknown | null };
+}) {
+  const data = getSunatDiagnostics(log);
+  if (!data) return null;
+
+  const diagnostics = data.diagnostics;
+  return (
+    <details className="mt-3 rounded-md border bg-muted/20 p-2">
+      <summary className="cursor-pointer text-[11px] font-semibold">
+        Diagnóstico técnico del envío
+      </summary>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <DiagnosticValue label="Archivo ZIP" value={data.fileName} />
+        <DiagnosticValue label="Archivo XML" value={data.xmlFileName} />
+        <DiagnosticValue label="Endpoint" value={data.endpoint} />
+        <DiagnosticValue
+          label="Credenciales"
+          value={data.credentialsSource}
+        />
+        <DiagnosticValue label="Modo usuario" value={data.usernameMode} />
+        <DiagnosticValue label="UBL" value={diagnostics?.ublVersionId} />
+        <DiagnosticValue
+          label="Customization"
+          value={diagnostics?.customizationId}
+        />
+        <DiagnosticValue label="Tipo CPE" value={diagnostics?.invoiceTypeCode} />
+        <DiagnosticValue label="Encoding" value={diagnostics?.declaredEncoding} />
+        <DiagnosticValue label="Raíz" value={diagnostics?.rootName} />
+        <DiagnosticValue label="Fecha" value={diagnostics?.issueDate} />
+        <DiagnosticValue label="Hora" value={diagnostics?.issueTime} />
+        <DiagnosticValue label="Notas" value={diagnostics?.noteCount} />
+        <DiagnosticValue
+          label="ProfileID"
+          value={diagnostics?.hasProfileId}
+        />
+        <DiagnosticValue
+          label="Signature Id"
+          value={diagnostics?.hasSignatureId}
+        />
+        <DiagnosticValue
+          label="Reference URI"
+          value={diagnostics?.signatureReferenceUri}
+        />
+        <DiagnosticValue label="URI cac" value={diagnostics?.cacSignatureUri} />
+        <DiagnosticValue label="Bytes ZIP" value={diagnostics?.zipEntrySize} />
+        <DiagnosticValue
+          label="Primeros bytes"
+          value={diagnostics?.zipFirstBytesHex}
+        />
+        <DiagnosticValue label="SHA XML" value={diagnostics?.xmlSha256} />
+        <DiagnosticValue label="SHA ZIP" value={data.zipSha256} />
+      </div>
+      {data.responseSnippet ? (
+        <pre className="mt-3 max-h-32 overflow-auto rounded border bg-background p-2 text-[10px] leading-relaxed">
+          {String(data.responseSnippet)}
+        </pre>
+      ) : null}
+    </details>
   );
 }
 
@@ -160,13 +308,67 @@ export default function ComprobanteDetallePage({
 
   const [anularOpen, setAnularOpen] = useState(false);
   const [motivoBaja, setMotivoBaja] = useState("");
+  const [downloadingArtifact, setDownloadingArtifact] =
+    useState<ArtifactKind | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printFormat, setPrintFormat] =
+    useState<FormatoImpresionDocumento>("A4");
+
+  // Company data for print preview
+  const configFiscalQ = useConfigFiscal();
+  const publicBrandingQ = usePublicBranding();
 
   const data = detalleQuery.data?.data as ComprobanteDetalleData | undefined;
+  const estadoAceptadoSunat = isComprobanteAceptadoSunat(data?.estado);
+  const saldoNoAcreditado = estadoAceptadoSunat
+    ? saldoQuery.data?.data
+    : undefined;
+  const mostrarSaldoNoAcreditado = !!saldoNoAcreditado;
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
-  const pdfHref = `${apiBase}/facturacion/comprobantes/${id}/pdf`;
-  const xmlHref = `${apiBase}/facturacion/comprobantes/${id}/xml`;
-  const cdrHref = `${apiBase}/facturacion/comprobantes/${id}/cdr`;
+  const printData = useMemo<ThermalReceiptData | null>(() => {
+    if (!data) return null;
+    const configFiscal = configFiscalQ.data?.data ?? null;
+    const empresaPublica = publicBrandingQ.data?.data ?? null;
+    const empresa = buildEmpresaPrintData(
+      configFiscal,
+      empresaPublica,
+      data.snapshotEmisorJson,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return comprobanteToPrintData(data as any, empresa, configFiscal?.pieImpresion ?? undefined);
+  }, [data, configFiscalQ.data, publicBrandingQ.data]);
+
+  const openPrintPreview = (format: FormatoImpresionDocumento) => {
+    setPrintFormat(format);
+    setPrintOpen(true);
+  };
+
+  const downloadArtifact = async (kind: ArtifactKind) => {
+    setDownloadingArtifact(kind);
+    try {
+      const result = await api.download(
+        `/facturacion/comprobantes/${id}/${kind}`,
+      );
+      const url = URL.createObjectURL(result.blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download =
+        result.filename ??
+        `${data?.numero ?? "comprobante"}.${kind === "cdr" ? "cdr.zip" : kind}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : `No se pudo descargar ${kind.toUpperCase()}`,
+      );
+    } finally {
+      setDownloadingArtifact(null);
+    }
+  };
 
   const puedeAnular = useMemo(() => {
     if (!data) return false;
@@ -197,7 +399,10 @@ export default function ComprobanteDetallePage({
     return (
       data.notasCredito.find((nota) => {
         const monto = Number(nota.monto ?? nota.total ?? 0);
-        return nota.estado === EstadoComprobante.ACEPTADO && monto >= data.total;
+        return (
+          nota.estado === EstadoComprobante.ACEPTADO &&
+          monto >= toMoneyNumber(data.total)
+        );
       }) ?? null
     );
   }, [data]);
@@ -297,25 +502,54 @@ export default function ComprobanteDetallePage({
               <Link href={`/ventas/${data.venta.id}`}>Ver venta</Link>
             </Button>
           ) : null}
-          {data.pdfUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={pdfHref} target="_blank" rel="noreferrer">
-                <Download className="size-3.5" /> PDF
-              </a>
-            </Button>
-          ) : null}
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            disabled={!data}
+            onClick={() => openPrintPreview("A4")}
+          >
+            <Printer className="size-3.5" />
+            A4
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            disabled={!data}
+            onClick={() => openPrintPreview("TICKET")}
+          >
+            <Printer className="size-3.5" />
+            Ticket
+          </Button>
           {data.xmlUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={xmlHref} target="_blank" rel="noreferrer">
-                <Download className="size-3.5" /> XML
-              </a>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={downloadingArtifact === "xml"}
+              onClick={() => downloadArtifact("xml")}
+            >
+              {downloadingArtifact === "xml" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Download className="size-3.5" />
+              )}
+              XML
             </Button>
           ) : null}
           {data.cdrUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={cdrHref} target="_blank" rel="noreferrer">
-                <Download className="size-3.5" /> CDR
-              </a>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={downloadingArtifact === "cdr"}
+              onClick={() => downloadArtifact("cdr")}
+            >
+              {downloadingArtifact === "cdr" ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Download className="size-3.5" />
+              )}
+              CDR
             </Button>
           ) : null}
           <Button
@@ -337,8 +571,7 @@ export default function ComprobanteDetallePage({
             />
             Consultar SUNAT
           </Button>
-          {data.estado === EstadoComprobante.RECHAZADO ||
-          data.estado === EstadoComprobante.PENDIENTE_ENVIO ? (
+          {data.estado === EstadoComprobante.RECHAZADO ? (
             <Button
               size="sm"
               disabled={reintentar.isPending}
@@ -388,10 +621,10 @@ export default function ComprobanteDetallePage({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={!saldoQuery.data?.data.puedeEmitirNc}
+                disabled={!estadoAceptadoSunat || !saldoNoAcreditado?.puedeEmitirNc}
                 title={
-                  saldoQuery.data?.data.bloqueoPorNcEnProceso
-                    ? `Bloqueado: NC ${saldoQuery.data.data.bloqueoPorNcEnProceso.numero} en estado ${saldoQuery.data.data.bloqueoPorNcEnProceso.estado}`
+                  saldoNoAcreditado?.bloqueoPorNcEnProceso
+                    ? `Bloqueado: NC ${saldoNoAcreditado.bloqueoPorNcEnProceso.numero} en estado ${saldoNoAcreditado.bloqueoPorNcEnProceso.estado}`
                     : undefined
                 }
                 onClick={() =>
@@ -403,11 +636,7 @@ export default function ComprobanteDetallePage({
               <Button
                 variant="outline"
                 size="sm"
-                disabled={
-                  data.estado !== EstadoComprobante.ACEPTADO &&
-                  data.estado !==
-                    EstadoComprobante.ACEPTADO_CON_OBSERVACIONES
-                }
+                disabled={!estadoAceptadoSunat}
                 onClick={() =>
                   router.push(`/comprobantes/nueva-nd?origen=${id}&motivo=03`)
                 }
@@ -531,11 +760,11 @@ export default function ComprobanteDetallePage({
                             {fmtMoney(d.precioUnitario, data.moneda)}
                           </td>
                           <td className="py-2 pr-2 text-right tabular-nums">
-                            {fmtMoney(Number(d.igvMonto ?? d.igv ?? 0), data.moneda)}
+                            {fmtMoney(d.igvMonto ?? d.igv, data.moneda)}
                           </td>
                           <td className="py-2 text-right font-medium tabular-nums">
                             {fmtMoney(
-                              Number(d.importeTotal ?? d.total ?? 0),
+                              d.importeTotal ?? d.total,
                               data.moneda,
                             )}
                           </td>
@@ -626,6 +855,12 @@ export default function ComprobanteDetallePage({
                           {log.mensaje}
                         </p>
                       ) : null}
+                      {explainSunatRejectMessage(log.mensaje) ? (
+                        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                          {explainSunatRejectMessage(log.mensaje)}
+                        </p>
+                      ) : null}
+                      <SunatDiagnostics log={log} />
                     </div>
                   ))}
                 </div>
@@ -640,7 +875,7 @@ export default function ComprobanteDetallePage({
 
         {/* Tab Vinculadas */}
         <TabsContent value="vinculadas" className="space-y-4">
-          {saldoQuery.data?.data ? (
+          {mostrarSaldoNoAcreditado ? (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Saldo no acreditado</CardTitle>
@@ -655,7 +890,7 @@ export default function ComprobanteDetallePage({
                     <p className="text-xs text-muted-foreground">Total origen</p>
                     <p className="font-semibold tabular-nums">
                       {fmtMoney(
-                        saldoQuery.data.data.totalOrigen,
+                        saldoNoAcreditado.totalOrigen,
                         data.moneda,
                       )}
                     </p>
@@ -663,7 +898,7 @@ export default function ComprobanteDetallePage({
                   <div>
                     <p className="text-xs text-muted-foreground">Acreditado</p>
                     <p className="tabular-nums">
-                      {fmtMoney(saldoQuery.data.data.acreditado, data.moneda)}
+                      {fmtMoney(saldoNoAcreditado.acreditado, data.moneda)}
                     </p>
                   </div>
                   <div>
@@ -672,30 +907,43 @@ export default function ComprobanteDetallePage({
                     </p>
                     <p
                       className={`font-semibold tabular-nums ${
-                        saldoQuery.data.data.saldoNoAcreditado <= 0
+                        toMoneyNumber(
+                          saldoNoAcreditado.saldoNoAcreditado,
+                        ) <= 0
                           ? "text-rose-600"
                           : "text-emerald-600"
                       }`}
                     >
                       {fmtMoney(
-                        saldoQuery.data.data.saldoNoAcreditado,
+                        saldoNoAcreditado.saldoNoAcreditado,
                         data.moneda,
                       )}
                     </p>
                   </div>
                 </div>
-                {saldoQuery.data.data.bloqueoPorNcEnProceso ? (
+                {saldoNoAcreditado.bloqueoPorNcEnProceso ? (
                   <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
                     NC{" "}
                     <span className="font-mono">
-                      {saldoQuery.data.data.bloqueoPorNcEnProceso.numero}
+                      {saldoNoAcreditado.bloqueoPorNcEnProceso.numero}
                     </span>{" "}
                     en estado{" "}
-                    {saldoQuery.data.data.bloqueoPorNcEnProceso.estado}{" "}
+                    {saldoNoAcreditado.bloqueoPorNcEnProceso.estado}{" "}
                     bloquea la emisión de otra NC.
                   </p>
                 ) : null}
               </CardContent>
+            </Card>
+          ) : data.estado === EstadoComprobante.RECHAZADO ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Sin saldo para NC</CardTitle>
+                <CardDescription>
+                  Este comprobante fue rechazado por SUNAT. No genera saldo no
+                  acreditado ni permite notas hasta que exista un comprobante
+                  aceptado.
+                </CardDescription>
+              </CardHeader>
             </Card>
           ) : null}
 
@@ -728,7 +976,7 @@ export default function ComprobanteDetallePage({
                         {n.estado}
                       </Badge>
                       <span className="ml-3 font-medium tabular-nums">
-                        {fmtMoney(Number(n.monto ?? n.total ?? 0), data.moneda)}
+                        {fmtMoney(n.monto ?? n.total, data.moneda)}
                       </span>
                     </li>
                   ))}
@@ -831,6 +1079,13 @@ export default function ComprobanteDetallePage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ThermalReceiptDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        data={printData}
+        format={printFormat}
+      />
     </div>
   );
 }

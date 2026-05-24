@@ -629,9 +629,7 @@ export class AuthService {
     }
   }
 
-  private async findUsablePasswordResetToken(
-    payload: PasswordResetJwtPayload,
-  ) {
+  private async findUsablePasswordResetToken(payload: PasswordResetJwtPayload) {
     if (!payload.jti) {
       throw new BadRequestException('Token de restablecimiento invalido');
     }

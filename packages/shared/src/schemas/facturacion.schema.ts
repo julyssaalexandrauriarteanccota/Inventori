@@ -21,6 +21,12 @@ const optionalTextSchema = nonEmptyTextSchema.optional();
 const nonNegativeMoneySchema = z.number().min(0);
 const positiveQuantitySchema = z.number().positive();
 const clienteDocumentoSunatCodes = ["6", "1", "0"] as const;
+const proveedorValidacionDocumentoCodes = [
+  "SUNAT_PADRON_LOCAL",
+  "DECOLECTA",
+  "APISPERU",
+  "MANUAL",
+] as const;
 
 function isValidClienteDocumentoSunat(
   tipo: (typeof clienteDocumentoSunatCodes)[number],
@@ -157,9 +163,17 @@ export const clienteValidacionSunatSchema = z
     clienteId: z.string().uuid().optional(),
     tipoDocumentoSunat: z.enum(clienteDocumentoSunatCodes),
     numeroDocumento: nonEmptyTextSchema,
+    proveedor: z.enum(proveedorValidacionDocumentoCodes).optional(),
     nombreNormalizado: optionalTextSchema,
     direccionFiscal: optionalTextSchema,
-    estado: z.enum(["PENDIENTE", "VALIDO", "INVALIDO", "ERROR"]),
+    ubigeo: z
+      .string()
+      .regex(/^\d{6}$/, "El ubigeo debe tener 6 dígitos")
+      .optional(),
+    departamento: optionalTextSchema,
+    provincia: optionalTextSchema,
+    distrito: optionalTextSchema,
+    estado: z.enum(["PENDIENTE", "VALIDO", "ACTIVO", "INVALIDO", "ERROR"]),
     condicionDomicilio: optionalTextSchema,
     ultimaValidacionAt: z.string().datetime().nullable().optional(),
   })

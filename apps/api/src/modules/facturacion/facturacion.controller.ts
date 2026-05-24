@@ -29,6 +29,7 @@ import { ComprobanteEnvioLogService } from './comprobante-envio-log.service';
 import { EmpresaSedeFiscalService } from './empresa-sede-fiscal.service';
 import { FacturacionService } from './facturacion.service';
 import { FeriadosNacionalesService } from './feriados-nacionales.service';
+import { PadronSunatRucService } from './padron-sunat-ruc.service';
 import { SeriesDocumentoAdminService } from './series-documento-admin.service';
 import {
   EmitirComprobanteDto,
@@ -70,6 +71,7 @@ export class FacturacionController {
     private readonly clienteValidacionSunatService: ClienteValidacionSunatService,
     private readonly comprobanteEnvioLogService: ComprobanteEnvioLogService,
     private readonly feriadosNacionalesService: FeriadosNacionalesService,
+    private readonly padronSunatRucService: PadronSunatRucService,
   ) {}
 
   // ── Comprobantes ────────────────────────────────────────────────────
@@ -591,6 +593,27 @@ export class FacturacionController {
   @ApiOperation({ summary: 'Eliminar validación SUNAT de cliente' })
   deleteClienteValidacion(@Param('id', ParseUUIDPipe) id: string) {
     return this.clienteValidacionSunatService.delete(id);
+  }
+
+  @Post('padron-sunat-ruc/importar')
+  @Roles(RolUsuario.ADMIN)
+  @ApiOperation({ summary: 'Iniciar importación del padrón reducido RUC SUNAT' })
+  importarPadronSunatRuc() {
+    return this.padronSunatRucService.startImportFromSunatUrl();
+  }
+
+  @Post('padron-sunat-ruc/importar/cancelar')
+  @Roles(RolUsuario.ADMIN)
+  @ApiOperation({ summary: 'Solicitar cancelación de importación del padrón RUC' })
+  cancelarImportacionPadronSunatRuc() {
+    return this.padronSunatRucService.cancelImport();
+  }
+
+  @Get('padron-sunat-ruc/importar/status')
+  @Roles(RolUsuario.ADMIN)
+  @ApiOperation({ summary: 'Consultar progreso de importación del padrón RUC' })
+  estadoImportacionPadronSunatRuc() {
+    return this.padronSunatRucService.getImportStatus();
   }
 
   // ── Notas de crédito ────────────────────────────────────────────────

@@ -529,7 +529,7 @@ export default function CotizacionesPage() {
           label="Cotizaciones activas"
           value={data?.meta?.total ?? 0}
           icon={FileText}
-          color="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400"
+          color="bg-[oklch(0.96_0.02_75)] text-[oklch(0.38_0.08_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)]"
           subtitle="En estado cotización"
           isLoading={isLoading}
           index={0}
@@ -894,8 +894,8 @@ export default function CotizacionesPage() {
       >
         <AlertDialogContent className="w-full rounded-2xl p-6 sm:max-w-md">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0 text-left">
-            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/40">
-              <XCircle className="size-5 text-amber-700 dark:text-amber-400" />
+            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-[oklch(0.96_0.02_75)] dark:bg-[oklch(0.16_0.03_75)]">
+              <XCircle className="size-5 text-[oklch(0.40_0.08_75)] dark:text-[oklch(0.78_0.08_75)]" />
             </div>
             <div className="flex flex-col gap-1.5">
               <AlertDialogTitle className="text-xl">
@@ -910,7 +910,7 @@ export default function CotizacionesPage() {
             <AlertDialogCancel className="mt-0 rounded-xl">Volver</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancel}
-              className="rounded-xl bg-amber-600 text-white hover:bg-amber-700"
+              className="rounded-xl bg-[oklch(0.60_0.14_75)] text-white hover:bg-[oklch(0.52_0.12_75)] dark:bg-[oklch(0.72_0.14_75)] dark:text-black dark:hover:bg-[oklch(0.65_0.12_75)] transition-all duration-200"
             >
               Cancelar cotización
             </AlertDialogAction>

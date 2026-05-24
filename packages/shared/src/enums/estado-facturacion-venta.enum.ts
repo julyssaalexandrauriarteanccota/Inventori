@@ -7,6 +7,8 @@
 export enum EstadoFacturacionVenta {
   /** Venta sin comprobante asociado todavía. */
   SIN_COMPROBANTE = "SIN_COMPROBANTE",
+  /** Venta menor de S/ 5 para cliente genérico, cerrada como ticket interno. */
+  VENTA_INTERNA = "VENTA_INTERNA",
   /** Comprobante creado, en cola o esperando CDR. */
   EN_EMISION = "EN_EMISION",
   /** CDR aceptado por SUNAT. */

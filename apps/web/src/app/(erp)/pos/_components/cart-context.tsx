@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 
-import { IGV_RATE } from "@/lib/pos-navigation";
+import { lineTotalInclIgv, splitIncludedIgv } from "@/lib/pos-pricing";
 
 export type CartLineKind = "PRODUCTO" | "EQUIPO";
 
@@ -112,22 +112,18 @@ function makeId() {
 }
 
 function calcTotals(lines: CartLine[]): CartTotals {
-  const subtotal = lines.reduce((acc, l) => {
-    const lineTotal = Math.max(0, l.cantidad * l.precioUnitario - l.descuento);
-    return acc + lineTotal;
-  }, 0);
-  const igv = subtotal * IGV_RATE;
-  const total = subtotal + igv;
+  const totalInclIgv = lines.reduce(
+    (acc, line) =>
+      acc +
+      lineTotalInclIgv(line.cantidad, line.precioUnitario, line.descuento),
+    0,
+  );
+  const totals = splitIncludedIgv(totalInclIgv);
+
   return {
-    subtotal: round2(subtotal),
-    igv: round2(igv),
-    total: round2(total),
+    ...totals,
     itemsCount: lines.reduce((acc, l) => acc + l.cantidad, 0),
   };
-}
-
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
 }
 
 function toFiniteNumber(value: unknown, fallback = 0) {
@@ -202,9 +198,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         const next = [...prev];
         next[idx] = {
           ...next[idx],
-          cantidad: next[idx].requiereSerie
-            ? 1
-            : next[idx].cantidad + cantidad,
+          cantidad: next[idx].requiereSerie ? 1 : next[idx].cantidad + cantidad,
         };
         return next;
       }
@@ -241,7 +235,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           l.id === lineId
             ? {
                 ...l,
-                cantidad: l.requiereSerie ? Math.min(1, Math.max(0, cantidad)) : Math.max(0, cantidad),
+                cantidad: l.requiereSerie
+                  ? Math.min(1, Math.max(0, cantidad))
+                  : Math.max(0, cantidad),
               }
             : l,
         )
@@ -268,7 +264,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const setEquipoSerie = useCallback((lineId: string, equipoSerie: string) => {
     setLines((prev) =>
       prev.map((l) =>
-        l.id === lineId ? { ...l, equipoSerie: equipoSerie.trim() || undefined } : l,
+        l.id === lineId
+          ? { ...l, equipoSerie: equipoSerie.trim() || undefined }
+          : l,
       ),
     );
   }, []);

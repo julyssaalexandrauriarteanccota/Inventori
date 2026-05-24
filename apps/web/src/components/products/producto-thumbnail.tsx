@@ -10,9 +10,10 @@ interface ProductoThumbnailProps {
   alt: string;
   /** Texto corto a mostrar como fallback (típicamente el SKU). */
   fallback: string;
-  /** Tamaño del cuadro en px. Default 44 (table). */
-  size?: number;
+  /** Tamaño del cuadro en px o "full" para ocupar todo el contenedor. Default 44 (table). */
+  size?: number | "full";
   className?: string;
+  imgClassName?: string;
   rounded?: "md" | "lg" | "xl" | "2xl";
 }
 
@@ -26,6 +27,7 @@ export function ProductoThumbnail({
   fallback,
   size = 44,
   className,
+  imgClassName,
   rounded = "lg",
 }: ProductoThumbnailProps) {
   const [attemptIndex, setAttemptIndex] = useState(0);
@@ -47,7 +49,11 @@ export function ProductoThumbnail({
         radius,
         className,
       )}
-      style={{ width: size, height: size }}
+      style={
+        size === "full"
+          ? { width: "100%", height: "100%" }
+          : { width: size, height: size }
+      }
     >
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -55,11 +61,16 @@ export function ProductoThumbnail({
           src={currentSrc}
           alt={alt}
           loading="lazy"
-          className="h-full w-full object-cover"
+          className={cn("h-full w-full object-cover", imgClassName)}
           onError={() => setAttemptIndex((idx) => idx + 1)}
         />
       ) : (
-        <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-blue-500 to-indigo-700 dark:from-blue-700 dark:to-indigo-900 text-[10px] font-bold uppercase tracking-wide text-white">
+        <div
+          className={cn(
+            "flex h-full w-full items-center justify-center bg-linear-to-br from-blue-500 to-indigo-700 dark:from-blue-700 dark:to-indigo-900 font-bold uppercase tracking-wide text-white",
+            size === "full" ? "text-sm" : "text-[10px]"
+          )}
+        >
           {initials}
         </div>
       )}

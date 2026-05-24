@@ -29,6 +29,10 @@ export class ClienteValidacionSunatService {
         { numeroDocumento: { contains: query.search, mode: 'insensitive' } },
         { nombreNormalizado: { contains: query.search, mode: 'insensitive' } },
         { direccionFiscal: { contains: query.search, mode: 'insensitive' } },
+        { ubigeo: { contains: query.search, mode: 'insensitive' } },
+        { departamento: { contains: query.search, mode: 'insensitive' } },
+        { provincia: { contains: query.search, mode: 'insensitive' } },
+        { distrito: { contains: query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -85,10 +89,11 @@ export class ClienteValidacionSunatService {
   }
 
   async upsert(dto: CreateClienteValidacionSunatDto) {
-    await this.ensureCliente(dto.clienteId);
     const data = this.normalizeDto(dto);
+    const cliente = await this.ensureCliente(data.clienteId);
     this.validateDocumentoSunat(data.tipoDocumentoSunat, data.numeroDocumento);
     this.applyDocumentoRules(data);
+    this.validateDocumentoMatchesCliente(data, cliente);
     const current = await this.prisma.clienteValidacionSunat.findFirst({
       where: {
         tipoDocumentoSunat: data.tipoDocumentoSunat,
@@ -122,10 +127,11 @@ export class ClienteValidacionSunatService {
       throw new NotFoundException(`Validación SUNAT ${id} no encontrada`);
     }
 
-    await this.ensureCliente(dto.clienteId);
     const data = this.normalizeDto(dto, current);
+    const cliente = await this.ensureCliente(data.clienteId);
     this.validateDocumentoSunat(data.tipoDocumentoSunat, data.numeroDocumento);
     this.applyDocumentoRules(data);
+    this.validateDocumentoMatchesCliente(data, cliente);
     const duplicate = await this.prisma.clienteValidacionSunat.findFirst({
       where: {
         tipoDocumentoSunat: data.tipoDocumentoSunat,
@@ -154,15 +160,23 @@ export class ClienteValidacionSunatService {
     return this.prisma.clienteValidacionSunat.delete({ where: { id } });
   }
 
-  private async ensureCliente(clienteId?: string) {
-    if (!clienteId) return;
+  private async ensureCliente(clienteId?: string | null) {
+    if (!clienteId) return null;
     const cliente = await this.prisma.cliente.findUnique({
       where: { id: clienteId },
-      select: { id: true },
+      select: {
+        id: true,
+        tipo: true,
+        dni: true,
+        ruc: true,
+        esGenerico: true,
+      },
     });
     if (!cliente) {
       throw new NotFoundException(`Cliente ${clienteId} no encontrado`);
     }
+
+    return cliente;
   }
 
   private normalizeDto(
@@ -173,6 +187,11 @@ export class ClienteValidacionSunatService {
       numeroDocumento: string;
       nombreNormalizado: string | null;
       direccionFiscal: string | null;
+      proveedor: string | null;
+      ubigeo: string | null;
+      departamento: string | null;
+      provincia: string | null;
+      distrito: string | null;
       estado: string;
       condicionDomicilio: string | null;
     },
@@ -191,10 +210,28 @@ export class ClienteValidacionSunatService {
         dto.nombreNormalizado !== undefined
           ? this.optional(dto.nombreNormalizado)
           : current?.nombreNormalizado,
+      proveedor:
+        dto.proveedor !== undefined
+          ? this.optional(dto.proveedor)
+          : (current?.proveedor ?? 'MANUAL'),
       direccionFiscal:
         dto.direccionFiscal !== undefined
           ? this.optional(dto.direccionFiscal)
           : current?.direccionFiscal,
+      ubigeo:
+        dto.ubigeo !== undefined ? this.optional(dto.ubigeo) : current?.ubigeo,
+      departamento:
+        dto.departamento !== undefined
+          ? this.optional(dto.departamento)
+          : current?.departamento,
+      provincia:
+        dto.provincia !== undefined
+          ? this.optional(dto.provincia)
+          : current?.provincia,
+      distrito:
+        dto.distrito !== undefined
+          ? this.optional(dto.distrito)
+          : current?.distrito,
       estado: this.required(dto.estado ?? current?.estado, 'estado'),
       condicionDomicilio:
         dto.condicionDomicilio !== undefined
@@ -239,6 +276,61 @@ export class ClienteValidacionSunatService {
         'Para sin documento se debe usar el número 00000000',
       );
     }
+  }
+
+  private validateDocumentoMatchesCliente(
+    data: {
+      tipoDocumentoSunat: string;
+      numeroDocumento: string;
+    },
+    cliente: {
+      tipo: string;
+      dni: string | null;
+      ruc: string | null;
+      esGenerico: boolean;
+    } | null,
+  ) {
+    if (!cliente) return;
+
+    if (cliente.esGenerico || cliente.dni === '00000000') {
+      if (
+        data.tipoDocumentoSunat !== '0' ||
+        data.numeroDocumento !== '00000000'
+      ) {
+        throw new BadRequestException(
+          'El cliente Público en General solo puede validarse como sin documento',
+        );
+      }
+      return;
+    }
+
+    if (cliente.ruc) {
+      if (
+        data.tipoDocumentoSunat !== '6' ||
+        data.numeroDocumento !== cliente.ruc
+      ) {
+        throw new BadRequestException(
+          'La validación vinculada debe usar el RUC real del cliente seleccionado',
+        );
+      }
+      return;
+    }
+
+    if (cliente.dni) {
+      if (
+        data.tipoDocumentoSunat !== '1' ||
+        data.numeroDocumento !== cliente.dni
+      ) {
+        throw new BadRequestException(
+          'La validación vinculada debe usar el DNI real del cliente seleccionado',
+        );
+      }
+      return;
+    }
+
+    throw new BadRequestException(
+      'El cliente seleccionado no tiene documento soportado para validación',
+    );
   }
 
   private required(value: string | null | undefined, label: string) {

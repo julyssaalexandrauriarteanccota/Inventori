@@ -37,6 +37,7 @@ const ESTADO_LABELS: Partial<Record<EstadoVenta, string>> = {
 
 const FACTURACION_LABELS: Record<EstadoFacturacionVenta, string> = {
   [EstadoFacturacionVenta.SIN_COMPROBANTE]: "Sin comprobante",
+  [EstadoFacturacionVenta.VENTA_INTERNA]: "Venta interna",
   [EstadoFacturacionVenta.EN_EMISION]: "En emision",
   [EstadoFacturacionVenta.EMITIDA]: "Emitida",
   [EstadoFacturacionVenta.EMITIDA_CON_OBS]: "Emitida c/ obs.",

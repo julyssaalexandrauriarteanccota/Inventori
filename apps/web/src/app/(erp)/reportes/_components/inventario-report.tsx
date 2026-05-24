@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import type { StockListItem } from "@erp/shared";
 import {
@@ -22,10 +22,8 @@ import { toast } from "sonner";
 import { useStock, useAlmacenes } from "@/hooks/use-inventario";
 import { useReporteStock } from "@/hooks/use-configuracion";
 import { useDebounce } from "@/hooks/use-debounce";
-import {
-  readStoredInventarioAutoRefreshPreference,
-  writeStoredInventarioAutoRefreshPreference,
-} from "@/lib/inventario-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,29 +34,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatCard } from "@/components/layout/stat-card";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const REFRESH_INTERVALS = [
-  { label: "30 s", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-  { label: "15 min", value: 900_000 },
-];
-
 const REPORTE_INVENTARIO_REFRESH_TOAST_ID = "reporte-inventario-refresh";
-const REPORTE_INVENTARIO_AUTO_REFRESH_TOAST_ID =
-  "reporte-inventario-auto-refresh";
 
 function exportToCSV(rows: StockListItem[], filename: string) {
   const header = [
@@ -95,7 +82,6 @@ function exportToCSV(rows: StockListItem[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
-
 export default function ReporteInventarioTab() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
@@ -107,14 +93,7 @@ export default function ReporteInventarioTab() {
   const [draftAlmacenId, setDraftAlmacenId] = useState<string | undefined>(
     undefined,
   );
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(
-    () => readStoredInventarioAutoRefreshPreference().enabled,
-  );
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(
-    () => readStoredInventarioAutoRefreshPreference().interval,
-  );
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const debouncedSearch = useDebounce(search, 300);
 
   const handleSearchChange = useCallback((value: string) => {
@@ -195,54 +174,14 @@ export default function ReporteInventarioTab() {
     await Promise.all([refetchStock(), refetchReporte(), refetchAlmacenes()]);
   }, [refetchStock, refetchReporte, refetchAlmacenes]);
 
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (autoRefreshEnabled) {
-      intervalRef.current = setInterval(() => {
-        void refetchAll();
-      }, autoRefreshInterval);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [autoRefreshEnabled, autoRefreshInterval, refetchAll]);
-
-  const handleToggleAutoRefresh = useCallback(
-    (enabled: boolean) => {
-      setAutoRefreshEnabled(enabled);
-      writeStoredInventarioAutoRefreshPreference({
-        enabled,
-        interval: autoRefreshInterval,
-      });
-    },
-    [autoRefreshInterval],
-  );
-
-  const handleChangeInterval = useCallback(
-    (interval: number) => {
-      setAutoRefreshInterval(interval);
-      writeStoredInventarioAutoRefreshPreference({
-        enabled: autoRefreshEnabled,
-        interval,
-      });
-    },
-    [autoRefreshEnabled],
-  );
-
-  const handleManualRefresh = useCallback(() => {
-    void refetchAll();
-    toast.info("Reporte actualizado", {
-      id: REPORTE_INVENTARIO_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, [refetchAll]);
+  const autoRefresh = usePageAutoRefresh({
+    scope: "reporte-inventario",
+    toastLabel: "Reporte de inventario",
+    manualToastMessage: "Reporte actualizado",
+    toastId: REPORTE_INVENTARIO_REFRESH_TOAST_ID,
+    onRefresh: refetchAll,
+  });
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const handleExportCSV = useCallback(() => {
     if (rows.length === 0) {
@@ -385,90 +324,10 @@ export default function ReporteInventarioTab() {
         </div>
 
         <div className="ml-auto flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-end">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-3 py-1.5 transition-colors duration-300",
-              autoRefreshEnabled
-                ? "border-primary/25 bg-primary/5"
-                : "border-border bg-muted/30",
-            )}
-          >
-            <div className="relative flex items-center justify-center">
-              {autoRefreshEnabled && (
-                <span className="absolute inline-flex size-5 animate-ping rounded-full bg-primary opacity-10" />
-              )}
-              <RefreshCcw
-                className={cn(
-                  "size-3.5 text-muted-foreground transition-all",
-                  (autoRefreshEnabled || isRefreshing) &&
-                    "text-primary animate-spin",
-                )}
-                style={
-                  autoRefreshEnabled || isRefreshing
-                    ? { animationDuration: "3s" }
-                    : {}
-                }
-              />
-            </div>
-
-            {autoRefreshEnabled ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-1 text-xs text-primary font-medium hover:underline">
-                    {REFRESH_INTERVALS.find(
-                      (item) => item.value === autoRefreshInterval,
-                    )?.label ?? "Auto"}
-                    <ChevronDown className="size-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36">
-                  {REFRESH_INTERVALS.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onClick={() => handleChangeInterval(option.value)}
-                      className={cn(
-                        "text-xs",
-                        autoRefreshInterval === option.value &&
-                          "font-medium text-primary",
-                      )}
-                    >
-                      {option.label}
-                      {autoRefreshInterval === option.value ? " ✓" : ""}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <span className="text-xs text-muted-foreground">Manual</span>
-            )}
-
-            <Switch
-              id="reporte-inventario-auto-refresh"
-              size="sm"
-              checked={autoRefreshEnabled}
-              onCheckedChange={(value) => {
-                handleToggleAutoRefresh(value);
-
-                if (value) {
-                  toast.success("Auto-refresh activado", {
-                    id: REPORTE_INVENTARIO_AUTO_REFRESH_TOAST_ID,
-                    duration: 1800,
-                  });
-                } else {
-                  toast.info("Auto-refresh desactivado", {
-                    id: REPORTE_INVENTARIO_AUTO_REFRESH_TOAST_ID,
-                    duration: 1800,
-                  });
-                }
-              }}
-            />
-            <Label
-              htmlFor="reporte-inventario-auto-refresh"
-              className="hidden cursor-pointer text-xs text-muted-foreground sm:block"
-            >
-              Auto
-            </Label>
-          </div>
+          <PageAutoRefreshControl
+            autoRefresh={autoRefresh}
+            isRefreshing={isRefreshing}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

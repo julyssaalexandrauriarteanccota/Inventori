@@ -71,20 +71,22 @@ describe('SunatPayloadBuilder', () => {
     expect(result.documentCode).toBe('01');
     expect(result.xmlFileName).toBe('20123456789-01-F001-00000007.xml');
     expect(result.fileName).toBe('20123456789-01-F001-00000007');
-    expect(result.xml).toMatch(
-      /^<\?xml version="1\.0" encoding="ISO-8859-1" standalone="no"\?>/,
-    );
+    expect(result.xml).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>/);
     expect(result.xml).toContain('<cbc:UBLVersionID>2.1</cbc:UBLVersionID>');
+    expect(result.xml).toContain('<cbc:CustomizationID>2.0</cbc:CustomizationID>');
     expect(result.xml).toContain('<cbc:ID>F001-00000007</cbc:ID>');
     expect(result.xml).toContain('<cac:PaymentTerms>');
     expect(result.xml).toContain(
       '<cbc:PaymentMeansID>Contado</cbc:PaymentMeansID>',
     );
     expect(result.xml).toContain(
-      '<cbc:InvoiceTypeCode listID="0101">01</cbc:InvoiceTypeCode>',
+      '<cbc:InvoiceTypeCode listID="0101" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" name="Tipo de Operacion" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51">01</cbc:InvoiceTypeCode>',
+    );
+    expect(result.xml).toContain(
+      '<cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listAgencyName="United Nations Economic Commission for Europe" listName="Currency">PEN</cbc:DocumentCurrencyCode>',
     );
     expect(result.xml).toContain('<cbc:IssueDate>2026-05-02</cbc:IssueDate>');
-    expect(result.xml).toContain('<cbc:IssueTime>15:30:45</cbc:IssueTime>');
+    expect(result.xml).toContain('<cbc:IssueTime>10:30:45</cbc:IssueTime>');
     expect(result.xml).toContain('<cbc:ID schemeID="6">20123456789</cbc:ID>');
     expect(result.xml).toContain(
       '<cbc:TaxExemptionReasonCode>10</cbc:TaxExemptionReasonCode>',
@@ -110,8 +112,21 @@ describe('SunatPayloadBuilder', () => {
     expect(result.documentCode).toBe('03');
     expect(result.xmlFileName).toBe('20123456789-03-B001-00000007.xml');
     expect(result.xml).toContain(
-      '<cbc:InvoiceTypeCode listID="0101">03</cbc:InvoiceTypeCode>',
+      '<cbc:InvoiceTypeCode listID="0101" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" name="Tipo de Operacion" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51">03</cbc:InvoiceTypeCode>',
     );
+  });
+
+  it('formatea fecha y hora de emisión en zona SUNAT Perú, no UTC', () => {
+    const result = builder.buildInvoice(
+      buildComprobante({
+        tipo: TipoDocumento.BOLETA,
+        serie: 'B001',
+        fechaEmision: new Date('2026-05-22T02:44:31.000Z'),
+      }),
+    );
+
+    expect(result.xml).toContain('<cbc:IssueDate>2026-05-21</cbc:IssueDate>');
+    expect(result.xml).toContain('<cbc:IssueTime>21:44:31</cbc:IssueTime>');
   });
 
   it('mapea afectaciones IGV semánticas a códigos esperados por SUNAT', () => {
@@ -161,6 +176,93 @@ describe('SunatPayloadBuilder', () => {
     );
   });
 
+  it('envía descripciones de ítems a SUNAT como texto plano sin HTML', () => {
+    const result = builder.buildInvoice(
+      buildComprobante({
+        detallesFiscales: [
+          {
+            item: 1,
+            codigoInterno: 'EQ-IMP-0001',
+            descripcion:
+              '<p>Konica Minolta Bizhub 808&nbsp;</p><ul><li>Equipo Multifuncional</li></ul>',
+            unidadSunat: 'NIU',
+            tipoAfectacionIgv: TipoAfectacionIgv.GRAVADO_OPERACION_ONEROSA,
+            cantidad: 1,
+            valorUnitario: 3813.56,
+            precioUnitario: 4500,
+            descuento: 0,
+            baseImponible: 3813.56,
+            igv: 686.44,
+            total: 4500,
+          },
+        ],
+      }),
+    );
+
+    expect(result.xml).toContain(
+      '<cbc:Description><![CDATA[Konica Minolta Bizhub 808 Equipo Multifuncional]]></cbc:Description>',
+    );
+    expect(result.xml).not.toContain('<p>');
+    expect(result.xml).not.toContain('<li>');
+    expect(result.xml).not.toContain('&nbsp;');
+  });
+
+  it('normaliza unidad legacy UND a NIU antes de enviar a SUNAT', () => {
+    const result = builder.buildInvoice(
+      buildComprobante({
+        detallesFiscales: [
+          {
+            item: 1,
+            codigoInterno: 'EQ-IMP-0001',
+            descripcion: 'Konica Minolta Bizhub 808',
+            unidadSunat: 'UND',
+            tipoAfectacionIgv: TipoAfectacionIgv.GRAVADO_OPERACION_ONEROSA,
+            cantidad: 1,
+            valorUnitario: 3813.56,
+            precioUnitario: 4500,
+            descuento: 0,
+            baseImponible: 3813.56,
+            igv: 686.44,
+            total: 4500,
+          },
+        ],
+      }),
+    );
+
+    expect(result.xml).toContain(
+      '<cbc:InvoicedQuantity unitCode="NIU">1.0000</cbc:InvoicedQuantity>',
+    );
+    expect(result.xml).not.toContain('unitCode="UND"');
+  });
+
+  it('normaliza unidades de servicio legacy a ZZ antes de enviar a SUNAT', () => {
+    const result = builder.buildInvoice(
+      buildComprobante({
+        detallesFiscales: [
+          {
+            item: 1,
+            codigoInterno: 'SRV-001',
+            descripcion: 'Diagnóstico',
+            unidadSunat: 'SERV',
+            tipoFiscalProducto: 'SERVICIO',
+            tipoAfectacionIgv: TipoAfectacionIgv.GRAVADO_OPERACION_ONEROSA,
+            cantidad: 1,
+            valorUnitario: 100,
+            precioUnitario: 118,
+            descuento: 0,
+            baseImponible: 100,
+            igv: 18,
+            total: 118,
+          },
+        ],
+      }),
+    );
+
+    expect(result.xml).toContain(
+      '<cbc:InvoicedQuantity unitCode="ZZ">1.0000</cbc:InvoicedQuantity>',
+    );
+  });
+
   it('rechaza comprobantes sin detalles fiscales congelados', () => {
     expect(() =>
       builder.buildInvoice(buildComprobante({ detallesFiscales: [] })),
@@ -182,6 +284,7 @@ describe('SunatPayloadBuilder', () => {
     expect(result.xmlFileName).toBe('20123456789-07-FC01-00000003.xml');
     expect(result.fileName).toBe('20123456789-07-FC01-00000003');
     expect(result.xml).toContain('<CreditNote ');
+    expect(result.xml).toContain('<cbc:CustomizationID>2.0</cbc:CustomizationID>');
     expect(result.xml).toContain('<cbc:ID>FC01-00000003</cbc:ID>');
     expect(result.xml).toContain(
       '<cbc:CreditNoteTypeCode>07</cbc:CreditNoteTypeCode>',

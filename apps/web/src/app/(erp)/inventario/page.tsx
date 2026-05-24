@@ -25,16 +25,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import {
-  readStoredInventarioAutoRefreshPreference,
-  writeStoredInventarioAutoRefreshPreference,
-} from "@/lib/inventario-auto-refresh";
-import {
   getSelectableManualTiposMovimiento,
   getTiposMovimientoConfig,
   getTiposMovimientoLabelMap,
 } from "@/lib/tipos-movimiento";
 import { useAuth } from "@/hooks/use-auth";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import { useTiposMovimientoConfig } from "@/hooks/use-configuracion";
 import {
   useStock,
@@ -45,7 +41,7 @@ import {
   useResolverAlerta,
 } from "@/hooks/use-inventario";
 import { useDebounce } from "@/hooks/use-debounce";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
@@ -77,15 +73,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const REFRESH_INTERVALS = [
-  { label: "30 s", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-  { label: "15 min", value: 900_000 },
-];
-
 const INVENTARIO_REFRESH_TOAST_ID = "inventario-refresh";
-const INVENTARIO_AUTO_REFRESH_TOAST_ID = "inventario-auto-refresh";
 
 /* ── Helpers ───────────────────────────────────────── */
 
@@ -130,7 +118,6 @@ function exportToCSV(rows: StockListItem[], filename: string) {
   a.click();
   URL.revokeObjectURL(url);
 }
-
 
 /* ── Page component ────────────────────────────────── */
 
@@ -220,7 +207,9 @@ export default function InventarioPage() {
         });
     const activos = almacenes.filter((a) => a.activo).length;
     if (activos < 2) {
-      return base.filter((item) => item.codigo !== TipoMovimiento.TRANSFERENCIA);
+      return base.filter(
+        (item) => item.codigo !== TipoMovimiento.TRANSFERENCIA,
+      );
     }
     return base;
   }, [almacenes, hasRole, tiposMovimientoConfig]);
@@ -284,6 +273,13 @@ export default function InventarioPage() {
   const stockBajoTotal = stockBajoCountRes?.meta?.total ?? 0;
   const almacenesActivos = almacenes.filter((a) => a.activo).length;
 
+  /* refetch helper */
+  const refetchAll = useCallback(() => {
+    void refetchStock();
+    void refetchMovimientos();
+    void refetchAlertas();
+  }, [refetchStock, refetchMovimientos, refetchAlertas]);
+
   /* mutations */
   const createMovimiento = useCreateMovimiento();
   const resolverAlerta = useResolverAlerta();
@@ -292,49 +288,13 @@ export default function InventarioPage() {
   const canCreate = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
 
   /* ── Auto-refresh ── */
-  const refetchAll = useCallback(() => {
-    void refetchStock();
-    void refetchMovimientos();
-    void refetchAlertas();
-  }, [refetchStock, refetchMovimientos, refetchAlertas]);
-
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", {
-      id: INVENTARIO_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, []);
-
-  const showAutoRefreshToast = useCallback((enabled: boolean) => {
-    if (enabled) {
-      toast.success("Auto-refresh activado", {
-        id: INVENTARIO_AUTO_REFRESH_TOAST_ID,
-        duration: 1800,
-      });
-      return;
-    }
-
-    toast.info("Auto-refresh desactivado", {
-      id: INVENTARIO_AUTO_REFRESH_TOAST_ID,
-      duration: 1800,
-    });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    refetchAll();
-    showRefreshToast();
-  }, [refetchAll, showRefreshToast]);
-
-  const {
-    enabled: autoRefreshEnabled,
-    interval: autoRefreshInterval,
-    setEnabled: setAutoRefreshEnabled,
-    setInterval: setAutoRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredInventarioAutoRefreshPreference,
-    writePreference: writeStoredInventarioAutoRefreshPreference,
-    onRefresh: refetchAll,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "inventario",
+    toastLabel: "Inventario",
+    manualToastMessage: "Lista actualizada",
+    toastId: INVENTARIO_REFRESH_TOAST_ID,
   });
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   /* ── Filtros popover handlers ── */
   const handleApplyFiltros = useCallback(() => {
@@ -619,18 +579,7 @@ export default function InventarioPage() {
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefreshEnabled}
-              interval={autoRefreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="inv-auto-refresh"
-              onEnabledChange={(value) => {
-                setAutoRefreshEnabled(value);
-                showAutoRefreshToast(value);
-              }}
-              onIntervalChange={setAutoRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               contentClassName="w-44"
               items={[

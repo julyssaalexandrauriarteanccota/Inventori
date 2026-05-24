@@ -77,6 +77,21 @@ export class CreateConfigEmpresaFiscalDto {
   @Matches(/^\d{6}$/, { message: 'El ubigeo fiscal debe tener 6 dígitos' })
   ubigeoFiscal?: string;
 
+  @ApiPropertyOptional({ example: 'LIMA' })
+  @IsOptional()
+  @IsString()
+  departamentoFiscal?: string;
+
+  @ApiPropertyOptional({ example: 'LIMA' })
+  @IsOptional()
+  @IsString()
+  provinciaFiscal?: string;
+
+  @ApiPropertyOptional({ example: 'LIMA' })
+  @IsOptional()
+  @IsString()
+  distritoFiscal?: string;
+
   @ApiPropertyOptional({ example: '0000' })
   @IsOptional()
   @Matches(/^\d{4}$/, {

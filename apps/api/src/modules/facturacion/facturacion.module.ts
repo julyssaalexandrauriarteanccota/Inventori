@@ -17,11 +17,13 @@ import { SerieDocumentoService } from './serie-documento.service';
 import { SeriesDocumentoAdminService } from './series-documento-admin.service';
 import { SunatCredentialsService } from './sunat-credentials.service';
 import { SunatDirectGateway } from './sunat-direct.gateway';
+import { GreenterGateway } from './greenter.gateway';
 import { SunatPayloadBuilder } from './sunat-payload.builder';
 import { ComprobantePdfService } from './comprobante-pdf.service';
 import { ComprobanteEmailService } from './comprobante-email.service';
 import { FiscalStorageService } from './fiscal-storage.service';
 import { FeriadosNacionalesService } from './feriados-nacionales.service';
+import { PadronSunatRucService } from './padron-sunat-ruc.service';
 import { ValidacionFiscalService } from './validacion-fiscal.service';
 import { SunatProcessor } from './sunat.processor';
 import { SunatBajaProcessor } from './sunat-baja.processor';
@@ -39,9 +41,6 @@ import { SunatXmlSigner } from './sunat-xml.signer';
       useFactory: (configService: ConfigService) => ({
         connection: {
           url: configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
-          lazyConnect: true,
-          enableOfflineQueue: false,
-          retryStrategy: () => null,
           maxRetriesPerRequest: null,
         },
       }),
@@ -74,6 +73,7 @@ import { SunatXmlSigner } from './sunat-xml.signer';
     SeriesDocumentoAdminService,
     SunatCredentialsService,
     SunatDirectGateway,
+    GreenterGateway,
     SunatPayloadBuilder,
     SunatProcessor,
     SunatBajaProcessor,
@@ -83,10 +83,16 @@ import { SunatXmlSigner } from './sunat-xml.signer';
     SunatXmlSigner,
     FiscalStorageService,
     FeriadosNacionalesService,
+    PadronSunatRucService,
     ComprobantePdfService,
     ComprobanteEmailService,
     ValidacionFiscalService,
   ],
-  exports: [FacturacionService, FiscalStorageService, ValidacionFiscalService],
+  exports: [
+    FacturacionService,
+    FiscalStorageService,
+    ValidacionFiscalService,
+    PadronSunatRucService,
+  ],
 })
 export class FacturacionModule {}

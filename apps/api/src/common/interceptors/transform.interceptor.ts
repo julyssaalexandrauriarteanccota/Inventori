@@ -3,6 +3,7 @@ import {
   NestInterceptor,
   ExecutionContext,
   CallHandler,
+  StreamableFile,
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -25,6 +26,10 @@ export class TransformInterceptor<T> implements NestInterceptor<
   ): Observable<TransformResponse<T>> {
     return next.handle().pipe(
       map((data: T) => {
+        if (data instanceof StreamableFile) {
+          return data as unknown as TransformResponse<T>;
+        }
+
         // Si ya viene con formato paginado { data, meta }, pasarlo tal cual
         if (
           data &&

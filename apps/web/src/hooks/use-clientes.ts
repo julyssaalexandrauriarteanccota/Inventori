@@ -5,6 +5,8 @@ import type {
   ClientesPaginatedResponse,
   ClienteFilters,
   ClienteFormPayload,
+  ConsultaDocumentoClientePayload,
+  ConsultaDocumentoClienteResult,
 } from '@erp/shared'
 
 import { api } from '@/lib/api'
@@ -78,6 +80,18 @@ export function useDeleteCliente() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (id: string) => api.delete(`/clientes/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [CLIENTES_KEY] }) },
+  })
+}
+
+export function useConsultarDocumentoCliente() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ConsultaDocumentoClientePayload) =>
+      api.post<{
+        data: ConsultaDocumentoClienteResult
+        meta: { timestamp: string }
+      }>('/clientes/consulta-documento', data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: [CLIENTES_KEY] }) },
   })
 }

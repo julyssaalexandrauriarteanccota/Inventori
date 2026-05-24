@@ -25,6 +25,12 @@ import { FiscalStorageService } from './fiscal-storage.service';
 import { ComprobantePdfService } from './comprobante-pdf.service';
 import { ComprobanteEmailService } from './comprobante-email.service';
 import { SunatDirectGateway } from './sunat-direct.gateway';
+import type {
+  SunatSendBillResult,
+  SunatSendSummaryResult,
+  SunatStatusResult,
+} from './sunat-direct.gateway';
+import { GreenterGateway } from './greenter.gateway';
 import { SunatPayloadBuilder } from './sunat-payload.builder';
 import { SunatXmlSigner } from './sunat-xml.signer';
 import { classifySunatError } from './sunat-error-classifier';
@@ -87,6 +93,7 @@ export class SunatProcessor extends WorkerHost {
     private readonly payloadBuilder?: SunatPayloadBuilder,
     private readonly xmlSigner?: SunatXmlSigner,
     private readonly sunatGateway?: SunatDirectGateway,
+    private readonly greenterGateway?: GreenterGateway,
   ) {
     super();
   }
@@ -245,43 +252,25 @@ export class SunatProcessor extends WorkerHost {
     );
 
     try {
-      if (!this.payloadBuilder || !this.xmlSigner || !this.sunatGateway) {
-        throw new Error('Servicios SUNAT directo no inyectados');
-      }
+      let result: SunatSendBillResult;
 
-      // Doc 08 §1 — el builder se elige por tipo. NC/ND requieren el origen
-      // para emitir el BillingReference UBL.
-      const built = esNota
-        ? tipoCpe === TipoDocumento.NOTA_CREDITO
-          ? this.payloadBuilder.buildCreditNote(
-              comprobante as Record<string, unknown>,
-            )
-          : this.payloadBuilder.buildDebitNote(
-              comprobante as Record<string, unknown>,
-            )
-        : this.payloadBuilder.buildInvoice(comprobante);
-      const xmlStorageKey = this.buildStorageKey(comprobante as never, 'xml');
+      if (this.useGreenterEngine()) {
+        if (!this.greenterGateway) {
+          throw new Error('GreenterGateway no inyectado');
+        }
 
-      let signedXml: string;
-      let payloadHash: string;
-      let certificateFingerprintSha256: string | null = null;
-
-      const cachedXml = await this.storage.readObjectText(xmlStorageKey);
-      if (cachedXml && comprobante.payloadHash) {
-        signedXml = cachedXml;
-        payloadHash = comprobante.payloadHash;
-        this.logger.log(
-          `Reutilizando XML firmado previo de ${comprobante.numero} (payloadHash ${payloadHash.slice(0, 12)}...)`,
+        const ambiente = await this.resolveAmbiente();
+        const greenter = await this.greenterGateway.sendComprobante(
+          comprobante as Record<string, unknown>,
+          ambiente,
         );
-      } else {
-        const signed = await this.xmlSigner.sign(built.xml);
-        signedXml = signed.signedXml;
-        certificateFingerprintSha256 = signed.certificateFingerprintSha256;
-        payloadHash = this.sha256(signedXml);
+        const xmlStorageKey = this.buildStorageKey(comprobante as never, 'xml');
+        const signedXmlBuffer = this.xmlBuffer(greenter.signedXml);
+        const payloadHash = this.sha256(signedXmlBuffer);
         await this.storage.writeObject(
           xmlStorageKey,
-          signedXml,
-          'application/xml',
+          signedXmlBuffer,
+          `application/xml; charset=${this.xmlCharset(greenter.signedXml)}`,
         );
         await this.prisma.comprobante.update({
           where: { id: comprobanteId },
@@ -289,21 +278,74 @@ export class SunatProcessor extends WorkerHost {
             payloadHash,
             xmlStorageKey,
             hashCpe: payloadHash,
-            ...(certificateFingerprintSha256
-              ? { hashSunat: certificateFingerprintSha256 }
-              : {}),
           },
         });
-      }
+        result = greenter.result;
+      } else {
+        if (!this.payloadBuilder || !this.xmlSigner || !this.sunatGateway) {
+          throw new Error('Servicios SUNAT directo no inyectados');
+        }
 
-      const ambiente = await this.resolveAmbiente();
-      const result = await this.sunatGateway.sendBill({
-        ruc: this.text((comprobante as Record<string, unknown>).emisorRuc),
-        fileName: built.fileName,
-        xmlFileName: built.xmlFileName,
-        signedXml,
-        ambiente,
-      });
+        // Doc 08 §1 — el builder se elige por tipo. NC/ND requieren el origen
+        // para emitir el BillingReference UBL.
+        const built = esNota
+          ? tipoCpe === TipoDocumento.NOTA_CREDITO
+            ? this.payloadBuilder.buildCreditNote(
+                comprobante as Record<string, unknown>,
+              )
+            : this.payloadBuilder.buildDebitNote(
+                comprobante as Record<string, unknown>,
+              )
+          : this.payloadBuilder.buildInvoice(comprobante);
+        const xmlStorageKey = this.buildStorageKey(comprobante as never, 'xml');
+
+        let signedXml: string;
+        let payloadHash: string;
+        let certificateFingerprintSha256: string | null = null;
+
+        const cachedXml = await this.storage.readObjectText(xmlStorageKey);
+        const debeRegenerarXmlFirmado =
+          estadoActual === EstadoComprobante.RECHAZADO ||
+          estadoActual === EstadoComprobante.REQUIERE_REVISION;
+        if (cachedXml && comprobante.payloadHash && !debeRegenerarXmlFirmado) {
+          signedXml = cachedXml;
+          payloadHash = comprobante.payloadHash;
+          this.logger.log(
+            `Reutilizando XML firmado previo de ${comprobante.numero} (payloadHash ${payloadHash.slice(0, 12)}...)`,
+          );
+        } else {
+          const signed = await this.xmlSigner.sign(built.xml);
+          signedXml = signed.signedXml;
+          certificateFingerprintSha256 = signed.certificateFingerprintSha256;
+          const signedXmlBuffer = this.xmlBuffer(signedXml);
+          payloadHash = this.sha256(signedXmlBuffer);
+          await this.storage.writeObject(
+            xmlStorageKey,
+            signedXmlBuffer,
+            `application/xml; charset=${this.xmlCharset(signedXml)}`,
+          );
+          await this.prisma.comprobante.update({
+            where: { id: comprobanteId },
+            data: {
+              payloadHash,
+              xmlStorageKey,
+              hashCpe: payloadHash,
+              ...(certificateFingerprintSha256
+                ? { hashSunat: certificateFingerprintSha256 }
+                : {}),
+            },
+          });
+        }
+
+        const ambiente = await this.resolveAmbiente();
+        result = await this.sunatGateway.sendBill({
+          ruc: this.text((comprobante as Record<string, unknown>).emisorRuc),
+          fileName: built.fileName,
+          xmlFileName: built.xmlFileName,
+          signedXml,
+          ambiente,
+        });
+      }
 
       if (result.accepted) {
         const cdrStorageKey = result.cdrContent
@@ -381,6 +423,7 @@ export class SunatProcessor extends WorkerHost {
         this.emitComprobanteEvent(
           comprobante,
           SocketEvents.COMPROBANTE_ACEPTADO,
+          result.mensaje,
         );
       } else {
         // Doc 06 §3 — CDR de rechazo es funcional. Correlativo quemado;
@@ -422,6 +465,7 @@ export class SunatProcessor extends WorkerHost {
         this.emitComprobanteEvent(
           comprobante,
           SocketEvents.COMPROBANTE_RECHAZADO,
+          result.mensaje,
         );
       }
     } catch (error) {
@@ -484,6 +528,7 @@ export class SunatProcessor extends WorkerHost {
         this.emitComprobanteEvent(
           comprobante,
           SocketEvents.COMPROBANTE_REQUIERE_REVISION,
+          `Error SUNAT directo [${classified.clase}/${classified.razon}]: ${(error as Error).message}`,
         );
         // No relanzamos: ya marcamos REQUIERE_REVISION; reintentar más sería
         // ruido. El facturador hace el reintento manual desde la UI.
@@ -592,6 +637,7 @@ export class SunatProcessor extends WorkerHost {
       this.emitComprobanteEvent(
         comprobante as Record<string, unknown>,
         SocketEvents.COMPROBANTE_ACEPTADO,
+        result.mensaje,
       );
     } else {
       await this.prisma.comprobante.update({
@@ -616,6 +662,11 @@ export class SunatProcessor extends WorkerHost {
           durationMs: Date.now() - startedAt,
         },
       });
+      this.emitComprobanteEvent(
+        comprobante as Record<string, unknown>,
+        SocketEvents.COMPROBANTE_REQUIERE_REVISION,
+        `Estado dudoso tras consulta forzada: ${result.mensaje}`,
+      );
     }
   }
 
@@ -650,6 +701,7 @@ export class SunatProcessor extends WorkerHost {
     const comprobante = comunicacion.comprobante as Record<string, unknown>;
     const comprobanteId = comprobante.id as string;
     const startedAt = Date.now();
+    const provider = this.useGreenterEngine() ? 'GREENTER' : 'SUNAT_DIRECT';
     if (
       await this.markExpiredComunicacionBajaIfNeeded(
         comunicacion as Record<string, unknown>,
@@ -668,7 +720,7 @@ export class SunatProcessor extends WorkerHost {
       data: {
         comprobanteId,
         tipo: TipoEnvio.COMUNICACION_BAJA,
-        proveedor: 'SUNAT_DIRECT',
+        proveedor: provider,
         tipoEvento: 'COMUNICACION_BAJA_ENVIO_INICIADO',
         estado: EstadoComprobante.BAJA_PENDIENTE,
         intento: 1,
@@ -678,39 +730,57 @@ export class SunatProcessor extends WorkerHost {
     });
 
     try {
-      if (!this.payloadBuilder || !this.xmlSigner || !this.sunatGateway) {
-        throw new Error('Servicios SUNAT directo no inyectados');
-      }
-
-      const built = this.payloadBuilder.buildVoidedNote({
-        identificadorBaja: comunicacion.identificadorBaja,
-        fechaGeneracion: comunicacion.createdAt,
-        motivo: comunicacion.motivo,
-        comprobante: {
-          tipo: comprobante.tipo as TipoDocumento,
-          serie: comprobante.serie as string,
-          correlativo: comprobante.correlativo as number,
-          fechaEmision: comprobante.fechaEmision as Date,
-          emisorRuc: this.text(comprobante.emisorRuc),
-          emisorRazonSocial: this.text(comprobante.emisorRazonSocial),
-        },
-      });
-      const signed = await this.xmlSigner.sign(built.xml);
       const xmlStorageKey = this.buildBajaStorageKey(comunicacion, 'xml');
-      await this.storage.writeObject(
-        xmlStorageKey,
-        signed.signedXml,
-        'application/xml',
-      );
-
       const ambiente = await this.resolveAmbiente();
-      const result = await this.sunatGateway.sendSummary({
-        ruc: this.text(comprobante.emisorRuc),
-        fileName: built.fileName,
-        xmlFileName: built.xmlFileName,
-        signedXml: signed.signedXml,
-        ambiente,
-      });
+      let result: SunatSendSummaryResult;
+
+      if (this.useGreenterEngine()) {
+        if (!this.greenterGateway) {
+          throw new Error('GreenterGateway no inyectado');
+        }
+        const greenter = await this.greenterGateway.sendBaja(
+          comunicacion as unknown as Record<string, unknown>,
+          ambiente,
+        );
+        await this.storage.writeObject(
+          xmlStorageKey,
+          this.xmlBuffer(greenter.signedXml),
+          `application/xml; charset=${this.xmlCharset(greenter.signedXml)}`,
+        );
+        result = greenter.result;
+      } else {
+        if (!this.payloadBuilder || !this.xmlSigner || !this.sunatGateway) {
+          throw new Error('Servicios SUNAT directo no inyectados');
+        }
+
+        const built = this.payloadBuilder.buildVoidedNote({
+          identificadorBaja: comunicacion.identificadorBaja,
+          fechaGeneracion: comunicacion.createdAt,
+          motivo: comunicacion.motivo,
+          comprobante: {
+            tipo: comprobante.tipo as TipoDocumento,
+            serie: comprobante.serie as string,
+            correlativo: comprobante.correlativo as number,
+            fechaEmision: comprobante.fechaEmision as Date,
+            emisorRuc: this.text(comprobante.emisorRuc),
+            emisorRazonSocial: this.text(comprobante.emisorRazonSocial),
+          },
+        });
+        const signed = await this.xmlSigner.sign(built.xml);
+        await this.storage.writeObject(
+          xmlStorageKey,
+          this.xmlBuffer(signed.signedXml),
+          `application/xml; charset=${this.xmlCharset(signed.signedXml)}`,
+        );
+
+        result = await this.sunatGateway.sendSummary({
+          ruc: this.text(comprobante.emisorRuc),
+          fileName: built.fileName,
+          xmlFileName: built.xmlFileName,
+          signedXml: signed.signedXml,
+          ambiente,
+        });
+      }
 
       if (!result.accepted || !result.ticket) {
         const message = result.mensaje || 'SUNAT rechazó la comunicación';
@@ -730,7 +800,7 @@ export class SunatProcessor extends WorkerHost {
           data: {
             comprobanteId,
             tipo: TipoEnvio.COMUNICACION_BAJA,
-            proveedor: 'SUNAT_DIRECT',
+            proveedor: provider,
             tipoEvento: 'COMUNICACION_BAJA_RECHAZADA_ENVIO',
             estado: EstadoComprobante.ACEPTADO,
             intento: 1,
@@ -760,7 +830,7 @@ export class SunatProcessor extends WorkerHost {
         data: {
           comprobanteId,
           tipo: TipoEnvio.COMUNICACION_BAJA,
-          proveedor: 'SUNAT_DIRECT',
+          proveedor: provider,
           tipoEvento: EventoEnvioComprobante.BAJA_INICIADA,
           estado: EstadoComprobante.BAJA_PENDIENTE,
           intento: 1,
@@ -867,18 +937,30 @@ export class SunatProcessor extends WorkerHost {
       );
       return;
     }
-    if (!this.sunatGateway) {
-      throw new Error('SunatDirectGateway no inyectado');
-    }
 
     const startedAt = Date.now();
+    const provider = this.useGreenterEngine() ? 'GREENTER' : 'SUNAT_DIRECT';
     try {
       const ambiente = await this.resolveAmbiente();
-      const result = await this.sunatGateway.getStatus({
-        ruc: this.text(comprobante.emisorRuc),
-        ticket: comunicacion.ticketSunat,
-        ambiente,
-      });
+      let result: SunatStatusResult;
+      if (this.useGreenterEngine()) {
+        if (!this.greenterGateway) {
+          throw new Error('GreenterGateway no inyectado');
+        }
+        result = await this.greenterGateway.consultarTicketBaja(
+          comunicacion as unknown as Record<string, unknown>,
+          ambiente,
+        );
+      } else {
+        if (!this.sunatGateway) {
+          throw new Error('SunatDirectGateway no inyectado');
+        }
+        result = await this.sunatGateway.getStatus({
+          ruc: this.text(comprobante.emisorRuc),
+          ticket: comunicacion.ticketSunat,
+          ambiente,
+        });
+      }
 
       const stillProcessing =
         result.codigoRespuesta === '98' ||
@@ -903,7 +985,7 @@ export class SunatProcessor extends WorkerHost {
             data: {
               comprobanteId,
               tipo: TipoEnvio.CONSULTA_TICKET,
-              proveedor: 'SUNAT_DIRECT',
+              proveedor: provider,
               tipoEvento: EventoEnvioComprobante.REQUIERE_REVISION,
               estado: EstadoComprobante.REQUIERE_REVISION,
               intento,
@@ -922,7 +1004,7 @@ export class SunatProcessor extends WorkerHost {
           data: {
             comprobanteId,
             tipo: TipoEnvio.CONSULTA_TICKET,
-            proveedor: 'SUNAT_DIRECT',
+            proveedor: provider,
             tipoEvento: EventoEnvioComprobante.BAJA_TICKET_RECIBIDO,
             estado: EstadoComprobante.BAJA_PENDIENTE,
             intento,
@@ -985,7 +1067,7 @@ export class SunatProcessor extends WorkerHost {
           data: {
             comprobanteId,
             tipo: TipoEnvio.COMUNICACION_BAJA,
-            proveedor: 'SUNAT_DIRECT',
+            proveedor: provider,
             tipoEvento: EventoEnvioComprobante.BAJA_RESUELTA,
             estado: EstadoComprobante.ANULADO,
             intento,
@@ -1025,7 +1107,7 @@ export class SunatProcessor extends WorkerHost {
           data: {
             comprobanteId,
             tipo: TipoEnvio.COMUNICACION_BAJA,
-            proveedor: 'SUNAT_DIRECT',
+            proveedor: provider,
             tipoEvento: EventoEnvioComprobante.BAJA_RESUELTA,
             estado: EstadoComprobante.ACEPTADO,
             intento,
@@ -1211,6 +1293,14 @@ export class SunatProcessor extends WorkerHost {
       : AmbienteSunat.BETA;
   }
 
+  private useGreenterEngine() {
+    return (
+      (this.configService.get<string>('SUNAT_ENGINE', 'DIRECT') ?? 'DIRECT')
+        .toUpperCase()
+        .trim() === 'GREENTER'
+    );
+  }
+
   private text(value: unknown, fallback = ''): string {
     if (typeof value === 'string') return value;
     if (
@@ -1379,9 +1469,12 @@ export class SunatProcessor extends WorkerHost {
 
   private hasSunatObservaciones(result: { responsePayload?: unknown }) {
     const payload = result.responsePayload as
-      | { cdrNotas?: unknown }
+      | { cdrNotas?: unknown; cdr?: { notes?: unknown } }
       | undefined;
-    return Array.isArray(payload?.cdrNotas) && payload.cdrNotas.length > 0;
+    return (
+      (Array.isArray(payload?.cdrNotas) && payload.cdrNotas.length > 0) ||
+      (Array.isArray(payload?.cdr?.notes) && payload.cdr.notes.length > 0)
+    );
   }
 
   /**
@@ -1467,8 +1560,25 @@ export class SunatProcessor extends WorkerHost {
     return map[this.text(tipo)] ?? '00';
   }
 
-  private sha256(value: string) {
-    return createHash('sha256').update(value, 'utf8').digest('hex');
+  private sha256(value: string | Buffer) {
+    return createHash('sha256').update(value).digest('hex');
+  }
+
+  private xmlBuffer(xml: string) {
+    return Buffer.from(xml, this.xmlEncoding(xml));
+  }
+
+  private xmlEncoding(xml: string): BufferEncoding {
+    return this.xmlCharset(xml) === 'UTF-8' ? 'utf8' : 'latin1';
+  }
+
+  private xmlCharset(xml: string) {
+    const declared =
+      xml.match(/<\?xml[^>]*encoding=["']([^"']+)["']/i)?.[1]?.toUpperCase() ??
+      '';
+    return declared === 'UTF-8' || declared === 'UTF8'
+      ? 'UTF-8'
+      : 'ISO-8859-1';
   }
 
   private emitComprobanteEvent(
@@ -1477,6 +1587,7 @@ export class SunatProcessor extends WorkerHost {
       | typeof SocketEvents.COMPROBANTE_ACEPTADO
       | typeof SocketEvents.COMPROBANTE_RECHAZADO
       | typeof SocketEvents.COMPROBANTE_REQUIERE_REVISION,
+    motivo?: string,
   ) {
     if (event === SocketEvents.COMPROBANTE_REQUIERE_REVISION) {
       this.events.emitToRoles(
@@ -1487,7 +1598,10 @@ export class SunatProcessor extends WorkerHost {
           numero: comprobante.numero as string,
           tipo: comprobante.tipo as never,
           estado: EstadoComprobante.REQUIERE_REVISION,
-          mensaje: 'Comprobante requiere revisión humana',
+          mensaje:
+            motivo ??
+            (comprobante.mensajeSunat as string | null) ??
+            'Comprobante requiere revisión humana',
           fechaVencimientoPlazo:
             comprobante.fechaVencimientoPlazo instanceof Date
               ? comprobante.fechaVencimientoPlazo.toISOString()
@@ -1509,6 +1623,7 @@ export class SunatProcessor extends WorkerHost {
       estado,
       clienteNombre: (cliente?.nombre as string) ?? 'Desconocido',
       total: Number(comprobante.total),
+      motivo: motivo ?? (comprobante.mensajeSunat as string | null) ?? null,
     };
     this.events.emitToRoles(
       [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
@@ -1565,6 +1680,15 @@ export class SunatProcessor extends WorkerHost {
         precioUnitario: Number(d.precioUnitario ?? 0),
         total: Number(d.total ?? 0),
       }));
+      const [configFiscal, empresaPublica] = await Promise.all([
+        this.prisma.configEmpresaFiscal.findFirst({
+          select: { regimenTributario: true, pieImpresion: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.configEmpresa.findFirst({
+          select: { logo: true },
+        }),
+      ]);
 
       const buffer = await this.pdfService.render({
         numero: this.text(comprobante.numero),
@@ -1577,8 +1701,21 @@ export class SunatProcessor extends WorkerHost {
             : new Date(this.text(comprobante.fechaEmision)),
         emisorRuc: this.text(comprobante.emisorRuc),
         emisorRazonSocial: this.text(comprobante.emisorRazonSocial),
+        emisorNombreComercial:
+          this.text(comprobante.emisorNombreComercial) || null,
         emisorDireccion: this.text(comprobante.emisorDireccionFiscal) || null,
         emisorUbigeo: this.text(comprobante.emisorUbigeoFiscal) || null,
+        emisorCodigoEstablecimiento:
+          this.text(comprobante.emisorCodigoEstablecimiento) || null,
+        emisorRegimenTributario:
+          this.text(configFiscal?.regimenTributario) || null,
+        emisorLogoPath: this.text(empresaPublica?.logo) || null,
+        emisorDepartamentoFiscal:
+          this.text(comprobante.emisorDepartamentoFiscal) || null,
+        emisorProvinciaFiscal:
+          this.text(comprobante.emisorProvinciaFiscal) || null,
+        emisorDistritoFiscal:
+          this.text(comprobante.emisorDistritoFiscal) || null,
         clienteDocTipo: this.text(comprobante.clienteDocTipo),
         clienteDocNum: this.text(comprobante.clienteDocNum),
         clienteNombre: this.text(comprobante.clienteNombre),
@@ -1589,6 +1726,8 @@ export class SunatProcessor extends WorkerHost {
         estado,
         cdrCodigo: cdrCodigo ?? null,
         cdrMensaje: cdrMensaje ?? null,
+        formaPago: 'CONTADO',
+        pieImpresion: this.text(configFiscal?.pieImpresion) || null,
         // Doc 09 §6 — digestValue del XML firmado va al QR y al pie del PDF.
         hashFirma: this.text(comprobante.hashCpe) || null,
         detalles,

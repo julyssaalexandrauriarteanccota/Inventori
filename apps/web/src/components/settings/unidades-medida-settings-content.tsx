@@ -16,6 +16,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import {
   RolUsuario,
+  sunatUnidadMedidaHelpText,
   type UnidadMedidaPayload,
   unidadMedidaFormSchema,
 } from "@erp/shared";
@@ -55,6 +56,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -464,11 +466,12 @@ function UnidadCreateFormContent({
             <FieldLabel>Código *</FieldLabel>
             <Input
               {...register("codigo")}
-              placeholder="UND"
+              placeholder="NIU"
               autoFocus
               maxLength={16}
               className="font-mono uppercase"
             />
+            <FieldDescription>{sunatUnidadMedidaHelpText()}</FieldDescription>
             <FieldError>{errors.codigo?.message}</FieldError>
           </Field>
 
@@ -589,6 +592,7 @@ function UnidadEditFormContent({
               autoFocus
               className="font-mono uppercase"
             />
+            <FieldDescription>{sunatUnidadMedidaHelpText()}</FieldDescription>
             <FieldError>{errors.codigo?.message}</FieldError>
           </Field>
 

@@ -1,0 +1,1 @@
+ALTER TYPE "EstadoFacturacionVenta" ADD VALUE IF NOT EXISTS 'VENTA_INTERNA';

@@ -12,7 +12,6 @@ type TributarioTab =
   | "certificado"
   | "credenciales-sol"
   | "reglas"
-  | "validaciones"
   | "feriados";
 
 const TAB_MAP: Record<string, TributarioTab> = {
@@ -20,7 +19,6 @@ const TAB_MAP: Record<string, TributarioTab> = {
   series: "series",
   certificado: "certificado",
   "credenciales-sol": "credenciales-sol",
-  validaciones: "reglas",
   feriados: "feriados",
 };
 

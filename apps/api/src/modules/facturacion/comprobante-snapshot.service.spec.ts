@@ -54,4 +54,58 @@ describe('ComprobanteSnapshotService', () => {
       clienteDireccion: 'Av. Cliente 123',
     });
   });
+
+  it('normaliza unidad legacy UND a código SUNAT NIU para bienes', () => {
+    const [detalle] = service.buildDetalleSnapshots(
+      {
+        cliente: {},
+        detalles: [
+          {
+            productoId: 'producto-1',
+            cantidad: 1,
+            precioUnitario: 118,
+            subtotal: 100,
+            producto: {
+              id: 'producto-1',
+              sku: 'EQ-001',
+              nombre: 'Equipo',
+              descripcion: 'Equipo',
+              tipo: 'EQUIPO',
+              unidadMedida: { codigo: 'UND' },
+            },
+          },
+        ],
+      },
+      18,
+    );
+
+    expect(detalle.unidadSunat).toBe('NIU');
+  });
+
+  it('normaliza unidades de servicio sin código SUNAT a ZZ', () => {
+    const [detalle] = service.buildDetalleSnapshots(
+      {
+        cliente: {},
+        detalles: [
+          {
+            productoId: 'servicio-1',
+            cantidad: 1,
+            precioUnitario: 118,
+            subtotal: 100,
+            producto: {
+              id: 'servicio-1',
+              sku: 'SRV-001',
+              nombre: 'Diagnóstico',
+              descripcion: 'Diagnóstico',
+              tipo: 'SERVICIO',
+              unidadMedida: { codigo: 'SERV' },
+            },
+          },
+        ],
+      },
+      18,
+    );
+
+    expect(detalle.unidadSunat).toBe('ZZ');
+  });
 });

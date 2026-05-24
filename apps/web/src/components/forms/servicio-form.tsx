@@ -5,6 +5,7 @@ import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, RefreshCcw } from "lucide-react";
 import { z } from "zod";
+import { toast } from "sonner";
 
 import {
   SERVICIO_RECORD_TYPE,
@@ -33,7 +34,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
-const SERVICE_UNIT_CODES = ["SERV", "HR", "HRS", "HORA", "VISITA", "UND"];
+const SERVICE_DEFAULT_UNIT_CODES = [
+  "ZZ",
+  "HUR",
+  "DAY",
+  "NIU",
+];
 
 const optionalNonNegativeInt = z.preprocess(
   (value) => {
@@ -125,7 +131,10 @@ export function ServicioForm({
   const { data: categoriasRes } = useCategoriasServicio();
   const categorias = useMemo(() => categoriasRes?.data ?? [], [categoriasRes]);
   const { data: unidadesRes } = useUnidadesServicio();
-  const unidades = useMemo(() => unidadesRes?.data ?? [], [unidadesRes]);
+  const unidades = useMemo(
+    () => (unidadesRes?.data ?? []).filter((unidad) => unidad.activo),
+    [unidadesRes],
+  );
   const {
     data: suggestedSkuRes,
     refetch: refetchSuggestedSku,
@@ -134,19 +143,6 @@ export function ServicioForm({
     categoriaId || undefined,
     mode === "create" && !skuManuallyEdited,
   );
-
-  const unidadesServicio = useMemo(() => {
-    const filtered = unidades.filter((unidad) =>
-      SERVICE_UNIT_CODES.includes(unidad.codigo.toUpperCase()),
-    );
-    if (unidadMedidaId) {
-      const current = unidades.find((unidad) => unidad.id === unidadMedidaId);
-      if (current && !filtered.some((unidad) => unidad.id === current.id)) {
-        filtered.push(current);
-      }
-    }
-    return filtered.length > 0 ? filtered : unidades;
-  }, [unidadMedidaId, unidades]);
 
   useEffect(() => {
     reset(getInitialValues(defaultValues));
@@ -158,13 +154,21 @@ export function ServicioForm({
   }, [isDirty, onDirtyChange]);
 
   useEffect(() => {
-    if (unidadMedidaId || unidadesServicio.length === 0) return;
-    setValue("unidadMedidaId", unidadesServicio[0].id, {
+    if (unidadMedidaId || unidades.length === 0) return;
+
+    const defaultUnidad =
+      SERVICE_DEFAULT_UNIT_CODES.map((codigo) =>
+        unidades.find((unidad) => unidad.codigo.toUpperCase() === codigo),
+      ).find(Boolean) ?? unidades[0];
+
+    if (!defaultUnidad) return;
+
+    setValue("unidadMedidaId", defaultUnidad.id, {
       shouldDirty: false,
       shouldTouch: false,
       shouldValidate: false,
     });
-  }, [setValue, unidadMedidaId, unidadesServicio]);
+  }, [setValue, unidadMedidaId, unidades]);
 
   useEffect(() => {
     const nextSku = suggestedSkuRes?.data.sku;
@@ -175,6 +179,23 @@ export function ServicioForm({
       shouldValidate: false,
     });
   }, [mode, setValue, skuManuallyEdited, suggestedSkuRes?.data.sku]);
+
+  async function handleGenerateSku() {
+    const result = await refetchSuggestedSku();
+    const nextSku = result.data?.data.sku;
+
+    if (!nextSku) {
+      toast.error("No se pudo generar un SKU sugerido");
+      return;
+    }
+
+    setSkuManuallyEdited(true);
+    setValue("sku", nextSku, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: true,
+    });
+  }
 
   function submit(values: ServicioFormValues) {
     onSubmit({
@@ -232,15 +253,8 @@ export function ServicioForm({
                 size="icon"
                 disabled={isFetchingSuggestedSku}
                 title="Generar SKU sugerido"
-                onClick={() => {
-                  setSkuManuallyEdited(false);
-                  setValue("sku", "", {
-                    shouldDirty: false,
-                    shouldTouch: false,
-                    shouldValidate: false,
-                  });
-                  void refetchSuggestedSku();
-                }}
+                className="rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+                onClick={() => void handleGenerateSku()}
               >
                 <RefreshCcw
                   className={`size-4 ${
@@ -263,10 +277,10 @@ export function ServicioForm({
             name="categoriaId"
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted/40">
                   <SelectValue placeholder="Selecciona categoria" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl shadow-xl border border-border/60 p-1 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
                   <SelectGroup>
                     {categorias.map((categoria) => (
                       <SelectItem key={categoria.id} value={categoria.id}>
@@ -288,12 +302,12 @@ export function ServicioForm({
             name="unidadMedidaId"
             render={({ field }) => (
               <Select value={field.value} onValueChange={field.onChange}>
-                <SelectTrigger className="w-full">
+                <SelectTrigger className="w-full rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted/40">
                   <SelectValue placeholder="Selecciona unidad" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-2xl shadow-xl border border-border/60 p-1 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
                   <SelectGroup>
-                    {unidadesServicio.map((unidad) => (
+                    {unidades.map((unidad) => (
                       <SelectItem key={unidad.id} value={unidad.id}>
                         {unidad.codigo} · {unidad.nombre}
                       </SelectItem>
@@ -304,7 +318,7 @@ export function ServicioForm({
             )}
           />
           <FieldDescription>
-            Para servicios suele usarse SERV, HORA, VISITA o UND.
+            Para servicios usa códigos SUNAT/UBL como ZZ, HUR o DAY.
           </FieldDescription>
           <FieldError>{errors.unidadMedidaId?.message}</FieldError>
         </Field>
@@ -354,7 +368,7 @@ export function ServicioForm({
           control={control}
           name="requiereRepuestos"
           render={({ field }) => (
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3 bg-muted/5 transition-all duration-300 hover:border-border-strong/60">
               <div>
                 <FieldLabel>Requiere repuestos</FieldLabel>
                 <FieldDescription>
@@ -370,7 +384,7 @@ export function ServicioForm({
           control={control}
           name="activo"
           render={({ field }) => (
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 p-3">
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3 bg-muted/5 transition-all duration-300 hover:border-border-strong/60">
               <div>
                 <FieldLabel>Activo</FieldLabel>
                 <FieldDescription>
@@ -394,11 +408,20 @@ export function ServicioForm({
       </Field>
 
       <div className="flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          className="rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+        >
           Cancelar
         </Button>
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? <Loader2 className="size-4 animate-spin" /> : null}
+        <Button
+          type="submit"
+          disabled={isLoading}
+          className="rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        >
+          {isLoading ? <Loader2 className="size-4 animate-spin mr-2" /> : null}
           {mode === "edit" ? "Guardar cambios" : "Crear servicio"}
         </Button>
       </div>

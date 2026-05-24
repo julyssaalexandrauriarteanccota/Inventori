@@ -30,6 +30,7 @@ import {
   type MotivoNDCodigo,
   calcularDeadlineComunicacionBaja,
   calcularDeadlineEnvio as calcularDeadlineEnvioShared,
+  normalizeSunatUnidadMedidaCode,
 } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { ComprobanteDetalleService } from './comprobante-detalle.service';
@@ -604,8 +605,112 @@ export class FacturacionService {
         motivo: n.motivoNotaDescripcion ?? null,
         motivoCodigo: n.motivoNota ?? null,
       }));
+    const detallesFiscales = (comprobante.detallesFiscales ?? []).map(
+      (detalle) => ({
+        ...detalle,
+        descripcion: this.plainFiscalText(detalle.descripcion),
+        cantidad: this.toNumber(detalle.cantidad),
+        valorUnitario: this.toNumber(detalle.valorUnitario),
+        precioUnitario: this.toNumber(detalle.precioUnitario),
+        descuento: this.toNumber(detalle.descuento),
+        baseImponible: this.toNumber(detalle.baseImponible),
+        igv: this.toNumber(detalle.igv),
+        igvMonto: this.toNumber(detalle.igv),
+        total: this.toNumber(detalle.total),
+        importeTotal: this.toNumber(detalle.total),
+      }),
+    );
+    const snapshot = this.asRecord(comprobante.snapshot);
+    const snapshotEmisorJson = this.asRecord(snapshot?.emisor) ?? {
+      ruc: comprobante.emisorRuc,
+      razonSocial: comprobante.emisorRazonSocial,
+      nombreComercial: comprobante.emisorNombreComercial,
+      direccionFiscal: {
+        direccion: comprobante.emisorDireccionFiscal,
+        ubigeo: comprobante.emisorUbigeoFiscal,
+        codigoPais: 'PE',
+      },
+      codigoEstablecimiento: comprobante.emisorCodigoEstablecimiento ?? '0000',
+      ambiente: comprobante.ambiente,
+    };
+    const snapshotClienteJson = this.asRecord(snapshot?.receptor) ?? {
+      tipoDocumento: comprobante.clienteDocTipo,
+      numeroDocumento: comprobante.clienteDocNum,
+      razonSocial: comprobante.clienteNombre,
+      direccion: comprobante.clienteDireccion,
+    };
+    const snapshotLineas = snapshot?.lineas;
+    const snapshotItemsJson = Array.isArray(snapshotLineas)
+      ? (snapshotLineas as unknown[]).map((linea): unknown => {
+          if (typeof linea !== 'object' || linea === null) return linea;
+          const item = linea as Record<string, unknown>;
+          return {
+            ...item,
+            descripcion: this.plainFiscalText(item.descripcion),
+          };
+        })
+      : detallesFiscales.map((detalle) => ({
+          item: detalle.item,
+          productoId: detalle.productoId,
+          codigoInterno: detalle.codigoInterno,
+          descripcion: detalle.descripcion,
+          unidadSunat: detalle.unidadSunat,
+          tipoFiscalProducto: detalle.tipoFiscalProducto,
+          tipoAfectacionIgv: detalle.tipoAfectacionIgv,
+          cantidad: detalle.cantidad,
+          valorUnitario: detalle.valorUnitario,
+          precioUnitario: detalle.precioUnitario,
+          descuento: detalle.descuento,
+          baseImponible: detalle.baseImponible,
+          igv: detalle.igv,
+          total: detalle.total,
+          metadataFiscal: detalle.metadataFiscal,
+        }));
 
-    return { ...comprobante, notasCredito, notasDebito };
+    return {
+      ...comprobante,
+      clienteTipoDoc: comprobante.clienteDocTipo,
+      subtotal: this.toNumber(comprobante.subtotal),
+      igv: this.toNumber(comprobante.igv),
+      total: this.toNumber(comprobante.total),
+      detallesFiscales,
+      snapshotEmisorJson,
+      snapshotClienteJson,
+      snapshotItemsJson,
+      xmlUrl: comprobante.xmlStorageKey ?? null,
+      cdrUrl: comprobante.cdrStorageKey ?? null,
+      pdfUrl: comprobante.pdfStorageKey ?? null,
+      notasCredito,
+      notasDebito,
+    };
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return null;
+    }
+    return value as Record<string, unknown>;
+  }
+
+  private toNumber(value: unknown) {
+    const amount = Number(value ?? 0);
+    return Number.isFinite(amount) ? amount : 0;
+  }
+
+  private plainFiscalText(value: unknown) {
+    if (typeof value !== 'string') return '';
+    return value
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<\/(p|div|li|h[1-6])>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   async getDocumentoSoporte(id: string) {
@@ -1088,12 +1193,37 @@ export class FacturacionService {
     if (!comprobante) {
       throw new NotFoundException(`Comprobante ${id} no encontrado`);
     }
-    const storageKey =
+    let storageKey =
       kind === 'xml'
         ? comprobante.xmlStorageKey
         : kind === 'cdr'
           ? comprobante.cdrStorageKey
           : comprobante.pdfStorageKey;
+    if (kind === 'pdf') {
+      const comprobanteParaPdf = await this.prisma.comprobante.findUnique({
+        where: { id },
+        include: {
+          detallesFiscales: { orderBy: { item: 'asc' } },
+        },
+      });
+      if (!comprobanteParaPdf) {
+        throw new NotFoundException(`Comprobante ${id} no encontrado`);
+      }
+
+      const pdfActualizado = await this.renderAndStoreComprobantePdf(
+        comprobanteParaPdf as unknown as Record<string, unknown>,
+        comprobanteParaPdf.estado as EstadoComprobante,
+        comprobanteParaPdf.codigoSunat,
+        comprobanteParaPdf.mensajeSunat,
+      );
+      if (pdfActualizado) {
+        storageKey = pdfActualizado;
+        await this.prisma.comprobante.update({
+          where: { id },
+          data: { pdfStorageKey: pdfActualizado },
+        });
+      }
+    }
     if (!storageKey) {
       throw new NotFoundException(
         `Archivo ${kind.toUpperCase()} no disponible para el comprobante ${comprobante.numero}.`,
@@ -1146,38 +1276,65 @@ export class FacturacionService {
           | undefined) ?? [];
       const detalles = detallesRaw.map((d) => ({
         item: Number(d.item ?? 0),
-        descripcion: String(d.descripcion ?? '—'),
+        descripcion: this.cleanText(d.descripcion) || '—',
         cantidad: Number(d.cantidad ?? 0),
         precioUnitario: Number(d.precioUnitario ?? 0),
         total: Number(d.total ?? 0),
       }));
       const fechaEmisionRaw = comprobante.fechaEmision;
+      const fechaEmisionText =
+        this.cleanText(fechaEmisionRaw) || new Date().toISOString();
+      const [configFiscal, empresaPublica] = await Promise.all([
+        this.prisma.configEmpresaFiscal.findFirst({
+          select: { regimenTributario: true, pieImpresion: true },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.configEmpresa.findFirst({
+          select: { logo: true },
+        }),
+      ]);
       const buffer = await this.pdfService.render({
-        numero: String(comprobante.numero ?? ''),
-        tipo: String(comprobante.tipo ?? ''),
-        serie: String(comprobante.serie ?? ''),
+        numero: this.cleanText(comprobante.numero),
+        tipo: this.cleanText(comprobante.tipo),
+        serie: this.cleanText(comprobante.serie),
         correlativo: Number(comprobante.correlativo ?? 0),
         fechaEmision:
           fechaEmisionRaw instanceof Date
             ? fechaEmisionRaw
-            : new Date(String(fechaEmisionRaw ?? new Date().toISOString())),
-        emisorRuc: String(comprobante.emisorRuc ?? ''),
-        emisorRazonSocial: String(comprobante.emisorRazonSocial ?? ''),
-        emisorDireccion: comprobante.emisorDireccionFiscal
-          ? String(comprobante.emisorDireccionFiscal)
-          : null,
-        clienteDocTipo: String(comprobante.clienteDocTipo ?? ''),
-        clienteDocNum: String(comprobante.clienteDocNum ?? ''),
-        clienteNombre: String(comprobante.clienteNombre ?? ''),
-        clienteDireccion: comprobante.clienteDireccion
-          ? String(comprobante.clienteDireccion)
-          : null,
+            : new Date(fechaEmisionText),
+        emisorRuc: this.cleanText(comprobante.emisorRuc),
+        emisorRazonSocial: this.cleanText(comprobante.emisorRazonSocial),
+        emisorNombreComercial:
+          this.cleanText(comprobante.emisorNombreComercial) || null,
+        emisorDireccion:
+          this.cleanText(comprobante.emisorDireccionFiscal) || null,
+        emisorUbigeo: this.cleanText(comprobante.emisorUbigeoFiscal) || null,
+        emisorCodigoEstablecimiento:
+          this.cleanText(comprobante.emisorCodigoEstablecimiento) || null,
+        emisorRegimenTributario: configFiscal?.regimenTributario ?? null,
+        emisorLogoPath: empresaPublica?.logo ?? null,
+        emisorDepartamentoFiscal:
+          this.cleanText(comprobante.emisorDepartamentoFiscal) || null,
+        emisorProvinciaFiscal:
+          this.cleanText(comprobante.emisorProvinciaFiscal) || null,
+        emisorDistritoFiscal:
+          this.cleanText(comprobante.emisorDistritoFiscal) || null,
+        clienteDocTipo: this.cleanText(comprobante.clienteDocTipo),
+        clienteDocNum: this.cleanText(comprobante.clienteDocNum),
+        clienteNombre: this.cleanText(comprobante.clienteNombre),
+        clienteDireccion: this.cleanText(comprobante.clienteDireccion) || null,
         subtotal: Number(comprobante.subtotal ?? 0),
         igv: Number(comprobante.igv ?? 0),
         total: Number(comprobante.total ?? 0),
         estado,
         cdrCodigo: cdrCodigo ?? null,
         cdrMensaje: cdrMensaje ?? null,
+        formaPago: 'CONTADO',
+        pieImpresion: configFiscal?.pieImpresion ?? null,
+        hashFirma:
+          this.cleanText(comprobante.hashCpe) ||
+          this.cleanText(comprobante.hashSunat) ||
+          null,
         detalles,
       });
       const storageKey = this.buildStorageKey(
@@ -1185,7 +1342,7 @@ export class FacturacionService {
           emisorRuc:
             (comprobante.emisorRuc as string | null | undefined) ?? null,
           tipo: comprobante.tipo,
-          serie: String(comprobante.serie ?? ''),
+          serie: this.cleanText(comprobante.serie),
           correlativo: Number(comprobante.correlativo ?? 0),
         },
         'pdf',
@@ -1194,7 +1351,11 @@ export class FacturacionService {
       return storageKey;
     } catch (error) {
       this.logger.error(
-        `No se pudo renderizar PDF tras consulta manual de ${String(comprobante.numero ?? comprobante.id)}: ${(error as Error).message}`,
+        `No se pudo renderizar PDF tras consulta manual de ${
+          this.cleanText(comprobante.numero) ||
+          this.cleanText(comprobante.id) ||
+          'sin-id'
+        }: ${(error as Error).message}`,
       );
       return null;
     }
@@ -1535,6 +1696,8 @@ export class FacturacionService {
         TipoDocumento.NOTA_CREDITO,
         undefined,
         ambiente,
+        undefined,
+        this.seriePrefixForNotaOrigen(comprobante.tipo as TipoDocumento),
       );
 
       const fechaEmision = new Date();
@@ -1569,7 +1732,11 @@ export class FacturacionService {
           clienteDireccion: comprobante.clienteDireccion,
           emisorRuc: comprobante.emisorRuc,
           emisorRazonSocial: comprobante.emisorRazonSocial,
+          emisorNombreComercial: comprobante.emisorNombreComercial,
           emisorDireccionFiscal: comprobante.emisorDireccionFiscal,
+          emisorUbigeoFiscal: comprobante.emisorUbigeoFiscal,
+          emisorCodigoEstablecimiento:
+            comprobante.emisorCodigoEstablecimiento,
           subtotal,
           igv,
           total: dto.monto,
@@ -1673,6 +1840,8 @@ export class FacturacionService {
         TipoDocumento.NOTA_DEBITO,
         undefined,
         ambiente,
+        undefined,
+        this.seriePrefixForNotaOrigen(comprobante.tipo as TipoDocumento),
       );
 
       const fechaEmision = new Date();
@@ -1701,7 +1870,11 @@ export class FacturacionService {
           clienteDireccion: comprobante.clienteDireccion,
           emisorRuc: comprobante.emisorRuc,
           emisorRazonSocial: comprobante.emisorRazonSocial,
+          emisorNombreComercial: comprobante.emisorNombreComercial,
           emisorDireccionFiscal: comprobante.emisorDireccionFiscal,
+          emisorUbigeoFiscal: comprobante.emisorUbigeoFiscal,
+          emisorCodigoEstablecimiento:
+            comprobante.emisorCodigoEstablecimiento,
           subtotal,
           igv,
           total: dto.monto,
@@ -2023,6 +2196,10 @@ export class FacturacionService {
     return map[tipo];
   }
 
+  private seriePrefixForNotaOrigen(tipo: TipoDocumento) {
+    return tipo === TipoDocumento.BOLETA ? 'B' : 'F';
+  }
+
   private estadoFromSunatStatus(
     codigoRespuesta: string,
     accepted: boolean,
@@ -2149,7 +2326,12 @@ export class FacturacionService {
     const intentoNumero = Number(comprobante.intentosEnvio ?? 0) + 1;
     await this.prisma.comprobante.update({
       where: { id },
-      data: { estado: EstadoComprobante.PENDIENTE_ENVIO },
+      data: {
+        estado: EstadoComprobante.PENDIENTE_ENVIO,
+        payloadHash: null,
+        hashCpe: null,
+        xmlStorageKey: null,
+      },
     });
     await this.updateVentaEstadoFacturacion(
       comprobante.ventaId,
@@ -2355,15 +2537,19 @@ export class FacturacionService {
           cantidad > 0 ? +(baseImponible / cantidad).toFixed(4) : 0;
         const precioUnitario =
           cantidad > 0 ? +(total / cantidad).toFixed(4) : total;
+        const tipoFiscalProducto = (source.tipoFiscalProducto ??
+          TipoFiscalProducto.SERVICIO) as Prisma.ComprobanteDetalleCreateManyInput['tipoFiscalProducto'];
         return {
           comprobanteId,
           productoId: source.productoId ?? null,
           item: index + 1,
           codigoInterno: source.codigoInterno ?? `AJUSTE-${linea.item}`,
           descripcion: linea.descripcion || source.descripcion,
-          unidadSunat: source.unidadSunat || 'NIU',
-          tipoFiscalProducto: (source.tipoFiscalProducto ??
-            TipoFiscalProducto.SERVICIO) as Prisma.ComprobanteDetalleCreateManyInput['tipoFiscalProducto'],
+          unidadSunat: normalizeSunatUnidadMedidaCode(
+            source.unidadSunat,
+            tipoFiscalProducto === TipoFiscalProducto.SERVICIO ? 'ZZ' : 'NIU',
+          ),
+          tipoFiscalProducto,
           tipoAfectacionIgv: (source.tipoAfectacionIgv ??
             TipoAfectacionIgv.GRAVADO_OPERACION_ONEROSA) as Prisma.ComprobanteDetalleCreateManyInput['tipoAfectacionIgv'],
           cantidad,

@@ -1,0 +1,1 @@
+export const LIMITE_VENTA_INTERNA_LEGAL = 5;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -29,10 +29,8 @@ import { cn } from "@/lib/utils";
 import { useReporteTickets } from "@/hooks/use-configuracion";
 import { useTickets } from "@/hooks/use-soporte";
 import { useDebounce } from "@/hooks/use-debounce";
-import {
-  readStoredSoporteAutoRefreshPreference,
-  writeStoredSoporteAutoRefreshPreference,
-} from "@/lib/soporte-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { StatCard } from "@/components/layout/stat-card";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +48,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /* ── Label maps ─────────────────────────────────────── */
@@ -176,15 +173,7 @@ function exportToCSV(rows: TicketListItem[], filename: string) {
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const REFRESH_INTERVALS = [
-  { label: "30 s", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-  { label: "15 min", value: 900_000 },
-];
-
 const REPORTE_SOPORTE_REFRESH_TOAST_ID = "reporte-soporte-refresh";
-const REPORTE_SOPORTE_AUTO_REFRESH_TOAST_ID = "reporte-soporte-auto-refresh";
 
 /* ── Page ───────────────────────────────────────────── */
 
@@ -204,14 +193,7 @@ export default function ReporteSoporteTab() {
   const [draftTipo, setDraftTipo] = useState<string>("all");
   const [draftDesde, setDraftDesde] = useState<string>("");
   const [draftHasta, setDraftHasta] = useState<string>("");
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(
-    () => readStoredSoporteAutoRefreshPreference().enabled,
-  );
-  const [autoRefreshInterval, setAutoRefreshInterval] = useState(
-    () => readStoredSoporteAutoRefreshPreference().interval,
-  );
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const debouncedSearch = useDebounce(search, 300);
 
   const reporteFilters = useMemo(
@@ -287,24 +269,14 @@ export default function ReporteSoporteTab() {
     await Promise.all([refetch(), refetchReporte()]);
   }, [refetch, refetchReporte]);
 
-  useEffect(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    if (autoRefreshEnabled) {
-      intervalRef.current = setInterval(() => {
-        void refetchAll();
-      }, autoRefreshInterval);
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [autoRefreshEnabled, autoRefreshInterval, refetchAll]);
+  const autoRefresh = usePageAutoRefresh({
+    scope: "reporte-soporte",
+    toastLabel: "Reporte de soporte",
+    manualToastMessage: "Reporte actualizado",
+    toastId: REPORTE_SOPORTE_REFRESH_TOAST_ID,
+    onRefresh: refetchAll,
+  });
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const activeFilterCount =
     (prioridadFilter !== "all" ? 1 : 0) +
@@ -324,35 +296,6 @@ export default function ReporteSoporteTab() {
     setLimit(l);
     setPage(1);
   };
-  const handleToggleAutoRefresh = useCallback(
-    (enabled: boolean) => {
-      setAutoRefreshEnabled(enabled);
-      writeStoredSoporteAutoRefreshPreference({
-        enabled,
-        interval: autoRefreshInterval,
-      });
-    },
-    [autoRefreshInterval],
-  );
-
-  const handleChangeInterval = useCallback(
-    (interval: number) => {
-      setAutoRefreshInterval(interval);
-      writeStoredSoporteAutoRefreshPreference({
-        enabled: autoRefreshEnabled,
-        interval,
-      });
-    },
-    [autoRefreshEnabled],
-  );
-
-  const handleManualRefresh = useCallback(() => {
-    void refetchAll();
-    toast.info("Reporte actualizado", {
-      id: REPORTE_SOPORTE_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, [refetchAll]);
 
   const handleExportCSV = useCallback(() => {
     if (rows.length === 0) {
@@ -564,89 +507,10 @@ export default function ReporteSoporteTab() {
         </div>
 
         <div className="ml-auto flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-end">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-3 py-1.5 transition-colors duration-300",
-              autoRefreshEnabled
-                ? "border-primary/25 bg-primary/5"
-                : "border-border bg-muted/30",
-            )}
-          >
-            <div className="relative flex items-center justify-center">
-              {autoRefreshEnabled && (
-                <span className="absolute inline-flex size-5 animate-ping rounded-full bg-primary opacity-10" />
-              )}
-              <RefreshCcw
-                className={cn(
-                  "size-3.5 text-muted-foreground transition-all",
-                  (autoRefreshEnabled || isRefreshing) &&
-                    "text-primary animate-spin",
-                )}
-                style={
-                  autoRefreshEnabled || isRefreshing
-                    ? { animationDuration: "3s" }
-                    : {}
-                }
-              />
-            </div>
-
-            {autoRefreshEnabled ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="flex items-center gap-1 text-xs text-primary font-medium hover:underline">
-                    {REFRESH_INTERVALS.find(
-                      (item) => item.value === autoRefreshInterval,
-                    )?.label ?? "Auto"}
-                    <ChevronDown className="size-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36">
-                  {REFRESH_INTERVALS.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onClick={() => handleChangeInterval(option.value)}
-                      className={cn(
-                        "text-xs",
-                        autoRefreshInterval === option.value &&
-                          "font-medium text-primary",
-                      )}
-                    >
-                      {option.label}
-                      {autoRefreshInterval === option.value ? " ✓" : ""}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <span className="text-xs text-muted-foreground">Manual</span>
-            )}
-
-            <Switch
-              id="reporte-soporte-auto-refresh"
-              size="sm"
-              checked={autoRefreshEnabled}
-              onCheckedChange={(value) => {
-                handleToggleAutoRefresh(value);
-                if (value) {
-                  toast.success("Auto-refresh activado", {
-                    id: REPORTE_SOPORTE_AUTO_REFRESH_TOAST_ID,
-                    duration: 1800,
-                  });
-                } else {
-                  toast.info("Auto-refresh desactivado", {
-                    id: REPORTE_SOPORTE_AUTO_REFRESH_TOAST_ID,
-                    duration: 1800,
-                  });
-                }
-              }}
-            />
-            <Label
-              htmlFor="reporte-soporte-auto-refresh"
-              className="hidden cursor-pointer text-xs text-muted-foreground sm:block"
-            >
-              Auto
-            </Label>
-          </div>
+          <PageAutoRefreshControl
+            autoRefresh={autoRefresh}
+            isRefreshing={isRefreshing}
+          />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

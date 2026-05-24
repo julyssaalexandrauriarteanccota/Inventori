@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -100,6 +101,15 @@ export class VentasController {
     @CurrentUser('sub') userId: string,
   ) {
     return this.ventasService.cancelar(id, userId, body?.motivo);
+  }
+
+  @Delete(':id')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({
+    summary: 'Eliminar una venta ya cancelada (borrado lógico)',
+  })
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ventasService.remove(id);
   }
 
   @Post(':id/enviar')

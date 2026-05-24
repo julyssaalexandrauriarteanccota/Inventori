@@ -476,7 +476,13 @@ export class ProductosService {
       },
       include: {
         categoria: {
-          select: { id: true, nombre: true, tipo: true, padreId: true },
+          select: {
+            id: true,
+            nombre: true,
+            tipo: true,
+            padreId: true,
+            padre: { select: { id: true, nombre: true } },
+          },
         },
         marca: { select: { id: true, nombre: true } },
         modeloCatalogo: {
@@ -604,7 +610,13 @@ export class ProductosService {
         take: limit,
         include: {
           categoria: {
-            select: { id: true, nombre: true, tipo: true, padreId: true },
+            select: {
+              id: true,
+              nombre: true,
+              tipo: true,
+              padreId: true,
+              padre: { select: { id: true, nombre: true } },
+            },
           },
           marca: { select: { id: true, nombre: true } },
           modeloCatalogo: {
@@ -637,7 +649,13 @@ export class ProductosService {
       where: { id, deletedAt: null },
       include: {
         categoria: {
-          select: { id: true, nombre: true, tipo: true, padreId: true },
+          select: {
+            id: true,
+            nombre: true,
+            tipo: true,
+            padreId: true,
+            padre: { select: { id: true, nombre: true } },
+          },
         },
         marca: { select: { id: true, nombre: true } },
         modeloCatalogo: {
@@ -845,7 +863,13 @@ export class ProductosService {
       },
       include: {
         categoria: {
-          select: { id: true, nombre: true, tipo: true, padreId: true },
+          select: {
+            id: true,
+            nombre: true,
+            tipo: true,
+            padreId: true,
+            padre: { select: { id: true, nombre: true } },
+          },
         },
         marca: { select: { id: true, nombre: true } },
         modeloCatalogo: {

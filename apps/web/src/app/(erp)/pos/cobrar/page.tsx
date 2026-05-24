@@ -6,12 +6,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  Building2,
+  Check,
   CheckCircle2,
+  ChevronsUpDown,
   CreditCard,
   FileImage,
   FileText,
+  IdCard,
   Loader2,
-  Plus,
   Printer,
   Receipt,
   Save,
@@ -28,18 +31,40 @@ import {
 import { toast } from "sonner";
 
 import {
-  ModalidadEnvioBoletas,
   TipoCliente,
   TipoDocumento,
+  LIMITE_VENTA_INTERNA_LEGAL,
   type ClienteListItem,
+  type EmpresaPublica,
+  type FormatoImpresionDocumento,
 } from "@erp/shared";
 
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -47,7 +72,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PageHeader } from "@/components/layout/page-header";
+// PageHeader is removed to maximize vertical space and match catalog design
 import {
   ThermalReceiptDialog,
   type ThermalReceiptData,
@@ -58,10 +83,14 @@ import { useMiAperturaActiva } from "@/hooks/use-caja";
 import { useClientes, useCreateCliente } from "@/hooks/use-clientes";
 import { useMetodosPago } from "@/hooks/use-configuracion";
 import { useDebounce } from "@/hooks/use-debounce";
-import { useConfigFiscal, useEmitirComprobante } from "@/hooks/use-facturacion";
+import {
+  useConfigFiscal,
+  type ConfigEmpresaFiscalItem,
+} from "@/hooks/use-facturacion";
 import { useAlmacenes } from "@/hooks/use-inventario";
+import { usePublicBranding } from "@/hooks/use-public-branding";
 import { useCreateVenta } from "@/hooks/use-ventas";
-import { api } from "@/lib/api";
+import { api, getApiAssetUrl } from "@/lib/api";
 import {
   getUploadAcceptAttr,
   revokeObjectPreviewUrl,
@@ -69,6 +98,7 @@ import {
   type NormalizedUploadedFile,
 } from "@/lib/file-uploads";
 import { POS_GENERIC_CLIENT_NAME } from "@/lib/pos-navigation";
+import { lineTotalInclIgv } from "@/lib/pos-pricing";
 import {
   BOLETA_UMBRAL_IDENTIFICACION,
   isSunatRuc,
@@ -79,14 +109,30 @@ import { useCart } from "../_components/cart-context";
 
 const CASH_METHOD_CODE = "EFECTIVO";
 const DIGITAL_PROOF_METHOD_CODE = "YAPE_PLIN";
+const FORMATO_IMPRESION_OPTIONS: Array<{
+  value: FormatoImpresionDocumento;
+  label: string;
+  hint: string;
+}> = [
+  { value: "TICKET", label: "Ticket", hint: "Papel térmico" },
+  { value: "A4", label: "A4", hint: "Hoja completa" },
+  { value: "AMBOS", label: "A4 y ticket", hint: "Imprime ambos" },
+];
 
 type ModoCliente = "GENERICO" | "IDENTIFICADO";
 type ClienteRaw = { id: string };
 type VentaCreada = { id: string; numero?: string };
-type ComprobanteCreado = { id?: string; numero?: string };
-type CobrarEmitirPosResponse = {
-  data?: { venta?: VentaCreada; comprobante?: ComprobanteCreado };
+type ComprobanteCreado = {
+  id?: string;
+  numero?: string;
+  serie?: string;
+  correlativo?: number;
+  fechaEmision?: string;
+  hashCpe?: string | null;
+  hashSunat?: string | null;
 };
+
+type ApiDataEnvelope<T> = T | { data?: T | { data?: T | null } | null };
 
 function asNumber(v: unknown) {
   const n = typeof v === "number" ? v : Number(v);
@@ -95,6 +141,149 @@ function asNumber(v: unknown) {
 function money(n: number) {
   return `S/ ${n.toFixed(2)}`;
 }
+function formatoLabel(value: FormatoImpresionDocumento) {
+  return (
+    FORMATO_IMPRESION_OPTIONS.find((option) => option.value === value)?.label ??
+    "Ticket"
+  );
+}
+
+function cleanText(value: unknown) {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function firstText(...values: unknown[]) {
+  for (const value of values) {
+    const cleaned = cleanText(value);
+    if (cleaned) return cleaned;
+  }
+  return undefined;
+}
+
+function unwrapApiData<T>(value: ApiDataEnvelope<T> | null | undefined) {
+  let current: unknown = value;
+  for (let i = 0; i < 3; i += 1) {
+    if (
+      current &&
+      typeof current === "object" &&
+      "data" in current &&
+      (current as { data?: unknown }).data !== undefined
+    ) {
+      current = (current as { data?: unknown }).data;
+      continue;
+    }
+    break;
+  }
+  return (current ?? null) as T | null;
+}
+
+function buildEmpresaPrintData(
+  configFiscal: ConfigEmpresaFiscalItem | null | undefined,
+  empresaPublica?: Partial<EmpresaPublica> | null,
+): ThermalReceiptData["empresa"] {
+  const logo = cleanText(empresaPublica?.logo);
+
+  return {
+    nombre:
+      firstText(configFiscal?.razonSocial, empresaPublica?.razonSocial) ??
+      "Empresa sin razón social",
+    nombreComercial: firstText(
+      configFiscal?.nombreComercial,
+      empresaPublica?.nombreComercial,
+    ),
+    ruc: firstText(configFiscal?.ruc, empresaPublica?.ruc),
+    direccion: firstText(configFiscal?.direccionFiscal, empresaPublica?.direccion),
+    departamento: firstText(configFiscal?.departamentoFiscal),
+    provincia: firstText(configFiscal?.provinciaFiscal),
+    distrito: firstText(configFiscal?.distritoFiscal),
+    ubigeo: firstText(configFiscal?.ubigeoFiscal),
+    codigoEstablecimiento: firstText(configFiscal?.codigoEstablecimiento),
+    regimenTributario: firstText(configFiscal?.regimenTributario),
+    telefono: firstText(
+      empresaPublica?.telefonoVentas,
+      empresaPublica?.whatsapp,
+      empresaPublica?.telefono,
+    ),
+    email: firstText(empresaPublica?.emailVentas, empresaPublica?.email),
+    web: firstText(empresaPublica?.website),
+    logoUrl: logo ? getApiAssetUrl(logo) : undefined,
+  };
+}
+
+function sunatDocTipoFromCliente(docTipo?: string) {
+  if (docTipo === "RUC") return "6";
+  if (docTipo === "DNI") return "1";
+  return "0";
+}
+
+function sunatTipoComprobante(tipo: TipoDocumento) {
+  if (tipo === TipoDocumento.FACTURA) return "01";
+  if (tipo === TipoDocumento.BOLETA) return "03";
+  return "00";
+}
+
+function formatFechaSunat(iso: string) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.slice(0, 10);
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function splitSerieNumero(comprobante?: ComprobanteCreado) {
+  const serie = cleanText(comprobante?.serie);
+  const correlativo = comprobante?.correlativo;
+  if (serie && typeof correlativo === "number") {
+    return { serie, correlativo: String(correlativo).padStart(8, "0") };
+  }
+
+  const numero = cleanText(comprobante?.numero);
+  const match = numero?.match(/^([A-Z0-9]+)-(\d+)$/i);
+  if (!match) return { serie: undefined, correlativo: undefined };
+  return { serie: match[1]?.toUpperCase(), correlativo: match[2] };
+}
+
+function buildSunatQrPayload({
+  ruc,
+  tipo,
+  comprobante,
+  igv,
+  total,
+  fecha,
+  docTipo,
+  docNumero,
+  hashFirma,
+}: {
+  ruc?: string;
+  tipo: TipoDocumento;
+  comprobante?: ComprobanteCreado;
+  igv: number;
+  total: number;
+  fecha: string;
+  docTipo?: string;
+  docNumero?: string;
+  hashFirma?: string;
+}) {
+  const { serie, correlativo } = splitSerieNumero(comprobante);
+  if (!ruc || !serie || !correlativo) return undefined;
+
+  return [
+    ruc,
+    sunatTipoComprobante(tipo),
+    serie,
+    correlativo.padStart(8, "0"),
+    igv.toFixed(2),
+    total.toFixed(2),
+    formatFechaSunat(fecha),
+    sunatDocTipoFromCliente(docTipo),
+    docNumero ?? "00000000",
+    hashFirma ?? "",
+  ].join("|");
+}
+
 function clienteLabel(c: ClienteListItem) {
   if (c.razonSocial) return c.razonSocial;
   const parts = [c.nombre, c.apellido].filter(Boolean) as string[];
@@ -129,24 +318,30 @@ export default function PosCobrarPage() {
   // ── Cliente ─────────────────────────────────────────────────────────
   const [modoCliente, setModoCliente] = useState<ModoCliente>("GENERICO");
   const [clienteSel, setClienteSel] = useState<ClienteListItem | null>(null);
+  const [clienteSelectOpen, setClienteSelectOpen] = useState(false);
   const [clienteQuery, setClienteQuery] = useState("");
   const debouncedClienteQuery = useDebounce(clienteQuery, 250);
   const [createClienteOpen, setCreateClienteOpen] = useState(false);
 
   const clientesQ = useClientes({
     page: 1,
-    limit: 6,
+    limit: 10,
     activo: true,
     search: debouncedClienteQuery || undefined,
   });
   const clientesEncontrados = useMemo(
-    () => (debouncedClienteQuery ? clientesQ.data?.data ?? [] : []),
-    [clientesQ.data?.data, debouncedClienteQuery],
+    () =>
+      (clientesQ.data?.data ?? []).filter(
+        (cliente) => !cliente.esGenerico && cliente.dni !== "00000000",
+      ),
+    [clientesQ.data?.data],
   );
   const createCliente = useCreateCliente();
 
   // ── Tipo de comprobante ─────────────────────────────────────────────
   const [tipoDoc, setTipoDoc] = useState<TipoDocumento>(TipoDocumento.BOLETA);
+  const [formatoImpresion, setFormatoImpresion] =
+    useState<FormatoImpresionDocumento>("TICKET");
 
   // ── Pago ────────────────────────────────────────────────────────────
   const [metodoPagoId, setMetodoPagoId] = useState("");
@@ -161,8 +356,7 @@ export default function PosCobrarPage() {
     () => (metodosRes?.data ?? []).filter((m) => m.activo),
     [metodosRes],
   );
-  const selectedMetodo =
-    metodos.find((m) => m.id === metodoPagoId) ?? null;
+  const selectedMetodo = metodos.find((m) => m.id === metodoPagoId) ?? null;
   const isCashPayment =
     !selectedMetodo || selectedMetodo.codigo === CASH_METHOD_CODE;
   const requiresDigitalProof =
@@ -191,11 +385,18 @@ export default function PosCobrarPage() {
     if (preferred) setAlmacenId(preferred);
   }, [almacenId, almacenes]);
 
-  // ── Modalidad SUNAT ─────────────────────────────────────────────────
+  // ── Configuración SUNAT ─────────────────────────────────────────────
   const configFiscalQ = useConfigFiscal();
-  const modalidadBoletas = configFiscalQ.data?.data?.modalidadEnvioBoletas;
-  const modalidadIndividual =
-    modalidadBoletas === ModalidadEnvioBoletas.INDIVIDUAL;
+  const configFiscal = configFiscalQ.data?.data ?? null;
+  const formatoDefault = configFiscal?.formatoImpresionDefault;
+  const publicBrandingQ = usePublicBranding();
+  const empresaPublica = publicBrandingQ.data?.data ?? null;
+
+  useEffect(() => {
+    if (formatoDefault) {
+      setFormatoImpresion(formatoDefault);
+    }
+  }, [formatoDefault]);
 
   // ── Vuelto ──────────────────────────────────────────────────────────
   const recibido = asNumber(montoRecibido);
@@ -209,6 +410,9 @@ export default function PosCobrarPage() {
     if (cart.totals.total >= BOLETA_UMBRAL_IDENTIFICACION) return true;
     return false;
   }, [tipoDoc, cart.totals.total]);
+  const isVentaInternaLegal =
+    modoCliente === "GENERICO" &&
+    cart.totals.total <= LIMITE_VENTA_INTERNA_LEGAL;
 
   useEffect(() => {
     if (requiresIdentificacion && modoCliente === "GENERICO") {
@@ -253,10 +457,9 @@ export default function PosCobrarPage() {
 
   // ── Submit ──────────────────────────────────────────────────────────
   const createVenta = useCreateVenta();
-  const emitirComprobanteMut = useEmitirComprobante();
-  const [submitting, setSubmitting] = useState<
-    null | "cotizacion" | "cobrar"
-  >(null);
+  const [submitting, setSubmitting] = useState<null | "cotizacion" | "cobrar">(
+    null,
+  );
 
   const upsertGenericClient = useCallback(async (): Promise<string> => {
     try {
@@ -330,6 +533,18 @@ export default function PosCobrarPage() {
       }
       // Cobrar
       if (!aperturaActiva) return "Debes abrir tu caja antes de cobrar";
+      if (!isVentaInternaLegal) {
+        if (configFiscalQ.isLoading) {
+          return "Cargando configuración tributaria de la empresa";
+        }
+        if (
+          !configFiscal?.ruc ||
+          !configFiscal?.razonSocial ||
+          !configFiscal?.direccionFiscal
+        ) {
+          return "Completa Configuración > Tributario antes de enviar a comprobantes";
+        }
+      }
       if (!almacenId) return "Selecciona un almacén";
       if (!metodoPagoId) return "Selecciona un método de pago";
       if (requiresDigitalProof && !paymentProof?.filename)
@@ -350,6 +565,11 @@ export default function PosCobrarPage() {
       validacionFactura,
       validacionBoleta700,
       aperturaActiva,
+      configFiscalQ.isLoading,
+      configFiscal?.ruc,
+      configFiscal?.razonSocial,
+      configFiscal?.direccionFiscal,
+      isVentaInternaLegal,
       almacenId,
       metodoPagoId,
       requiresDigitalProof,
@@ -364,6 +584,7 @@ export default function PosCobrarPage() {
     venta: VentaCreada;
     comprobante?: ComprobanteCreado;
     total: number;
+    ventaInterna: boolean;
   } | null>(null);
   const [printData, setPrintData] = useState<ThermalReceiptData | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
@@ -439,61 +660,57 @@ export default function PosCobrarPage() {
         equipoSerie: l.equipoSerie || undefined,
       }));
 
-      let venta: VentaCreada | undefined;
       let comprobante: ComprobanteCreado | undefined;
 
-      if (tipoDoc === TipoDocumento.BOLETA && modalidadIndividual) {
-        const res = await api.post<CobrarEmitirPosResponse>(
-          "/ventas/pos/cobrar-emitir",
-          {
-            clienteId,
-            notas: cart.notas || undefined,
-            detalles,
-            metodoPagoId,
-            almacenId,
-            referenciaPago: referenciaPago || undefined,
-            evidenciaPagoFilename: paymentProof?.filename,
-          },
-        );
-        venta = res.data?.venta;
-        comprobante = res.data?.comprobante;
-      } else if (tipoDoc === TipoDocumento.BOLETA) {
-        const ventaRes = (await createVenta.mutateAsync({
-          clienteId,
-          notas: cart.notas || undefined,
-          detalles,
-        })) as { data?: VentaCreada };
-        venta = ventaRes.data;
-        if (!venta?.id) throw new Error("No se obtuvo ID de la venta");
-        await api.patch(`/ventas/${venta.id}/confirmar`, {
-          metodoPagoId,
-          almacenId,
-          referenciaPago: referenciaPago || undefined,
-          evidenciaPagoFilename: paymentProof?.filename,
-        });
-      } else {
-        const ventaRes = (await createVenta.mutateAsync({
-          clienteId,
-          notas: cart.notas || undefined,
-          detalles,
-        })) as { data?: VentaCreada };
-        venta = ventaRes.data;
-        if (!venta?.id) throw new Error("No se obtuvo ID de la venta");
-        await api.patch(`/ventas/${venta.id}/confirmar`, {
-          metodoPagoId,
-          almacenId,
-          referenciaPago: referenciaPago || undefined,
-          evidenciaPagoFilename: paymentProof?.filename,
-        });
-        const emitRes = (await emitirComprobanteMut.mutateAsync({
-          ventaId: venta.id,
-          tipo: TipoDocumento.FACTURA,
-        })) as { data?: ComprobanteCreado };
-        comprobante = emitRes.data;
-      }
+      const ventaRes = (await createVenta.mutateAsync({
+        clienteId,
+        notas: cart.notas || undefined,
+        detalles,
+      })) as { data?: VentaCreada };
+      const venta = ventaRes.data;
+      if (!venta?.id) throw new Error("No se obtuvo ID de la venta");
+      await api.patch(`/ventas/${venta.id}/confirmar`, {
+        metodoPagoId,
+        almacenId,
+        referenciaPago: referenciaPago || undefined,
+        evidenciaPagoFilename: paymentProof?.filename,
+        ventaInterna: isVentaInternaLegal,
+      });
 
       if (!venta?.id) throw new Error("No se obtuvo ID de la venta cobrada");
-      toast.success(`Venta ${venta.numero ?? venta.id} cobrada`);
+      toast.success(
+        isVentaInternaLegal
+          ? `Venta interna ${venta.numero ?? venta.id} cobrada`
+          : `Venta ${venta.numero ?? venta.id} cobrada y enviada a Por emitir`,
+      );
+
+      const [freshFiscalRes, freshEmpresaRes] = await Promise.all([
+        api.get<ApiDataEnvelope<ConfigEmpresaFiscalItem | null>>(
+          "/facturacion/config-fiscal",
+        ),
+        api.get<ApiDataEnvelope<EmpresaPublica>>("/config/empresa/publica", {
+          skipAuth: true,
+        }),
+      ]);
+      const freshConfigFiscal =
+        unwrapApiData<ConfigEmpresaFiscalItem | null>(freshFiscalRes) ??
+        configFiscal;
+      const freshEmpresaPublica =
+        unwrapApiData<EmpresaPublica>(freshEmpresaRes) ?? empresaPublica;
+      const empresaComprobante = buildEmpresaPrintData(
+        freshConfigFiscal,
+        freshEmpresaPublica,
+      );
+      if (
+        !isVentaInternaLegal &&
+        (!empresaComprobante.ruc ||
+          !empresaComprobante.nombre ||
+          !empresaComprobante.direccion)
+      ) {
+        throw new Error(
+          "No se pudo cargar la configuración tributaria real para imprimir",
+        );
+      }
 
       const metodoNombre = selectedMetodo?.nombre;
       const clienteNombre =
@@ -506,35 +723,90 @@ export default function PosCobrarPage() {
           ? "DNI"
           : undefined;
       const docNumero = clienteSel?.ruc ?? clienteSel?.dni ?? undefined;
+      const fechaComprobante =
+        comprobante?.fechaEmision ?? new Date().toISOString();
+      const hasComprobante = Boolean(comprobante?.numero);
+      const hashFirma = firstText(comprobante?.hashCpe, comprobante?.hashSunat);
+      const qrPayload = hasComprobante
+        ? buildSunatQrPayload({
+            ruc: empresaComprobante.ruc,
+            tipo: tipoDoc,
+            comprobante,
+            igv: cart.totals.igv,
+            total: cart.totals.total,
+            fecha: fechaComprobante,
+            docTipo,
+            docNumero,
+            hashFirma,
+          })
+        : undefined;
 
       setPrintData({
-        empresa: { nombre: "INVENTORI POS" },
+        empresa: empresaComprobante,
         comprobante: {
-          tipo: tipoDoc,
-          numero: comprobante?.numero,
-          fecha: new Date().toISOString(),
+          tipo: hasComprobante
+            ? tipoDoc
+            : isVentaInternaLegal
+              ? "VENTA_INTERNA"
+              : "VENTA",
+          serie: comprobante?.serie,
+          numero: comprobante?.numero ?? venta.numero,
+          fecha: fechaComprobante,
+          estado: hasComprobante
+            ? undefined
+            : isVentaInternaLegal
+              ? "INTERNA"
+              : "PENDIENTE DE EMISION",
+          esComprobanteElectronico: hasComprobante,
+          leyendaTipo: hasComprobante
+            ? undefined
+            : isVentaInternaLegal
+              ? "TICKET INTERNO - NO ES COMPROBANTE FISCAL"
+              : tipoDoc === TipoDocumento.FACTURA
+                ? "VENTA PENDIENTE DE FACTURA"
+                : "VENTA PENDIENTE DE BOLETA",
         },
-        cliente: { nombre: clienteNombre, docTipo, docNumero },
+        cliente: {
+          nombre: clienteNombre,
+          docTipo,
+          docNumero,
+          direccion: clienteSel?.direccion ?? undefined,
+        },
         items: cart.lines.map((l) => ({
           sku: l.sku,
           nombre: l.nombre,
           cantidad: l.cantidad,
           precioUnitario: l.precioUnitario,
-          total: Math.max(0, l.cantidad * l.precioUnitario - l.descuento),
+          total: lineTotalInclIgv(l.cantidad, l.precioUnitario, l.descuento),
         })),
         totales: {
+          opGravadas: cart.totals.subtotal,
+          opExoneradas: 0,
+          opInafectas: 0,
           subtotal: cart.totals.subtotal,
           igv: cart.totals.igv,
           total: cart.totals.total,
+          moneda: "PEN",
         },
         pago: {
           metodo: metodoNombre,
           referencia: referenciaPago || undefined,
+          formaPago: "CONTADO",
+          recibido: isCashPayment && recibido > 0 ? recibido : undefined,
+          vuelto: isCashPayment && vuelto > 0 ? vuelto : undefined,
         },
         ventaNumero: venta.numero,
+        pieImpresion: freshConfigFiscal?.pieImpresion ?? undefined,
+        qrPayload,
+        hashFirma,
       });
 
-      setConfirmacion({ venta, comprobante, total: cart.totals.total });
+      setConfirmacion({
+        venta,
+        comprobante,
+        total: cart.totals.total,
+        ventaInterna: isVentaInternaLegal,
+      });
       cart.clear();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Error al cobrar la venta");
@@ -548,104 +820,61 @@ export default function PosCobrarPage() {
     clienteSel,
     cart,
     tipoDoc,
-    modalidadIndividual,
     metodoPagoId,
     almacenId,
     referenciaPago,
     paymentProof?.filename,
     selectedMetodo,
+    recibido,
+    vuelto,
+    isCashPayment,
+    isVentaInternaLegal,
+    empresaPublica,
+    configFiscal,
     createVenta,
-    emitirComprobanteMut,
   ]);
 
-  // ── Pantalla de éxito ───────────────────────────────────────────────
-  if (confirmacion) {
-    return (
-      <>
-        <div className="mx-auto flex max-w-xl flex-col items-center gap-4 rounded-3xl border border-primary/20 bg-card px-6 py-12 text-center shadow-sm">
-          <div className="grid size-16 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg">
-            <CheckCircle2 className="size-9" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">Venta cobrada</h1>
-            {confirmacion.venta.numero ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Venta{" "}
-                <span className="font-mono font-semibold">
-                  {confirmacion.venta.numero}
-                </span>
-              </p>
-            ) : null}
-            {confirmacion.comprobante?.numero ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {tipoDoc === TipoDocumento.FACTURA ? "Factura" : "Boleta"}{" "}
-                <span className="font-mono font-semibold">
-                  {confirmacion.comprobante.numero}
-                </span>
-              </p>
-            ) : null}
-            <p className="mt-3 text-3xl font-bold tabular-nums text-primary">
-              {money(confirmacion.total)}
-            </p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-2">
-            {printData ? (
-              <Button
-                variant="outline"
-                onClick={() => setPrintOpen(true)}
-                className="rounded-xl"
-              >
-                <Printer className="size-4" /> Imprimir ticket
-              </Button>
-            ) : null}
-            <Button
-              onClick={() => router.push("/pos")}
-              className="rounded-xl bg-primary text-primary-foreground"
-            >
-              <Sparkles className="size-4" /> Nueva venta
-            </Button>
-            <Button asChild variant="outline" className="rounded-xl">
-              <Link href="/pos/historial">Historial</Link>
-            </Button>
-          </div>
-        </div>
-        <ThermalReceiptDialog
-          open={printOpen}
-          onOpenChange={setPrintOpen}
-          data={printData}
-        />
-      </>
-    );
-  }
+  const handleConfirmacionOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) router.push("/pos");
+    },
+    [router],
+  );
 
   // ── UI principal ────────────────────────────────────────────────────
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <PageHeader
-        title="Cobro y emisión"
-        description="Paso 2 · Cliente, comprobante y método de pago. El carrito está fijado del paso anterior."
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push("/pos")}
-            className="gap-2 rounded-xl"
-          >
-            <ArrowLeft className="size-4" /> Volver al carrito
-          </Button>
-        }
-      />
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      {/* Top Header Row for Checkout Step - Compact and Sleek */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2">
+        <div>
+          <h1 className="font-display text-lg sm:text-xl font-bold tracking-tight text-foreground">
+            Cobro y comprobante
+          </h1>
+          <p className="text-xs text-muted-foreground font-sans mt-0.5">
+            Paso 2 · Cobra la venta y define si queda interna o lista para
+            comprobante.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => router.push("/pos")}
+          className="h-8.5 gap-2 rounded-xl text-xs border-border bg-background/50 hover:bg-primary/5 hover:text-primary active:scale-95 transition-all duration-200 cursor-pointer font-sans"
+        >
+          <ArrowLeft className="size-4" /> Volver al carrito
+        </Button>
+      </div>
 
       {!aperturaActiva ? (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+        <div className="flex items-start gap-3 rounded-xl border border-[oklch(0.86_0.05_75)] bg-[oklch(0.96_0.02_75)] px-3 py-2.5 text-xs text-[oklch(0.38_0.08_75)] dark:border-[oklch(0.25_0.05_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[oklch(0.45_0.10_75)] dark:text-[oklch(0.75_0.10_75)]" />
           <div className="flex-1">
             <p className="font-semibold">No tienes una caja abierta.</p>
             <p className="opacity-90">
               Abre tu turno desde{" "}
               <Link
                 href="/pos/caja"
-                className="font-medium underline underline-offset-2"
+                className="font-medium underline underline-offset-2 hover:text-[oklch(0.30_0.08_75)] dark:hover:text-[oklch(0.85_0.08_75)] transition-colors"
               >
                 Caja
               </Link>{" "}
@@ -655,49 +884,58 @@ export default function PosCobrarPage() {
         </div>
       ) : null}
 
-      {tipoDoc === TipoDocumento.BOLETA &&
-      !modalidadIndividual &&
-      !configFiscalQ.isLoading ? (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-300/60 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+      {!configFiscalQ.isLoading ? (
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-primary">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div className="flex-1">
             <p className="font-semibold">
-              Modalidad de boletas no es INDIVIDUAL.
+              {isVentaInternaLegal ? "Venta interna disponible." : "Emisión centralizada."}
             </p>
             <p className="opacity-90">
-              Se cobrará y guardará la venta; la boleta se emitirá por resumen
-              diario. Cambia la modalidad en{" "}
-              <Link
-                href="/configuracion/tributario"
-                className="font-medium underline underline-offset-2"
-              >
-                Configuración tributaria
-              </Link>
-              .
+              {isVentaInternaLegal ? (
+                <>
+                  Público en general hasta S/{" "}
+                  {LIMITE_VENTA_INTERNA_LEGAL.toFixed(2)} puede cerrarse como
+                  ticket interno. No aparecerá en Por emitir.
+                </>
+              ) : (
+                <>
+                  Al cobrar, la venta quedará en{" "}
+                  <Link
+                    href="/comprobantes"
+                    className="font-medium underline underline-offset-2"
+                  >
+                    Comprobantes &gt; Por emitir
+                  </Link>
+                  . Desde ahí se emite la boleta o factura con la validación SUNAT correspondiente.
+                </>
+              )}
             </p>
           </div>
         </div>
       ) : null}
 
-      <div className="grid h-full min-h-0 gap-4 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      <div className="grid h-full min-h-0 gap-2 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         {/* ── Columna izquierda: resumen carrito (read-only) ─── */}
-        <section className="flex min-h-0 flex-col rounded-2xl border border-primary/20 bg-card shadow-sm">
-          <header className="border-b border-primary/15 px-4 py-3">
-            <h2 className="text-base font-semibold tracking-tight">
-              Resumen del pedido
-            </h2>
-            <p className="text-[11px] text-muted-foreground">
-              {cart.totals.itemsCount} ítem
-              {cart.totals.itemsCount === 1 ? "" : "s"} ·{" "}
-              <Link
-                href="/pos"
-                className="text-primary underline-offset-2 hover:underline"
-              >
-                Editar carrito
-              </Link>
-            </p>
+        <section className="flex min-h-0 flex-col rounded-xl border border-border/80 bg-card shadow-lg shadow-primary/[0.01]">
+          <header className="flex items-center justify-between border-b border-border/40 px-3 py-2.5 bg-gradient-to-r from-primary/5 via-primary/[0.01] to-transparent rounded-t-xl">
+            <div>
+              <h2 className="font-display text-[15px] font-bold tracking-tight text-foreground">
+                Resumen del pedido
+              </h2>
+              <p className="text-[11px] text-muted-foreground font-sans mt-0.5">
+                {cart.totals.itemsCount}{" "}
+                {cart.totals.itemsCount === 1 ? "ítem" : "ítems"} ·{" "}
+                <Link
+                  href="/pos"
+                  className="text-primary underline underline-offset-2 hover:text-primary/80 transition-colors font-semibold"
+                >
+                  Editar carrito
+                </Link>
+              </p>
+            </div>
           </header>
-          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2.5">
             {cart.lines.map((l) => {
               const lineTotal = Math.max(
                 0,
@@ -706,7 +944,7 @@ export default function PosCobrarPage() {
               return (
                 <div
                   key={l.id}
-                  className="rounded-lg border border-primary/15 bg-primary/5 px-2.5 py-2 text-xs dark:bg-primary/10"
+                  className="rounded-xl border border-border/60 bg-muted/20 px-2.5 py-2 text-xs hover:border-primary/20 hover:bg-primary/[0.005] hover:shadow-sm transition-all duration-300 ease-out animate-fade-in group"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -727,29 +965,35 @@ export default function PosCobrarPage() {
                         </p>
                       ) : null}
                     </div>
-                    <span className="shrink-0 font-semibold tabular-nums">
+                    <span className="shrink-0 font-display font-bold text-foreground group-hover:text-primary transition-colors tabular-nums">
                       {money(lineTotal)}
                     </span>
                   </div>
                   <p className="mt-1 text-[10px] text-muted-foreground">
-                    {l.cantidad} × {money(l.precioUnitario)} s/IGV
-                    {l.descuento > 0 ? ` − ${money(l.descuento)}` : ""}
+                    {l.cantidad} × {money(l.precioUnitario)} inc. IGV
+                    {l.descuento > 0 ? ` − ${money(l.descuento)} desc.` : ""}
                   </p>
                 </div>
               );
             })}
           </div>
-          <Separator className="bg-primary/15" />
-          <div className="space-y-1 px-4 py-3 text-sm">
+          <Separator className="bg-border/30" />
+          <div className="space-y-1.5 px-4 py-3 text-xs font-sans">
             <Row
-              label="Subtotal (s/IGV)"
+              label="Base imponible"
               value={money(cart.totals.subtotal)}
               muted
             />
-            <Row label="IGV (18%)" value={money(cart.totals.igv)} muted />
-            <div className="flex items-baseline justify-between pt-1">
-              <span className="text-sm font-medium">Total a cobrar</span>
-              <span className="text-3xl font-bold tabular-nums text-primary">
+            <Row
+              label="IGV incluido (18%)"
+              value={money(cart.totals.igv)}
+              muted
+            />
+            <div className="flex items-baseline justify-between pt-2 border-t border-border/40 mt-1.5">
+              <span className="text-[13px] font-bold text-foreground">
+                Total a cobrar (inc. IGV)
+              </span>
+              <span className="font-display text-3xl font-extrabold tabular-nums text-primary tracking-tight">
                 {money(cart.totals.total)}
               </span>
             </div>
@@ -757,9 +1001,9 @@ export default function PosCobrarPage() {
         </section>
 
         {/* ── Columna derecha: formulario de cobro ─── */}
-        <section className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+        <section className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           {/* Cliente */}
-          <div className="rounded-2xl border border-primary/20 bg-card p-4 shadow-sm">
+          <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-md shadow-primary/[0.01]">
             <div className="flex items-center justify-between gap-3">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Cliente
@@ -805,106 +1049,206 @@ export default function PosCobrarPage() {
             </p>
 
             {modoCliente === "IDENTIFICADO" ? (
-              <div className="mt-3">
-                {clienteSel ? (
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                        <User className="size-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">
-                          {clienteLabel(clienteSel)}
-                        </p>
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {clienteDoc(clienteSel) ?? "Sin documento"}
-                        </p>
-                      </div>
-                    </div>
+              <div className="mt-3 space-y-2">
+                <Popover
+                  open={clienteSelectOpen}
+                  onOpenChange={(open) => {
+                    setClienteSelectOpen(open);
+                    if (!open) setClienteQuery("");
+                  }}
+                >
+                  <PopoverTrigger asChild>
                     <Button
                       type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 gap-1 rounded-lg px-2 text-xs"
-                      onClick={() => {
-                        setClienteSel(null);
-                        setClienteQuery("");
-                      }}
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={clienteSelectOpen}
+                      className={cn(
+                        "h-auto min-h-12 w-full justify-between rounded-xl border-border bg-background/50 px-3 py-2 text-left shadow-inner hover:bg-primary/5 hover:border-primary/30",
+                        !clienteSel && "text-muted-foreground",
+                        (validacionFactura || validacionBoleta700) &&
+                          !clienteSel &&
+                          "border-destructive/40",
+                      )}
                     >
-                      <X className="size-3.5" /> Cambiar
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <span
+                          className={cn(
+                            "grid size-8 shrink-0 place-items-center rounded-lg border",
+                            clienteSel
+                              ? "border-primary/15 bg-primary/10 text-primary"
+                              : "border-border bg-muted/40 text-muted-foreground",
+                          )}
+                        >
+                          {clienteSel?.tipo === TipoCliente.EMPRESA ? (
+                            <Building2 className="size-4" />
+                          ) : clienteSel ? (
+                            <User className="size-4" />
+                          ) : (
+                            <UserSearch className="size-4" />
+                          )}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-foreground">
+                            {clienteSel
+                              ? clienteLabel(clienteSel)
+                              : "Seleccionar cliente"}
+                          </span>
+                          <span className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                            <IdCard className="size-3" />
+                            {clienteSel
+                              ? (clienteDoc(clienteSel) ?? "Sin documento")
+                              : "Buscar por nombre, RUC o DNI"}
+                          </span>
+                        </span>
+                      </span>
+                      <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                     </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <UserSearch className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-2xl border-border/80 p-0 shadow-xl"
+                    onWheel={(event) => event.stopPropagation()}
+                  >
+                    <Command shouldFilter={false}>
+                      <CommandInput
                         value={clienteQuery}
-                        onChange={(e) => setClienteQuery(e.target.value)}
+                        onValueChange={setClienteQuery}
                         placeholder="Buscar por nombre, RUC o DNI…"
-                        className="h-10 rounded-xl border-primary/20 pl-9 text-sm"
-                        autoFocus
                       />
-                    </div>
-                    {debouncedClienteQuery ? (
-                      clientesQ.isLoading ? (
-                        <p className="px-1 text-xs text-muted-foreground">
-                          <Loader2 className="mr-1 inline size-3 animate-spin" />
-                          Buscando…
-                        </p>
-                      ) : clientesEncontrados.length === 0 ? (
-                        <div className="space-y-2">
-                          <p className="rounded-lg border border-dashed border-primary/20 px-3 py-2 text-xs text-muted-foreground">
-                            Sin coincidencias para “{debouncedClienteQuery}”.
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2 rounded-lg border-primary/30 text-primary hover:bg-primary/5"
-                            onClick={() => setCreateClienteOpen(true)}
+                      <CommandList className="max-h-72 overflow-y-auto overscroll-contain">
+                        {clientesQ.isFetching ? (
+                          <CommandItem value="buscando" disabled>
+                            <Loader2 className="size-4 animate-spin opacity-70" />
+                            <span>Buscando clientes…</span>
+                          </CommandItem>
+                        ) : null}
+
+                        {!clientesQ.isFetching &&
+                        clientesEncontrados.length === 0 ? (
+                          <CommandGroup>
+                            <CommandItem value="sin-clientes" disabled>
+                              <div className="flex w-full flex-col items-center gap-2 py-4 text-center">
+                                <UserSearch className="size-8 text-muted-foreground/40" />
+                                <p className="text-xs font-medium">
+                                  {debouncedClienteQuery
+                                    ? `Sin coincidencias para “${debouncedClienteQuery}”`
+                                    : "No hay clientes activos para mostrar"}
+                                </p>
+                              </div>
+                            </CommandItem>
+                          </CommandGroup>
+                        ) : null}
+
+                        <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+
+                        {clientesEncontrados.length > 0 ? (
+                          <CommandGroup heading="Clientes activos">
+                            {clientesEncontrados.map((cliente) => {
+                              const ClienteIcon =
+                                cliente.tipo === TipoCliente.EMPRESA
+                                  ? Building2
+                                  : User;
+                              const doc = clienteDoc(cliente);
+                              const selected = clienteSel?.id === cliente.id;
+
+                              return (
+                                <CommandItem
+                                  key={cliente.id}
+                                  value={`${clienteLabel(cliente)} ${doc ?? ""}`}
+                                  onSelect={() => {
+                                    setClienteSel(cliente);
+                                    setClienteQuery("");
+                                    setClienteSelectOpen(false);
+                                  }}
+                                  className="items-start gap-2.5 py-2.5"
+                                >
+                                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                                    <ClienteIcon className="size-4" />
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-sm font-semibold">
+                                      {clienteLabel(cliente)}
+                                    </span>
+                                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                                      <span className="font-mono uppercase">
+                                        {doc ?? "Sin documento"}
+                                      </span>
+                                      {cliente.telefono || cliente.celular ? (
+                                        <span>
+                                          {cliente.telefono ?? cliente.celular}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </span>
+                                  <Check
+                                    className={cn(
+                                      "mt-1 size-4 shrink-0 text-primary",
+                                      selected ? "opacity-100" : "opacity-0",
+                                    )}
+                                  />
+                                </CommandItem>
+                              );
+                            })}
+                          </CommandGroup>
+                        ) : null}
+
+                        <CommandGroup heading="Acciones">
+                          <CommandItem
+                            value="crear cliente nuevo"
+                            onSelect={() => {
+                              setCreateClienteOpen(true);
+                              setClienteSelectOpen(false);
+                            }}
+                            className="gap-2 text-primary"
                           >
                             <UserPlus className="size-4" />
-                            Crear cliente nuevo
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <ul className="max-h-44 overflow-auto rounded-xl border border-primary/15">
-                            {clientesEncontrados.map((c) => (
-                              <li key={c.id}>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setClienteSel(c);
-                                    setClienteQuery("");
-                                  }}
-                                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-primary/5"
-                                >
-                                  <span className="min-w-0 truncate text-sm">
-                                    {clienteLabel(c)}
-                                  </span>
-                                  <span className="shrink-0 font-mono text-[10px] uppercase text-muted-foreground">
-                                    {clienteDoc(c) ?? "—"}
-                                  </span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="w-full gap-2 rounded-lg text-primary hover:bg-primary/5"
-                            onClick={() => setCreateClienteOpen(true)}
-                          >
-                            <Plus className="size-3.5" /> Crear cliente nuevo
-                          </Button>
-                        </>
-                      )
-                    ) : null}
+                            <span>Crear cliente nuevo</span>
+                          </CommandItem>
+                          {clienteSel ? (
+                            <CommandItem
+                              value="limpiar cliente"
+                              onSelect={() => {
+                                setClienteSel(null);
+                                setClienteQuery("");
+                                setClienteSelectOpen(false);
+                              }}
+                              className="gap-2 text-muted-foreground"
+                            >
+                              <X className="size-4" />
+                              <span>Quitar selección</span>
+                            </CommandItem>
+                          ) : null}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+
+                {clienteSel ? (
+                  <div className="grid gap-2 rounded-xl border border-primary/15 bg-primary/[0.03] px-3 py-2 text-[11px] sm:grid-cols-3">
+                    <div className="min-w-0">
+                      <span className="text-muted-foreground">Tipo</span>
+                      <p className="truncate font-semibold">
+                        {clienteSel.tipo === TipoCliente.EMPRESA
+                          ? "Empresa"
+                          : "Persona natural"}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-muted-foreground">Documento</span>
+                      <p className="truncate font-mono font-semibold">
+                        {clienteDoc(clienteSel) ?? "—"}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-muted-foreground">Contacto</span>
+                      <p className="truncate font-semibold">
+                        {clienteSel.telefono ?? clienteSel.celular ?? "—"}
+                      </p>
+                    </div>
                   </div>
-                )}
+                ) : null}
               </div>
             ) : null}
 
@@ -923,7 +1267,7 @@ export default function PosCobrarPage() {
           </div>
 
           {/* Tipo comprobante + método de pago */}
-          <div className="grid gap-3 rounded-2xl border border-primary/20 bg-card p-4 shadow-sm md:grid-cols-2">
+          <div className="grid gap-3 rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-md shadow-primary/[0.01] md:grid-cols-2 xl:grid-cols-3">
             <div>
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Tipo de comprobante
@@ -963,11 +1307,11 @@ export default function PosCobrarPage() {
                   <Loader2 className="size-3.5 animate-spin" /> Cargando…
                 </div>
               ) : metodos.length === 0 ? (
-                <p className="mt-2 rounded-xl border border-dashed border-amber-500/30 bg-amber-500/10 p-2.5 text-[11px] text-amber-700 dark:text-amber-300">
+                <p className="mt-2 rounded-xl border border-dashed border-[oklch(0.86_0.05_75)] bg-[oklch(0.96_0.02_75)] p-2.5 text-[11px] text-[oklch(0.38_0.08_75)] dark:border-[oklch(0.25_0.05_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)]">
                   No hay métodos de pago activos.
                 </p>
               ) : (
-                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                <div className="mt-2 grid grid-cols-3 gap-2">
                   {metodos.map((m) => {
                     const Icon = metodoIcon(m.codigo);
                     const active = metodoPagoId === m.id;
@@ -977,24 +1321,61 @@ export default function PosCobrarPage() {
                         type="button"
                         onClick={() => setMetodoPagoId(m.id)}
                         className={cn(
-                          "flex flex-col items-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-medium transition",
+                          "flex flex-col items-center justify-center gap-1.5 rounded-xl border p-2 text-[10px] font-bold uppercase tracking-wider transition-all duration-300 ease-out active:scale-95 cursor-pointer w-full font-sans shadow-sm",
                           active
-                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
-                            : "border-primary/20 bg-card hover:bg-primary/5",
+                            ? "border-primary bg-primary/10 text-primary shadow-sm shadow-primary/[0.05]"
+                            : "border-border bg-background/50 hover:border-primary/30 hover:bg-primary/[0.02] text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        <Icon className="size-4" />
-                        <span className="truncate">{m.nombre}</span>
+                        <Icon className="size-4 shrink-0" />
+                        <span className="truncate max-w-full leading-none">
+                          {m.nombre}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
               )}
             </div>
+
+            <div>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Formato al finalizar
+              </Label>
+              <Select
+                value={formatoImpresion}
+                onValueChange={(value) =>
+                  setFormatoImpresion(value as FormatoImpresionDocumento)
+                }
+              >
+                <SelectTrigger className="mt-2 h-12 rounded-xl border-border bg-background/50 text-sm focus:border-primary/40 focus:ring-primary/20">
+                  <SelectValue placeholder="Formato" />
+                </SelectTrigger>
+                <SelectContent>
+                  {FORMATO_IMPRESION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      <span className="flex flex-col">
+                        <span>{option.label}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {option.hint}
+                        </span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                Default:{" "}
+                {formatoDefault
+                  ? formatoLabel(formatoDefault)
+                  : "Ticket si no hay configuración"}
+                .
+              </p>
+            </div>
           </div>
 
           {/* Pago: efectivo (recibido/vuelto) o digital (evidencia) */}
-          <div className="rounded-2xl border border-primary/20 bg-card p-4 shadow-sm">
+          <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-md shadow-primary/[0.01]">
             {isCashPayment ? (
               <div className="space-y-2">
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1005,7 +1386,7 @@ export default function PosCobrarPage() {
                   onChange={(e) => setMontoRecibido(e.target.value)}
                   inputMode="decimal"
                   placeholder="0.00"
-                  className="h-12 rounded-xl border-primary/20 text-right text-lg font-semibold tabular-nums"
+                  className="h-11 rounded-lg border-border text-right text-lg font-bold tabular-nums focus-visible:ring-primary/20 focus-visible:border-primary/40 bg-background/50 focus:bg-background transition-all duration-300"
                 />
                 {recibido > 0 && recibido < cart.totals.total ? (
                   <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-xs">
@@ -1092,20 +1473,20 @@ export default function PosCobrarPage() {
                   value={referenciaPago}
                   onChange={(e) => setReferenciaPago(e.target.value)}
                   placeholder="Opcional"
-                  className="h-9 rounded-xl border-primary/20 text-sm"
+                  className="h-9.5 rounded-xl border-border text-sm focus-visible:ring-primary/20 focus-visible:border-primary/40 bg-background/50 focus:bg-background transition-all duration-300"
                 />
               </div>
             )}
           </div>
 
           {/* Almacén + Notas */}
-          <div className="grid gap-3 rounded-2xl border border-primary/20 bg-card p-4 shadow-sm md:grid-cols-[200px_1fr]">
+          <div className="grid gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-md shadow-primary/[0.01] md:grid-cols-[200px_1fr]">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Almacén
               </Label>
               <Select value={almacenId} onValueChange={setAlmacenId}>
-                <SelectTrigger className="h-9 rounded-xl border-primary/20 text-sm">
+                <SelectTrigger className="h-9.5 rounded-xl border-border text-sm focus:border-primary/40 focus:ring-primary/20 bg-background/50 transition-all duration-300">
                   <SelectValue placeholder="Almacén" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1125,13 +1506,13 @@ export default function PosCobrarPage() {
                 value={cart.notas}
                 onChange={(e) => cart.setNotas(e.target.value)}
                 placeholder="Observaciones internas (opcional)"
-                className="min-h-[50px] resize-none rounded-xl border-primary/20 text-xs"
+                className="min-h-[50px] resize-none rounded-xl border-border text-xs focus-visible:ring-primary/20 focus-visible:border-primary/40 bg-background/50 focus:bg-background transition-all duration-300"
               />
             </div>
           </div>
 
           {/* CTAs */}
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2 pt-2">
             <Button
               type="button"
               size="lg"
@@ -1142,26 +1523,26 @@ export default function PosCobrarPage() {
                 !!validacionBoleta700 ||
                 !!validacionFactura
               }
-              className="h-14 rounded-xl bg-primary text-base font-semibold text-primary-foreground shadow-md hover:bg-primary/90"
+              className="h-13 rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-md shadow-primary/10 hover:bg-primary/95 active:scale-[0.97] transition-all duration-200 cursor-pointer gap-2"
             >
               {submitting === "cobrar" ? (
-                <Loader2 className="size-5 animate-spin" />
+                <Loader2 className="size-4.5 animate-spin" />
               ) : (
-                <Receipt className="size-5" />
+                <Receipt className="size-4.5" />
               )}
-              Cobrar y emitir · {money(cart.totals.total)}
+              {isVentaInternaLegal ? "Cobrar venta interna" : "Cobrar y enviar a Por emitir"} · {money(cart.totals.total)}
             </Button>
             <Button
               type="button"
               variant="outline"
               onClick={() => void handleGuardarCotizacion()}
               disabled={submitting !== null}
-              className="rounded-xl border-primary/20 hover:bg-primary/5"
+              className="h-11 rounded-xl border-border bg-background/50 hover:bg-primary/5 hover:border-primary/20 hover:text-primary active:scale-[0.98] transition-all duration-200 cursor-pointer text-xs font-semibold text-muted-foreground gap-2"
             >
               {submitting === "cotizacion" ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Loader2 className="size-4 animate-spin text-primary" />
               ) : (
-                <Save className="size-4" />
+                <Save className="size-4 text-muted-foreground/80 group-hover:text-primary" />
               )}
               Guardar como cotización
             </Button>
@@ -1195,6 +1576,117 @@ export default function PosCobrarPage() {
             "Cliente creado y seleccionado. Si necesitas RUC o dirección, edítalo en /clientes.",
           );
         }}
+      />
+
+      <Dialog
+        open={!!confirmacion}
+        onOpenChange={handleConfirmacionOpenChange}
+      >
+        <DialogContent className="max-w-xl rounded-3xl border-emerald-500/20 p-0 shadow-2xl shadow-emerald-500/[0.08]">
+          <div className="flex flex-col items-center gap-5 px-6 py-7 text-center sm:px-8">
+            <div className="grid size-16 place-items-center rounded-2xl border border-emerald-400/20 bg-emerald-500 text-white shadow-lg shadow-emerald-500/20">
+              <CheckCircle2 className="size-9" />
+            </div>
+            <DialogHeader className="items-center text-center">
+              <DialogTitle className="font-display text-2xl font-black uppercase tracking-tight text-emerald-600 dark:text-emerald-400">
+                Venta cobrada con éxito
+              </DialogTitle>
+            </DialogHeader>
+            {confirmacion ? (
+              <>
+                <div className="w-full space-y-1 rounded-2xl border border-border bg-card/60 p-4 shadow-sm">
+                  {confirmacion.venta.numero ? (
+                    <p className="flex items-center justify-between gap-4 text-xs font-semibold text-muted-foreground">
+                      <span>Código de venta:</span>
+                      <span className="font-mono text-[13px] font-bold text-foreground">
+                        {confirmacion.venta.numero}
+                      </span>
+                    </p>
+                  ) : null}
+                  {confirmacion.comprobante?.numero ? (
+                    <p className="flex items-center justify-between gap-4 border-t border-border/40 pt-1.5 text-xs font-semibold text-muted-foreground">
+                      <span>
+                        {tipoDoc === TipoDocumento.FACTURA
+                          ? "Factura electrónica"
+                          : "Boleta de venta"}
+                        :
+                      </span>
+                      <span className="font-mono text-[13px] font-bold text-foreground">
+                        {confirmacion.comprobante.numero}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="flex items-center justify-between gap-4 border-t border-border/40 pt-1.5 text-xs font-semibold text-muted-foreground">
+                      <span>Estado fiscal:</span>
+                      <span className="font-bold text-foreground">
+                        {confirmacion.ventaInterna
+                          ? "Ticket interno"
+                          : "Pendiente en Comprobantes"}
+                      </span>
+                    </p>
+                  )}
+                  <p className="flex items-center justify-between gap-4 border-t border-border/40 pt-1.5 text-xs font-semibold text-muted-foreground">
+                    <span>Formato:</span>
+                    <span className="font-bold text-foreground">
+                      {formatoLabel(formatoImpresion)}
+                    </span>
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/10 px-6 py-3 dark:bg-emerald-500/[0.07]">
+                  <span className="block text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                    Total cobrado
+                  </span>
+                  <p className="mt-0.5 font-display text-3xl font-black tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {money(confirmacion.total)}
+                  </p>
+                </div>
+              </>
+            ) : null}
+          </div>
+          <DialogFooter className="grid gap-2 border-t border-border/50 bg-muted/20 px-6 py-4 sm:grid-cols-2 sm:gap-2">
+            {printData ? (
+              <Button
+                variant="outline"
+                onClick={() => setPrintOpen(true)}
+                className="h-11 gap-2 rounded-xl border-border bg-background/70 text-xs font-semibold hover:border-emerald-500/20 hover:bg-emerald-500/5 hover:text-emerald-500"
+              >
+                <Printer className="size-4" /> Imprimir{" "}
+                {formatoLabel(formatoImpresion)}
+              </Button>
+            ) : null}
+            {confirmacion?.venta.id && !confirmacion.ventaInterna ? (
+              <Button
+                asChild
+                className="h-11 gap-2 rounded-xl text-xs font-extrabold"
+              >
+                <Link href={`/comprobantes?ventaId=${confirmacion.venta.id}`}>
+                  <Receipt className="size-4" /> Ir a Por emitir
+                </Link>
+              </Button>
+            ) : (
+              <Button
+                onClick={() => router.push("/pos")}
+                className="h-11 gap-2 rounded-xl text-xs font-extrabold"
+              >
+                <Sparkles className="size-4" /> Nueva venta
+              </Button>
+            )}
+            <Button
+              asChild
+              variant="outline"
+              className="h-10 gap-2 rounded-xl text-xs font-semibold text-muted-foreground sm:col-span-2"
+            >
+              <Link href="/ventas">Ver historial de ventas</Link>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ThermalReceiptDialog
+        open={printOpen}
+        onOpenChange={setPrintOpen}
+        data={printData}
+        format={formatoImpresion}
       />
     </div>
   );
@@ -1244,15 +1736,18 @@ function TipoDocTile({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "flex flex-col items-start gap-0.5 rounded-xl border px-3 py-2 text-left transition",
+        "flex flex-col items-start gap-1 rounded-xl border p-2.5 text-left transition-all duration-300 ease-out active:scale-98 cursor-pointer w-full font-sans shadow-sm",
         active
-          ? "border-primary bg-primary/10 text-primary"
-          : "border-primary/20 bg-card hover:bg-primary/5",
-        disabled && "cursor-not-allowed opacity-50 hover:bg-card",
+          ? "border-primary bg-primary/[0.04] text-primary shadow-sm shadow-primary/[0.05]"
+          : "border-border bg-card hover:border-primary/30 hover:bg-primary/[0.01]",
+        disabled &&
+          "cursor-not-allowed opacity-40 hover:bg-card hover:border-border shadow-none active:scale-100",
       )}
     >
-      <span className="text-sm font-semibold">{label}</span>
-      <span className="text-[10px] text-muted-foreground">{hint}</span>
+      <span className="text-[13px] font-bold tracking-tight">{label}</span>
+      <span className="text-[10px] text-muted-foreground leading-normal font-medium">
+        {hint}
+      </span>
     </button>
   );
 }

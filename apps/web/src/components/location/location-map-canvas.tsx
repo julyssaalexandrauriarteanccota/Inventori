@@ -19,6 +19,7 @@ export type LocationCoordinates = {
 
 export interface LocationMapCanvasProps {
   marker?: LocationCoordinates | null
+  center?: LocationCoordinates | null
   interactive?: boolean
   onSelect?: (coordinates: LocationCoordinates) => void
   className?: string
@@ -43,9 +44,11 @@ const markerIcon = L.divIcon({
 
 function MapViewport({
   marker,
+  center,
   zoom,
 }: {
   marker?: LocationCoordinates | null
+  center?: LocationCoordinates | null
   zoom: number
 }) {
   const map = useMap()
@@ -54,8 +57,9 @@ function MapViewport({
     const timeoutId = window.setTimeout(() => {
       map.invalidateSize()
 
-      if (marker) {
-        map.flyTo([marker.latitud, marker.longitud], zoom, {
+      const target = marker ?? center
+      if (target) {
+        map.flyTo([target.latitud, target.longitud], zoom, {
           animate: false,
         })
         map.setZoom(zoom)
@@ -63,8 +67,8 @@ function MapViewport({
 
       window.setTimeout(() => {
         map.invalidateSize()
-        if (marker) {
-          map.setView([marker.latitud, marker.longitud], zoom, {
+        if (target) {
+          map.setView([target.latitud, target.longitud], zoom, {
             animate: false,
           })
         }
@@ -72,7 +76,7 @@ function MapViewport({
     }, 120)
 
     return () => window.clearTimeout(timeoutId)
-  }, [map, marker, zoom])
+  }, [map, marker, center, zoom])
 
   return null
 }
@@ -102,15 +106,13 @@ function MapSelectionEvents({
 
 export function LocationMapCanvas({
   marker,
+  center: customCenter,
   interactive = false,
   onSelect,
   className,
   zoom = 16,
 }: LocationMapCanvasProps) {
-  const center = marker ?? DEFAULT_CENTER
-  const mapKey = marker
-    ? `${marker.latitud.toFixed(6)}-${marker.longitud.toFixed(6)}`
-    : 'location-map-default'
+  const center = marker ?? customCenter ?? DEFAULT_CENTER
 
   return (
     <div
@@ -120,9 +122,9 @@ export function LocationMapCanvas({
       )}
     >
       <MapContainer
-        key={mapKey}
+        key="location-map-canvas"
         center={[center.latitud, center.longitud]}
-        zoom={marker ? zoom : 13}
+        zoom={marker ?? customCenter ? zoom : 13}
         scrollWheelZoom={interactive}
         dragging
         doubleClickZoom={interactive}
@@ -134,7 +136,7 @@ export function LocationMapCanvas({
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapViewport marker={marker} zoom={zoom} />
+        <MapViewport marker={marker} center={customCenter} zoom={zoom} />
         <MapSelectionEvents interactive={interactive} onSelect={onSelect} />
         {marker ? (
           <Marker

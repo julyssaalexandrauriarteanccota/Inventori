@@ -156,7 +156,7 @@ describe('FacturacionService', () => {
         id: 'det-1',
         productoId: 'prod-1',
         cantidad: 2,
-        precioUnitario: 500.0,
+        precioUnitario: 590.0,
         subtotal: 1000.0,
         producto: {
           id: 'prod-1',
@@ -340,12 +340,12 @@ describe('FacturacionService', () => {
     // Doc 06 §4 — reconciliación IGV global ↔ suma por línea.
     //
     // Caso clásico de descuadre por redondeo: 5 unidades de un consumible barato
-    // a S/ 0.85 cada una (sin IGV).
+    // a S/ 1.00 cada una (precio de venta con IGV; base S/ 0.85).
     //
-    //  Antes del fix (Forma A — recálculo sobre subtotal):
+    //  Antes del fix (Forma A — recálculo global sobre subtotal):
     //    Comprobante.igv = round(4.25 × 0.18) = round(0.765) = 0.77
     //  Después del fix (Forma B — Σ de líneas):
-    //    cada línea.igv = round(0.85 × 0.18) = round(0.153) = 0.15
+    //    cada línea.igv = round(1.00 - 0.85) = 0.15
     //    Σ por línea = 5 × 0.15 = 0.75
     //
     // SUNAT exige que cbc:TaxAmount global (Comprobante.igv) ≈ Σ TaxAmount por
@@ -362,7 +362,7 @@ describe('FacturacionService', () => {
           id: `det-${idx + 1}`,
           productoId: 'prod-cheap',
           cantidad: 1,
-          precioUnitario: 0.85,
+          precioUnitario: 1,
           descuento: 0,
           subtotal: 0.85,
           producto: {
@@ -1467,6 +1467,15 @@ describe('FacturacionService', () => {
       const result = await service.reintentarEnvio('comp-1');
 
       expect(result.message).toContain('reencolado');
+      expect(mockPrisma.comprobante.update).toHaveBeenCalledWith({
+        where: { id: 'comp-1' },
+        data: {
+          estado: EstadoComprobante.PENDIENTE_ENVIO,
+          payloadHash: null,
+          hashCpe: null,
+          xmlStorageKey: null,
+        },
+      });
       expect(mockQueue.add).toHaveBeenCalled();
     });
 

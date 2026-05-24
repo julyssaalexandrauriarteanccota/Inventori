@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { SignedXml } from 'xml-crypto';
+import { createSign } from 'node:crypto';
+import { DOMParser } from '@xmldom/xmldom';
+import { ExclusiveCanonicalization, SignedXml } from 'xml-crypto';
 import { CertificadoDigitalService } from './certificado-digital.service';
 
 export interface SignedSunatXmlResult {
@@ -36,14 +38,18 @@ export class SunatXmlSigner {
         "/*[local-name(.)='Invoice' or local-name(.)='CreditNote' or local-name(.)='DebitNote' or local-name(.)='VoidedDocuments' or local-name(.)='SummaryDocuments']",
       transforms: [
         'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-        'http://www.w3.org/2001/10/xml-exc-c14n#',
+        'http://www.w3.org/TR/2001/REC-xml-c14n-20010315',
       ],
       digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
       uri: '',
+      isEmptyUri: true,
     });
 
     signer.computeSignature(xml, {
       prefix: 'ds',
+      existingPrefixes: {
+        ds: 'http://www.w3.org/2000/09/xmldsig#',
+      },
       location: {
         reference: "//*[local-name(.)='ExtensionContent']",
         action: 'append',
@@ -51,9 +57,45 @@ export class SunatXmlSigner {
     });
 
     return {
-      signedXml: signer.getSignedXml(),
+      signedXml: this.omitImplicitReferenceCanonicalizationTransform(
+        signer.getSignedXml(),
+        material.privateKeyPem,
+      ),
       certificateId: material.certificate.id,
       certificateFingerprintSha256: material.certificate.fingerprintSha256,
     };
+  }
+
+  private omitImplicitReferenceCanonicalizationTransform(
+    signedXml: string,
+    privateKeyPem: string,
+  ) {
+    const referenceCanonicalizationTransformPattern =
+      /<ds:Transform Algorithm="http:\/\/www\.w3\.org\/TR\/2001\/REC-xml-c14n-20010315"\s*\/>/;
+    if (!referenceCanonicalizationTransformPattern.test(signedXml)) {
+      return signedXml;
+    }
+
+    const xml = signedXml.replace(referenceCanonicalizationTransformPattern, '');
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const signedInfo = doc.getElementsByTagName('ds:SignedInfo')[0];
+    if (!signedInfo) {
+      return xml;
+    }
+
+    const canonicalSignedInfo = new ExclusiveCanonicalization().process(
+      signedInfo as never,
+      {
+        defaultNsForPrefix: SignedXml.defaultNsForPrefix,
+      } as never,
+    );
+    const signatureValue = createSign('RSA-SHA256')
+      .update(canonicalSignedInfo)
+      .sign(privateKeyPem, 'base64');
+
+    return xml.replace(
+      /<ds:SignatureValue>[\s\S]*?<\/ds:SignatureValue>/,
+      `<ds:SignatureValue>${signatureValue}</ds:SignatureValue>`,
+    );
   }
 }

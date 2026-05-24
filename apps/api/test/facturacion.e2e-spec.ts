@@ -17,7 +17,8 @@ describe('Facturacion (e2e)', () => {
       numero: 'VTA-0001',
       estado: 'ORDEN_CONFIRMADA',
       subtotal: 100,
-      total: 100,
+      igv: 18,
+      total: 118,
       clienteId: 'cli-1',
       cliente: {
         id: 'cli-1',
@@ -27,13 +28,14 @@ describe('Facturacion (e2e)', () => {
         ruc: '20987654326',
         dni: '12345678',
         direccion: 'Av. Demo 123',
+        email: 'cliente@demo.com',
       },
       detalles: [
         {
           id: 'det-1',
           productoId: 'prod-1',
           cantidad: 1,
-          precioUnitario: 100,
+          precioUnitario: 118,
           subtotal: 100,
           producto: {
             id: 'prod-1',
@@ -55,6 +57,7 @@ describe('Facturacion (e2e)', () => {
       direccionFiscal: 'Av. Fiscal 123',
       ubigeoFiscal: '150101',
       codigoEstablecimiento: '0000',
+      ambienteDefault: 'BETA',
     };
     const prismaMock = context.prismaMock as Record<string, any>;
 
@@ -139,9 +142,70 @@ describe('Facturacion (e2e)', () => {
       findFirst: jest.fn(() => Promise.resolve(configFiscal)),
     };
 
+    prismaMock.certificadoDigital = {
+      findFirst: jest.fn(() =>
+        Promise.resolve({
+          id: 'cert-1',
+          validoHasta: new Date('2028-12-31T00:00:00.000Z'),
+        }),
+      ),
+    };
+
+    prismaMock.fiscalSecret = {
+      findMany: jest.fn(() =>
+        Promise.resolve([{ name: 'sol-username' }, { name: 'sol-password' }]),
+      ),
+    };
+
+    prismaMock.clienteValidacionSunat = {
+      findUnique: jest.fn(() =>
+        Promise.resolve({
+          estado: 'ACTIVO',
+          condicionDomicilio: 'HABIDO',
+          ultimaValidacionAt: new Date(),
+          nombreNormalizado: 'CLIENTE SAC',
+        }),
+      ),
+    };
+
     prismaMock.$transaction = jest.fn(
       async (fn: (tx: any) => Promise<unknown>) =>
         fn({
+          $queryRaw: jest.fn((query: any) => {
+            const queryStr = String(
+              query && typeof query === 'object'
+                ? query.text ||
+                    query.sql ||
+                    (Array.isArray(query)
+                      ? query.join(' ')
+                      : JSON.stringify(query))
+                : query,
+            );
+            if (queryStr.includes('series_documento')) {
+              return Promise.resolve([]);
+            }
+            if (queryStr.includes('config_empresa')) {
+              return Promise.resolve([
+                {
+                  id: 'empresa',
+                  serieFactura: 'F001',
+                  serieBoleta: 'B001',
+                  correlativoFactura: 0,
+                  correlativoBoleta: 0,
+                  serieNotaCredito: 'FC01',
+                  serieNotaDebito: 'FD01',
+                  correlativoNotaCredito: 0,
+                  correlativoNotaDebito: 0,
+                  porcentajeIGV: 18,
+                  ruc: '20123456789',
+                  razonSocial: 'ERP Demo SAC',
+                  nombreComercial: 'ERP Demo',
+                  direccion: 'Av. Fiscal 123',
+                },
+              ]);
+            }
+            return Promise.resolve([]);
+          }),
           configEmpresa: {
             findFirst: prismaMock.configEmpresa.findFirst,
             update: jest.fn(),
@@ -168,6 +232,9 @@ describe('Facturacion (e2e)', () => {
               ({ data }: { data: Array<Record<string, any>> }) =>
                 Promise.resolve({ count: data.length }),
             ),
+          },
+          comprobanteEnvioLog: {
+            create: jest.fn(() => Promise.resolve({})),
           },
           venta: {
             update: jest.fn(
@@ -258,7 +325,7 @@ describe('Facturacion (e2e)', () => {
 
     const response = await request(app.getHttpServer())
       .get(
-        '/api/v1/facturacion/comprobantes/22222222-2222-4222-8222-000000000001/pdf',
+        '/api/v1/facturacion/comprobantes/22222222-2222-4222-8222-000000000001/documento',
       )
       .set('Authorization', `Bearer ${token}`)
       .expect(200);

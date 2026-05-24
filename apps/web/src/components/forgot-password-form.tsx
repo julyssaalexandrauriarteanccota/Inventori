@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { forgotPasswordRequestSchema, type ForgotPasswordRequestSchema } from '@erp/shared'
-import { AlertCircle, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle2, Loader2, Mail } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { api, ApiError } from '@/lib/api'
@@ -22,7 +22,6 @@ import {
   Field,
   FieldContent,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
@@ -75,7 +74,7 @@ export function ForgotPasswordForm({
               </p>
             </div>
             <Link href="/auth/login">
-              <Button variant="outline" className="mt-2 rounded-xl">
+              <Button variant="outline" className="mt-2 rounded-xl transition-all duration-150 ease-out active:scale-95">
                 <ArrowLeft className="mr-2 size-4" />
                 Volver al inicio de sesion
               </Button>
@@ -89,11 +88,11 @@ export function ForgotPasswordForm({
   return (
     <div className={cn('flex w-full flex-col', className)} {...props}>
       <Card className="overflow-hidden rounded-2xl border-border/70 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
-        <CardContent className="grid p-0 md:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="flex items-center justify-center p-6 md:p-9">
+        <CardContent className="grid p-0 md:grid-cols-2">
+          <div className="flex items-center justify-center p-8 md:p-12">
             <div className="w-full max-w-[360px]">
               <CardHeader className="px-0 pb-0">
-                <CardTitle className="text-3xl font-semibold tracking-tight">
+                <CardTitle className="font-display text-3xl font-bold tracking-tight text-foreground/90">
                   Recuperar contrasena
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
@@ -101,10 +100,19 @@ export function ForgotPasswordForm({
                 </CardDescription>
               </CardHeader>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
+              <div className="h-px bg-border/60 my-6" />
+
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-0 space-y-5">
                 {error ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div
+                    className="flex items-start gap-2 rounded-xl border px-3 py-2 text-sm"
+                    style={{
+                      color: 'oklch(0.60 0.22 25)',
+                      borderColor: 'oklch(0.60 0.22 25 / 0.3)',
+                      backgroundColor: 'oklch(0.60 0.22 25 / 0.05)',
+                    }}
+                  >
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
                     <span>{error}</span>
                   </div>
                 ) : null}
@@ -113,26 +121,43 @@ export function ForgotPasswordForm({
                   <Field data-invalid={!!errors.email}>
                     <FieldLabel htmlFor="forgot-password-email">Correo electronico</FieldLabel>
                     <FieldContent>
-                      <Input
-                        id="forgot-password-email"
-                        type="email"
-                        placeholder="m@ejemplo.com"
-                        autoComplete="email"
-                        disabled={isSubmitting}
-                        className="h-11 rounded-xl border-border/70 shadow-none"
-                        {...register('email')}
-                      />
+                      <div className="relative">
+                        <Mail className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
+                        <Input
+                          id="forgot-password-email"
+                          type="email"
+                          placeholder="m@ejemplo.com"
+                          autoComplete="email"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "h-12 rounded-xl border-border/70 pl-11 pr-4 py-3 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.email && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.email ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.email}
+                          {...register('email')}
+                        />
+                      </div>
                       <FieldDescription>
                         Te enviaremos un enlace seguro si la cuenta existe.
                       </FieldDescription>
-                      <FieldError errors={[errors.email]} />
+                      {errors.email?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.email.message}</span>
+                        </div>
+                      )}
                     </FieldContent>
                   </Field>
                 </FieldGroup>
 
                 <Button
                   type="submit"
-                  className="h-11 w-full rounded-xl text-sm font-medium"
+                  className="h-12 w-full py-3 px-8 rounded-xl text-sm font-medium transition-all duration-150 ease-out active:scale-95 hover:bg-primary/95"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -146,10 +171,12 @@ export function ForgotPasswordForm({
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
+              <div className="h-px bg-border/60 my-6" />
+
+              <p className="mt-0 text-center text-sm text-muted-foreground">
                 <Link
                   href="/auth/login"
-                  className="inline-flex items-center gap-2 font-medium underline underline-offset-4 transition hover:text-foreground"
+                  className="inline-flex items-center gap-2 font-medium underline underline-offset-4 transition-all duration-150 ease-out active:scale-95 hover:text-foreground"
                 >
                   <ArrowLeft className="size-4" />
                   Volver al inicio de sesion

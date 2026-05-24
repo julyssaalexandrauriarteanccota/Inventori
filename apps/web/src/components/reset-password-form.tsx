@@ -18,6 +18,7 @@ import {
   EyeOff,
   KeyRound,
   Loader2,
+  Lock,
   Wand2,
 } from 'lucide-react'
 
@@ -38,7 +39,6 @@ import {
   Field,
   FieldContent,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
@@ -79,14 +79,9 @@ export function ResetPasswordForm({
   })
 
   useEffect(() => {
-    if (!token) {
-      setTokenStatus('missing')
-      return
-    }
+    if (!token) return
 
     let cancelled = false
-    setTokenStatus('checking')
-    setTokenError(null)
     setValue('token', token, { shouldValidate: true })
 
     api
@@ -163,7 +158,7 @@ export function ResetPasswordForm({
               </p>
             </div>
             <Link href="/auth/forgot-password">
-              <Button className="mt-2 rounded-xl">Solicitar nuevo enlace</Button>
+              <Button className="mt-2 rounded-xl transition-all duration-150 ease-out active:scale-95">Solicitar nuevo enlace</Button>
             </Link>
           </CardContent>
         </Card>
@@ -206,7 +201,7 @@ export function ResetPasswordForm({
               </p>
             </div>
             <Link href="/auth/forgot-password">
-              <Button className="mt-2 rounded-xl">Solicitar nuevo enlace</Button>
+              <Button className="mt-2 rounded-xl transition-all duration-150 ease-out active:scale-95">Solicitar nuevo enlace</Button>
             </Link>
           </CardContent>
         </Card>
@@ -228,7 +223,7 @@ export function ResetPasswordForm({
                 Ya puedes iniciar sesion con tu nueva contrasena. Las sesiones anteriores fueron cerradas.
               </p>
             </div>
-            <Button className="mt-2 rounded-xl" onClick={() => router.replace('/auth/login')}>
+            <Button className="mt-2 rounded-xl transition-all duration-150 ease-out active:scale-95" onClick={() => router.replace('/auth/login')}>
               Ir al inicio de sesion
             </Button>
           </CardContent>
@@ -240,14 +235,14 @@ export function ResetPasswordForm({
   return (
     <div className={cn('flex w-full flex-col', className)} {...props}>
       <Card className="overflow-hidden rounded-2xl border-border/70 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
-        <CardContent className="grid p-0 md:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="flex items-center justify-center p-6 md:p-9">
+        <CardContent className="grid p-0 md:grid-cols-2">
+          <div className="flex items-center justify-center p-8 md:p-12">
             <div className="w-full max-w-[360px]">
               <CardHeader className="px-0 pb-0">
                 <div className="mb-2 flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
                   <KeyRound className="size-6" />
                 </div>
-                <CardTitle className="text-3xl font-semibold tracking-tight">
+                <CardTitle className="font-display text-3xl font-bold tracking-tight text-foreground/90">
                   Restablecer contrasena
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
@@ -255,12 +250,21 @@ export function ResetPasswordForm({
                 </CardDescription>
               </CardHeader>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
+              <div className="h-px bg-border/60 my-6" />
+
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-0 space-y-5">
                 <input type="hidden" {...register('token')} />
 
                 {error ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div
+                    className="flex items-start gap-2 rounded-xl border px-3 py-2 text-sm"
+                    style={{
+                      color: 'oklch(0.60 0.22 25)',
+                      borderColor: 'oklch(0.60 0.22 25 / 0.3)',
+                      backgroundColor: 'oklch(0.60 0.22 25 / 0.05)',
+                    }}
+                  >
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
                     <span>{error}</span>
                   </div>
                 ) : null}
@@ -273,7 +277,7 @@ export function ResetPasswordForm({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 rounded-lg px-2 text-xs"
+                        className="h-7 rounded-lg px-2 text-xs transition-all duration-150 ease-out active:scale-95"
                         onClick={handleGeneratePassword}
                         disabled={isSubmitting}
                       >
@@ -283,12 +287,18 @@ export function ResetPasswordForm({
                     </div>
                     <FieldContent>
                       <div className="relative">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
                         <Input
                           id="reset-password"
                           type={showPassword ? 'text' : 'password'}
                           autoComplete="new-password"
                           disabled={isSubmitting}
-                          className="h-11 rounded-xl border-border/70 pr-11 shadow-none"
+                          className={cn(
+                            "h-12 rounded-xl border-border/70 pl-11 pr-12 py-3 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.password && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.password ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.password}
                           {...register('password')}
                         />
                         <Button
@@ -296,14 +306,23 @@ export function ResetPasswordForm({
                           variant="ghost"
                           size="icon"
                           aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
-                          className="absolute right-1 top-1 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="absolute right-1.5 top-1.5 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-transform active:scale-95 duration-150 ease-out"
                           onClick={() => setShowPassword((current) => !current)}
                         >
                           {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                         </Button>
                       </div>
                       <FieldDescription>{PASSWORD_REQUIREMENTS_TEXT}</FieldDescription>
-                      <FieldError errors={[errors.password]} />
+                      {errors.password?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.password.message}</span>
+                        </div>
+                      )}
                     </FieldContent>
                   </Field>
 
@@ -311,12 +330,18 @@ export function ResetPasswordForm({
                     <FieldLabel htmlFor="reset-confirm-password">Confirmar contrasena</FieldLabel>
                     <FieldContent>
                       <div className="relative">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
                         <Input
                           id="reset-confirm-password"
                           type={showConfirmPassword ? 'text' : 'password'}
                           autoComplete="new-password"
                           disabled={isSubmitting}
-                          className="h-11 rounded-xl border-border/70 pr-11 shadow-none"
+                          className={cn(
+                            "h-12 rounded-xl border-border/70 pl-11 pr-12 py-3 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.confirmPassword && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.confirmPassword ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.confirmPassword}
                           {...register('confirmPassword')}
                         />
                         <Button
@@ -328,7 +353,7 @@ export function ResetPasswordForm({
                               ? 'Ocultar confirmacion de contrasena'
                               : 'Mostrar confirmacion de contrasena'
                           }
-                          className="absolute right-1 top-1 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
+                          className="absolute right-1.5 top-1.5 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-transform active:scale-95 duration-150 ease-out"
                           onClick={() => setShowConfirmPassword((current) => !current)}
                         >
                           {showConfirmPassword ? (
@@ -338,14 +363,23 @@ export function ResetPasswordForm({
                           )}
                         </Button>
                       </div>
-                      <FieldError errors={[errors.confirmPassword]} />
+                      {errors.confirmPassword?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.confirmPassword.message}</span>
+                        </div>
+                      )}
                     </FieldContent>
                   </Field>
                 </FieldGroup>
 
                 <Button
                   type="submit"
-                  className="h-11 w-full rounded-xl text-sm font-medium"
+                  className="h-12 w-full py-3 px-8 rounded-xl text-sm font-medium transition-all duration-150 ease-out active:scale-95 hover:bg-primary/95"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -359,10 +393,12 @@ export function ResetPasswordForm({
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
+              <div className="h-px bg-border/60 my-6" />
+
+              <p className="mt-0 text-center text-sm text-muted-foreground">
                 <Link
                   href="/auth/login"
-                  className="inline-flex items-center gap-2 font-medium underline underline-offset-4 transition hover:text-foreground"
+                  className="inline-flex items-center gap-2 font-medium underline underline-offset-4 transition-all duration-150 ease-out active:scale-95 hover:text-foreground"
                 >
                   <ArrowLeft className="size-4" />
                   Volver al inicio de sesion

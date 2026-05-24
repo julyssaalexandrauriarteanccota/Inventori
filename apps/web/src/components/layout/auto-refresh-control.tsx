@@ -1,33 +1,34 @@
-'use client'
+"use client";
 
-import { ChevronDown, RefreshCcw } from 'lucide-react'
+import { ChevronDown, RefreshCcw } from "lucide-react";
 
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
+} from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 export interface AutoRefreshIntervalOption {
-  label: string
-  value: number
+  label: string;
+  value: number;
 }
 
 interface AutoRefreshControlProps {
-  enabled: boolean
-  interval: number
-  intervals: AutoRefreshIntervalOption[]
-  switchId: string
-  onEnabledChange: (enabled: boolean) => void
-  onIntervalChange: (interval: number) => void
-  onManualRefresh?: () => void
-  className?: string
-  label?: string
+  enabled: boolean;
+  interval: number;
+  intervals: AutoRefreshIntervalOption[];
+  switchId: string;
+  onEnabledChange: (enabled: boolean) => void;
+  onIntervalChange: (interval: number) => void;
+  onManualRefresh?: () => void;
+  className?: string;
+  isRefreshing?: boolean;
+  label?: string;
 }
 
 export function AutoRefreshControl({
@@ -39,15 +40,17 @@ export function AutoRefreshControl({
   onIntervalChange,
   onManualRefresh,
   className,
-  label = 'Auto',
+  isRefreshing = false,
+  label = "Auto",
 }: AutoRefreshControlProps) {
+  const showSpinner = enabled || isRefreshing;
+
   return (
     <div
+      data-slot="auto-refresh-control"
+      data-active={showSpinner}
       className={cn(
-        'flex items-center gap-2 rounded-xl border px-3 py-1.5 transition-colors duration-300 shadow-none',
-        enabled
-          ? 'border-primary/25 bg-primary/8 dark:border-[color-mix(in_oklch,var(--sidebar-primary)_22%,var(--app-border))] dark:bg-[color-mix(in_oklch,var(--sidebar-primary)_20%,var(--app-canvas))]'
-          : 'border-border bg-muted/45 dark:border-[color-mix(in_oklch,var(--sidebar-primary)_16%,var(--app-border))] dark:bg-[color-mix(in_oklch,var(--sidebar-primary)_12%,var(--app-canvas))]',
+        "flex items-center gap-2 rounded-xl border px-3 py-1.5 shadow-none",
         className,
       )}
     >
@@ -56,7 +59,7 @@ export function AutoRefreshControl({
           <span className="absolute inline-flex size-5 animate-ping rounded-full bg-primary opacity-10" />
           <RefreshCcw
             className="size-3.5 animate-spin text-primary transition-all"
-            style={{ animationDuration: '3s' }}
+            style={{ animationDuration: "3s" }}
           />
         </div>
       ) : (
@@ -67,7 +70,13 @@ export function AutoRefreshControl({
           onClick={onManualRefresh}
           disabled={!onManualRefresh}
         >
-          <RefreshCcw className="size-3.5" />
+          <RefreshCcw
+            className={cn(
+              "size-3.5",
+              isRefreshing && "animate-spin text-primary",
+            )}
+            style={isRefreshing ? { animationDuration: "3s" } : undefined}
+          />
           <span className="sr-only">Actualizar</span>
         </Button>
       )}
@@ -80,7 +89,7 @@ export function AutoRefreshControl({
               className="flex items-center gap-1 text-xs font-medium text-primary hover:underline dark:text-foreground/90"
             >
               {intervals.find((option) => option.value === interval)?.label ??
-                'Auto'}
+                "Auto"}
               <ChevronDown className="size-3" />
             </button>
           </DropdownMenuTrigger>
@@ -90,12 +99,12 @@ export function AutoRefreshControl({
                 key={option.value}
                 onClick={() => onIntervalChange(option.value)}
                 className={cn(
-                  'text-xs',
-                  interval === option.value && 'font-medium text-primary',
+                  "text-xs",
+                  interval === option.value && "font-medium text-primary",
                 )}
               >
                 {option.label}
-                {interval === option.value ? ' ✓' : ''}
+                {interval === option.value ? " ✓" : ""}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -107,7 +116,6 @@ export function AutoRefreshControl({
         size="sm"
         checked={enabled}
         onCheckedChange={onEnabledChange}
-        className="dark:data-[state=checked]:border-[color-mix(in_oklch,var(--sidebar-primary)_18%,var(--app-border))] dark:data-[state=checked]:bg-[color-mix(in_oklch,var(--sidebar-primary)_28%,var(--app-muted))]"
       />
       <Label
         htmlFor={switchId}
@@ -116,5 +124,5 @@ export function AutoRefreshControl({
         {label}
       </Label>
     </div>
-  )
+  );
 }

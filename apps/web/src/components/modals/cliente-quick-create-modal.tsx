@@ -58,11 +58,11 @@ export function ClienteQuickCreateModal({
       <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
         <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/40">
-              <Plus className="size-4 text-blue-600 dark:text-blue-400" />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
+              <Plus className="size-4 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-base sm:text-lg font-semibold">
+              <DialogTitle className="text-base sm:text-lg font-semibold font-display">
                 Nuevo cliente
               </DialogTitle>
               <DialogDescription className="text-xs mt-0.5">

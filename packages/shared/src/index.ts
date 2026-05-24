@@ -29,6 +29,8 @@ export * from "./enums/motivos-nd.enum";
 export * from "./enums/necesidad-solicitud.enum";
 export * from "./enums/estado-solicitud.enum";
 export * from "./constants/password-policy";
+export * from "./constants/sunat-unidades-medida";
+export * from "./constants/facturacion";
 export * from "./schemas";
 export * from "./types/pagination.type";
 export * from "./types/auth.type";

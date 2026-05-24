@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type {
   VentasPaginatedResponse,
+  VentaDetailResponse,
   QueryVentaFilters,
   VentaFormPayload,
   ConfirmarVentaPayload,
@@ -35,10 +36,7 @@ export function useVentas(filters: QueryVentaFilters = {}) {
 export function useVenta(id: string | undefined) {
   return useQuery({
     queryKey: [VENTAS_KEY, id],
-    queryFn: () =>
-      api.get<{ data: Record<string, unknown>; meta: { timestamp: string } }>(
-        `/ventas/${id}`,
-      ),
+    queryFn: () => api.get<VentaDetailResponse>(`/ventas/${id}`),
     enabled: !!id,
   })
 }

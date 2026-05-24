@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule } from '@nestjs/swagger';
-import type { Express, Request, Response } from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -24,6 +24,18 @@ async function bootstrap() {
 
   // Seguridad
   app.use(helmet());
+
+  // Las imágenes públicas subidas se renderizan desde el frontend (otro origin
+  // en desarrollo: localhost:3000 -> localhost:4000). Helmet envía CORP
+  // same-origin por defecto, por eso se permite cross-origin solo en esta ruta.
+  httpAdapter.use(
+    '/api/v1/uploads/public',
+    (_req: Request, res: Response, next: NextFunction) => {
+      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      next();
+    },
+  );
 
   // CORS
   app.enableCors({

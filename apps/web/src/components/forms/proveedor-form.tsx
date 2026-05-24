@@ -57,6 +57,21 @@ export function ProveedorForm({
             <h3 className="text-sm font-semibold text-foreground">Datos fiscales</h3>
           </div>
           <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+            <Field data-invalid={errors.ruc ? true : undefined} className="md:col-span-2">
+              <FieldLabel>RUC *</FieldLabel>
+              <Input
+                {...register('ruc', {
+                  onChange: (e) => {
+                    e.target.value = e.target.value.replace(/\D/g, '')
+                  }
+                })}
+                placeholder="20123456789"
+                maxLength={11}
+                aria-invalid={!!errors.ruc}
+              />
+              <FieldError>{errors.ruc?.message}</FieldError>
+            </Field>
+
             <Field data-invalid={errors.razonSocial ? true : undefined} className="md:col-span-2">
               <FieldLabel>Razón social *</FieldLabel>
               <Input
@@ -65,17 +80,6 @@ export function ProveedorForm({
                 aria-invalid={!!errors.razonSocial}
               />
               <FieldError>{errors.razonSocial?.message}</FieldError>
-            </Field>
-
-            <Field data-invalid={errors.ruc ? true : undefined}>
-              <FieldLabel>RUC *</FieldLabel>
-              <Input
-                {...register('ruc')}
-                placeholder="20123456789"
-                maxLength={11}
-                aria-invalid={!!errors.ruc}
-              />
-              <FieldError>{errors.ruc?.message}</FieldError>
             </Field>
 
             <Field data-invalid={errors.email ? true : undefined}>

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { CondicionProducto } from "../enums/condicion-producto.enum";
+import {
+  isSunatUnidadMedidaCode,
+  sunatUnidadMedidaHelpText,
+} from "../constants/sunat-unidades-medida";
 import { TipoCliente } from "../enums/tipo-cliente.enum";
 import { TipoProducto } from "../enums/tipo-producto.enum";
 import { apiMetaSchema } from "./auth.schema";
@@ -18,7 +22,14 @@ function requiredTextField(message: string) {
 }
 
 function optionalEmailField() {
-  return z.string().email("Ingresa un correo valido").optional();
+  return z
+    .string()
+    .optional()
+    .transform((value) => {
+      const trimmed = value?.trim();
+      return trimmed && trimmed.length > 0 ? trimmed : undefined;
+    })
+    .pipe(z.string().email("Ingresa un correo valido").optional());
 }
 
 function nonNegativeNumberField(label: string) {
@@ -377,7 +388,17 @@ export const clienteValidacionDocumentoSchema = z.object({
   id: z.string().uuid(),
   tipoDocumentoSunat: z.enum(["6", "1", "0"]),
   numeroDocumento: z.string(),
-  estado: z.enum(["PENDIENTE", "VALIDO", "INVALIDO", "ERROR"]),
+  proveedor: z
+    .enum(["SUNAT_PADRON_LOCAL", "DECOLECTA", "APISPERU", "MANUAL"])
+    .nullable()
+    .optional(),
+  nombreNormalizado: z.string().nullable().optional(),
+  direccionFiscal: z.string().nullable().optional(),
+  ubigeo: z.string().nullable().optional(),
+  departamento: z.string().nullable().optional(),
+  provincia: z.string().nullable().optional(),
+  distrito: z.string().nullable().optional(),
+  estado: z.enum(["PENDIENTE", "VALIDO", "ACTIVO", "INVALIDO", "ERROR"]),
   condicionDomicilio: z.string().nullable(),
   ultimaValidacionAt: z.string().nullable(),
 });
@@ -497,7 +518,9 @@ export const unidadMedidaFormSchema = z.object({
   codigo: requiredTextField("El código es obligatorio").max(
     16,
     "El código es demasiado largo",
-  ),
+  ).transform((value) => value.toUpperCase()).refine(isSunatUnidadMedidaCode, {
+    message: `Código de unidad no válido para SUNAT/UBL. ${sunatUnidadMedidaHelpText()}`,
+  }),
   nombre: requiredTextField("El nombre es obligatorio").max(
     80,
     "El nombre es demasiado largo",

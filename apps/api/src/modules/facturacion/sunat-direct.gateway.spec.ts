@@ -83,7 +83,8 @@ describe('SunatDirectGateway', () => {
       ruc: '20123456789',
       fileName: '20123456789-01-F001-00000001',
       xmlFileName: '20123456789-01-F001-00000001.xml',
-      signedXml: '<Invoice><ext:UBLExtensions /></Invoice>',
+      signedXml:
+        '<?xml version="1.0" encoding="UTF-8"?><Invoice><cbc:Description>Diagnóstico técnico</cbc:Description></Invoice>',
       ambiente: AmbienteSunat.BETA,
     });
 
@@ -93,15 +94,28 @@ describe('SunatDirectGateway', () => {
       'La Factura numero F001-00000001 ha sido aceptada',
     );
     expect(result.cdrContent).toBe(cdrBase64);
-    expect(result.requestPayload).toEqual(
-      expect.objectContaining({
-        endpoint: 'https://sunat-beta.example.test/billService',
-        ambiente: AmbienteSunat.BETA,
-        fileName: '20123456789-01-F001-00000001.zip',
+    expect(result.requestPayload).toMatchObject({
+      endpoint: 'https://sunat-beta.example.test/billService',
+      ambiente: AmbienteSunat.BETA,
+      fileName: '20123456789-01-F001-00000001.zip',
+      xmlFileName: '20123456789-01-F001-00000001.xml',
+      diagnostics: {
+        declaredEncoding: 'UTF-8',
+        rootName: 'Invoice',
         xmlFileName: '20123456789-01-F001-00000001.xml',
-        zipSha256: expect.any(String),
-      }),
-    );
+        zipEntries: ['20123456789-01-F001-00000001.xml'],
+        hasProfileId: false,
+        noteCount: 0,
+      },
+    });
+    expect(result.requestPayload.zipSha256).toEqual(expect.any(String));
+    expect(
+      (result.requestPayload.diagnostics as Record<string, unknown>).firstLine,
+    ).toContain('encoding="UTF-8"');
+    expect(
+      (result.requestPayload.diagnostics as Record<string, unknown>)
+        .zipFirstBytesHex,
+    ).toMatch(/^3c3f786d6c2076657273696f6e3d22/);
     expect(result.responsePayload).toEqual(
       expect.objectContaining({
         httpStatus: 200,
@@ -136,6 +150,17 @@ describe('SunatDirectGateway', () => {
       '<fileName>20123456789-01-F001-00000001.zip</fileName>',
     );
     expect(String(init.body)).toContain('<contentFile>');
+
+    const contentBase64 = String(init.body).match(
+      /<contentFile>([^<]+)<\/contentFile>/,
+    )?.[1];
+    expect(contentBase64).toBeDefined();
+    const sentZip = new AdmZip(Buffer.from(contentBase64 ?? '', 'base64'));
+    const sentXml = sentZip
+      .getEntry('20123456789-01-F001-00000001.xml')
+      ?.getData()
+      .toString('utf8');
+    expect(sentXml).toContain('Diagnóstico técnico');
   });
 
   it('marca como rechazado cuando el CDR de sendBill trae código de rechazo', async () => {
@@ -216,6 +241,9 @@ describe('SunatDirectGateway', () => {
         httpStatus: 500,
         faultCode: 'soapenv:Client.1033',
         faultMessage: 'Archivo XML no cumple validaciones de ejemplo',
+        responseSnippet: expect.stringContaining(
+          'Archivo XML no cumple validaciones de ejemplo',
+        ),
       }),
     );
   });

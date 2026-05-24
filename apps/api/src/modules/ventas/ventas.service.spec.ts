@@ -3,7 +3,11 @@ import { VentasService } from './ventas.service';
 import { PrismaService } from '../../database/prisma.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CajaService } from '../caja/caja.service';
-import { ModalidadEnvioBoletas, TipoDocumento } from '@erp/shared';
+import {
+  EstadoFacturacionVenta,
+  ModalidadEnvioBoletas,
+  TipoDocumento,
+} from '@erp/shared';
 import { FacturacionService } from '../facturacion/facturacion.service';
 
 const mockTx = {
@@ -111,8 +115,8 @@ describe('VentasService', () => {
       validoHasta: new Date('2099-01-01T00:00:00.000Z'),
     });
     mockPrisma.fiscalSecret.findMany.mockResolvedValue([
-      { name: 'sol_username' },
-      { name: 'sol_password' },
+      { name: 'sol-username' },
+      { name: 'sol-password' },
     ]);
     mockPrisma.$transaction.mockImplementation(
       (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
@@ -137,9 +141,9 @@ describe('VentasService', () => {
         id: 'vta-1',
         numero: 'VTA-0001',
         estado: 'COTIZACION',
-        subtotal: 200,
-        igv: 36,
-        total: 236,
+        subtotal: 169.49,
+        igv: 30.51,
+        total: 200,
       });
 
       const result = await service.create(dto, 'user-1');
@@ -276,6 +280,41 @@ describe('VentasService', () => {
     });
   });
 
+  describe('remove', () => {
+    it('should soft delete a cancelled venta', async () => {
+      mockPrisma.venta.findFirst.mockResolvedValue({
+        id: 'vta-1',
+        numero: 'VTA-0001',
+        estado: 'CANCELADA',
+      });
+      mockPrisma.venta.update.mockResolvedValue({
+        id: 'vta-1',
+        deletedAt: new Date('2026-05-21T12:00:00.000Z'),
+      });
+
+      await service.remove('vta-1');
+
+      expect(mockPrisma.venta.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'vta-1' },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+    });
+
+    it('should reject delete before cancelling', async () => {
+      mockPrisma.venta.findFirst.mockResolvedValue({
+        id: 'vta-1',
+        numero: 'VTA-0001',
+        estado: 'ORDEN_CONFIRMADA',
+      });
+
+      await expect(service.remove('vta-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+  });
+
   // ═══════════════════════════════════════════
   //  UPDATE (solo COTIZACIÓN)
   // ═══════════════════════════════════════════
@@ -314,10 +353,10 @@ describe('VentasService', () => {
       mockPrisma.producto.findMany.mockResolvedValue([mockProducto]);
       mockPrisma.venta.update.mockResolvedValue({
         id: 'vta-1',
-        subtotal: 200,
+        subtotal: 169.49,
         descuento: 0,
-        igv: 36,
-        total: 236,
+        igv: 30.51,
+        total: 200,
       });
 
       await service.update('vta-1', {
@@ -327,9 +366,9 @@ describe('VentasService', () => {
       expect(mockPrisma.venta.update).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            subtotal: 200,
-            igv: 36,
-            total: 236,
+            subtotal: 169.49,
+            igv: 30.51,
+            total: 200,
             detalles: expect.objectContaining({
               deleteMany: {},
               create: [
@@ -361,6 +400,8 @@ describe('VentasService', () => {
       numero: 'VTA-0001',
       estado: 'COTIZACION',
       clienteId: 'cli-1',
+      total: 200,
+      cliente: { id: 'cli-1', esGenerico: false, dni: '12345678', ruc: null },
       detalles: [
         {
           id: 'det-1',
@@ -478,6 +519,83 @@ describe('VentasService', () => {
       );
     });
 
+    it('should close generic sales up to S/ 5 as internal', async () => {
+      const ventaInterna = {
+        ...mockVenta,
+        total: 5,
+        cliente: { id: 'cli-1', esGenerico: true, dni: '00000000', ruc: null },
+      };
+      mockPrisma.venta.findFirst.mockResolvedValue(ventaInterna);
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+      mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 48 });
+      mockTx.venta.update.mockResolvedValue({
+        ...ventaInterna,
+        estado: 'ORDEN_CONFIRMADA',
+        estadoFacturacion: EstadoFacturacionVenta.VENTA_INTERNA,
+      });
+
+      await service.confirmar(
+        'vta-1',
+        { ...confirmarDto, ventaInterna: true },
+        'user-1',
+      );
+
+      expect(mockTx.venta.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            estadoFacturacion: EstadoFacturacionVenta.VENTA_INTERNA,
+          }),
+        }),
+      );
+    });
+
+    it('should reject internal sales over the legal limit', async () => {
+      mockPrisma.venta.findFirst.mockResolvedValue({
+        ...mockVenta,
+        total: 5.01,
+        cliente: { id: 'cli-1', esGenerico: true, dni: '00000000', ruc: null },
+      });
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+
+      await expect(
+        service.confirmar(
+          'vta-1',
+          { ...confirmarDto, ventaInterna: true },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject internal sales for identified clients', async () => {
+      mockPrisma.venta.findFirst.mockResolvedValue({
+        ...mockVenta,
+        total: 5,
+        cliente: { id: 'cli-1', esGenerico: false, dni: '12345678', ruc: null },
+      });
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+
+      await expect(
+        service.confirmar(
+          'vta-1',
+          { ...confirmarDto, ventaInterna: true },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should reject if venta is not COTIZACION', async () => {
       mockPrisma.venta.findFirst.mockResolvedValue({
         ...mockVenta,
@@ -535,10 +653,10 @@ describe('VentasService', () => {
       numero: 'VTA-0001',
       estado: 'COTIZACION',
       clienteId: 'cli-1',
-      subtotal: 100,
+      subtotal: 84.75,
       descuento: 0,
-      igv: 18,
-      total: 118,
+      igv: 15.25,
+      total: 100,
       cliente: { id: 'cli-1', nombre: 'Cliente', dni: '12345678' },
       detalles: [
         {
@@ -546,7 +664,7 @@ describe('VentasService', () => {
           cantidad: 1,
           precioUnitario: 100,
           descuento: 0,
-          subtotal: 100,
+          subtotal: 84.75,
           equipoSerie: null,
           producto: {
             ...mockProducto,
@@ -597,7 +715,7 @@ describe('VentasService', () => {
       expect(mockCajaService.registrarIngresoVenta).toHaveBeenCalledWith(
         expect.objectContaining({
           ventaId: 'vta-pos-1',
-          monto: 118,
+          monto: 100,
         }),
         mockTx,
       );
@@ -626,7 +744,7 @@ describe('VentasService', () => {
             ...dto,
             clienteId: 'cli-publico',
             detalles: [
-              { productoId: 'prod-1', cantidad: 1, precioUnitario: 600 },
+              { productoId: 'prod-1', cantidad: 1, precioUnitario: 700 },
             ],
           },
           'user-1',

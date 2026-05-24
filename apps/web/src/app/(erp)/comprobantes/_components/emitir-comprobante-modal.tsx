@@ -6,6 +6,8 @@ import { AlertTriangle, CheckCircle2, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   EstadoFacturacionVenta,
+  type ItemValidacion,
+  type ResultadoValidacion,
   TipoDocumento,
   type VentaPendienteFacturacionItem,
 } from "@erp/shared";
@@ -13,8 +15,10 @@ import {
 import {
   useEmitirComprobante,
   useSeriesDocumento,
+  useValidarPreEmision,
 } from "@/hooks/use-facturacion";
 import { Button } from "@/components/ui/button";
+import { ValidacionPreEmisionModal } from "@/components/modals/validacion-pre-emision-modal";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ApiError } from "@/lib/api";
 
 interface EmitirComprobanteModalProps {
   venta: VentaPendienteFacturacionItem | null;
@@ -44,6 +49,11 @@ type ComprobanteCreado = {
   numero?: string;
 };
 
+type ValidationErrorDetails = {
+  bloqueantes?: ItemValidacion[];
+  advertencias?: ItemValidacion[];
+};
+
 function inferDefaultTipo(venta: VentaPendienteFacturacionItem): TipoDocumento {
   return venta.cliente.ruc?.length === 11
     ? TipoDocumento.FACTURA
@@ -52,6 +62,20 @@ function inferDefaultTipo(venta: VentaPendienteFacturacionItem): TipoDocumento {
 
 function buildSeriePreview(serie: string, correlativoActual: number) {
   return `${serie}-${String(correlativoActual + 1).padStart(8, "0")}`;
+}
+
+function getValidationDetails(error: unknown): ResultadoValidacion | null {
+  if (!(error instanceof ApiError)) return null;
+  const details = error.details as ValidationErrorDetails | undefined;
+  const bloqueantes = Array.isArray(details?.bloqueantes)
+    ? details.bloqueantes
+    : [];
+  const advertencias = Array.isArray(details?.advertencias)
+    ? details.advertencias
+    : [];
+
+  if (bloqueantes.length === 0 && advertencias.length === 0) return null;
+  return { bloqueantes, advertencias };
 }
 
 export function EmitirComprobanteModal({
@@ -74,6 +98,9 @@ export function EmitirComprobanteModal({
     ventaId: string;
     value: string;
   } | null>(null);
+  const [validationModalOpen, setValidationModalOpen] = useState(false);
+  const [validationModalResult, setValidationModalResult] =
+    useState<ResultadoValidacion | null>(null);
 
   const tipo =
     venta && tipoOverride?.ventaId === venta.id
@@ -99,6 +126,10 @@ export function EmitirComprobanteModal({
     venta && observacionesDraft?.ventaId === venta.id
       ? observacionesDraft.value
       : "";
+  const preEmissionQuery = useValidarPreEmision(venta?.id, tipo, !!venta);
+  const preEmissionResult = preEmissionQuery.data?.data ?? null;
+  const fiscalBlockers = preEmissionResult?.bloqueantes ?? [];
+  const fiscalWarnings = preEmissionResult?.advertencias ?? [];
 
   const validations = useMemo(() => {
     if (!venta) return [];
@@ -107,18 +138,23 @@ export function EmitirComprobanteModal({
         ok: venta.estadoFacturacion === EstadoFacturacionVenta.SIN_COMPROBANTE,
         text: "Venta sin comprobante previo",
       },
-      {
-        ok: tipo !== TipoDocumento.FACTURA || venta.cliente.ruc?.length === 11,
-        text: "Factura con RUC valido",
-      },
-      {
-        ok:
-          tipo !== TipoDocumento.BOLETA ||
-          venta.total <= 700 ||
-          !!venta.cliente.dni ||
-          !!venta.cliente.ruc,
-        text: "Boleta mayor a S/ 700 con cliente identificado",
-      },
+      ...(tipo === TipoDocumento.FACTURA
+        ? [
+            {
+              ok: venta.cliente.ruc?.length === 11,
+              text: "Factura con RUC valido",
+            },
+          ]
+        : []),
+      ...(tipo === TipoDocumento.BOLETA
+        ? [
+            {
+              ok:
+                venta.total <= 700 || !!venta.cliente.dni || !!venta.cliente.ruc,
+              text: "Boleta mayor a S/ 700 con DNI o RUC registrado",
+            },
+          ]
+        : []),
       {
         ok: !selectedSerie || selectedSerie.tipo === tipo,
         text: "Serie compatible con el tipo seleccionado",
@@ -126,16 +162,17 @@ export function EmitirComprobanteModal({
     ];
   }, [selectedSerie, tipo, venta]);
 
-  const hasBlockers = validations.some((item) => !item.ok);
+  const hasLocalBlockers = validations.some((item) => !item.ok);
 
-  async function handleSubmit() {
-    if (!venta || hasBlockers) return;
+  async function emit(confirmarAdvertencias = false) {
+    if (!venta || hasLocalBlockers || fiscalBlockers.length > 0) return;
     try {
       const result = (await emitir.mutateAsync({
         ventaId: venta.id,
         tipo,
         serieDocumentoId,
         observaciones: observaciones.trim() || undefined,
+        confirmarAdvertencias,
       })) as { data?: ComprobanteCreado } | ComprobanteCreado;
       const comprobante =
         (result as { data?: ComprobanteCreado }).data ??
@@ -148,21 +185,46 @@ export function EmitirComprobanteModal({
       setTipoOverride(null);
       setSerieOverride(null);
       setObservacionesDraft(null);
+      setValidationModalOpen(false);
+      setValidationModalResult(null);
     } catch (err) {
+      const validationDetails = getValidationDetails(err);
+      if (validationDetails) {
+        setValidationModalResult(validationDetails);
+        setValidationModalOpen(true);
+      }
       const message =
         err instanceof Error ? err.message : "Error al emitir comprobante";
       toast.error(message);
     }
   }
 
+  async function handleSubmit() {
+    if (!venta) return;
+    if (hasLocalBlockers || fiscalBlockers.length > 0) {
+      setValidationModalResult(
+        preEmissionResult ?? { bloqueantes: [], advertencias: [] },
+      );
+      setValidationModalOpen(true);
+      return;
+    }
+    if (fiscalWarnings.length > 0) {
+      setValidationModalResult(preEmissionResult);
+      setValidationModalOpen(true);
+      return;
+    }
+    await emit();
+  }
+
   return (
-    <Dialog
-      open={!!venta}
-      onOpenChange={(open) => {
-        if (!open && !emitir.isPending) onClose();
-      }}
-    >
-      <DialogContent>
+    <>
+      <Dialog
+        open={!!venta}
+        onOpenChange={(open) => {
+          if (!open && !emitir.isPending) onClose();
+        }}
+      >
+        <DialogContent>
         <DialogHeader>
           <DialogTitle>Emitir comprobante</DialogTitle>
           <DialogDescription>
@@ -265,6 +327,30 @@ export function EmitirComprobanteModal({
                 <span>{validation.text}</span>
               </div>
             ))}
+            {preEmissionQuery.isFetching ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>Validando reglas fiscales...</span>
+              </div>
+            ) : null}
+            {fiscalBlockers.map((item) => (
+              <div
+                key={`bloq-${item.reglaId}`}
+                className="flex items-center gap-2 text-xs text-destructive"
+              >
+                <AlertTriangle className="size-3.5" />
+                <span>{item.mensaje}</span>
+              </div>
+            ))}
+            {fiscalWarnings.map((item) => (
+              <div
+                key={`adv-${item.reglaId}`}
+                className="flex items-center gap-2 text-xs text-amber-600"
+              >
+                <AlertTriangle className="size-3.5" />
+                <span>{item.mensaje}</span>
+              </div>
+            ))}
           </div>
         </div>
         <DialogFooter>
@@ -277,7 +363,11 @@ export function EmitirComprobanteModal({
           </Button>
           <Button
             onClick={() => void handleSubmit()}
-            disabled={emitir.isPending || hasBlockers}
+            disabled={
+              emitir.isPending ||
+              preEmissionQuery.isFetching ||
+              hasLocalBlockers
+            }
           >
             {emitir.isPending ? (
               <Loader2 className="size-4 animate-spin" />
@@ -287,7 +377,15 @@ export function EmitirComprobanteModal({
             Emitir
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <ValidacionPreEmisionModal
+        open={validationModalOpen}
+        onOpenChangeAction={setValidationModalOpen}
+        resultado={validationModalResult}
+        onConfirmAction={() => void emit(true)}
+        emitiendo={emitir.isPending}
+      />
+    </>
   );
 }

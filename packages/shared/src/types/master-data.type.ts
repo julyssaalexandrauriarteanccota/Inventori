@@ -2,6 +2,7 @@ import { TipoCliente } from "../enums/tipo-cliente.enum";
 import { CondicionProducto } from "../enums/condicion-producto.enum";
 import { TipoProducto } from "../enums/tipo-producto.enum";
 import {
+  ProveedorValidacionDocumento,
   EstadoValidacionSunat,
   TipoDocumentoSunatCliente,
 } from "./facturacion.type";
@@ -21,6 +22,43 @@ export interface ClienteFormPayload extends LocationPayload {
   notas?: string;
   activo?: boolean;
   esGenerico?: boolean;
+}
+
+export type ConsultaDocumentoClienteTipo = "DNI" | "RUC";
+export type ConsultaDocumentoClienteProveedor =
+  | "SUNAT_PADRON_LOCAL"
+  | "DECOLECTA"
+  | "APISPERU";
+export type ConsultaDocumentoSunatCode = "1" | "6";
+
+export interface ConsultaDocumentoClientePayload {
+  tipoDocumento: ConsultaDocumentoClienteTipo;
+  numeroDocumento: string;
+  modo?: "AUTO" | "LOCAL_ONLY" | "EXTERNAL_ONLY";
+}
+
+export interface ConsultaDocumentoClienteResult {
+  tipoDocumento: ConsultaDocumentoClienteTipo;
+  tipoDocumentoSunat: ConsultaDocumentoSunatCode;
+  numeroDocumento: string;
+  proveedor: ConsultaDocumentoClienteProveedor;
+  consultadoAt: string;
+  nombres?: string;
+  apellidoPaterno?: string;
+  apellidoMaterno?: string;
+  nombreCompleto?: string;
+  codVerifica?: string;
+  razonSocial?: string;
+  nombreComercial?: string;
+  telefonos?: string[];
+  direccion?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
+  ubigeo?: string;
+  estado?: string;
+  condicionDomicilio?: string;
+  capital?: string;
 }
 
 export interface ProveedorFormPayload {
@@ -123,6 +161,13 @@ export interface ClienteValidacionDocumentoItem {
   id: string;
   tipoDocumentoSunat: TipoDocumentoSunatCliente;
   numeroDocumento: string;
+  proveedor?: ProveedorValidacionDocumento | null;
+  nombreNormalizado?: string | null;
+  direccionFiscal?: string | null;
+  ubigeo?: string | null;
+  departamento?: string | null;
+  provincia?: string | null;
+  distrito?: string | null;
   estado: EstadoValidacionSunat;
   condicionDomicilio: string | null;
   ultimaValidacionAt: string | null;
@@ -204,6 +249,7 @@ export interface ProductoListItem {
     nombre: string;
     tipo: TipoProducto;
     padreId?: string | null;
+    padre?: { id: string; nombre: string } | null;
   };
   marca: {
     id: string;

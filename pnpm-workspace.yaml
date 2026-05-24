@@ -2,3 +2,25 @@ packages:
   - 'apps/api'
   - 'apps/web'
   - 'packages/*'
+allowBuilds:
+  '@nestjs/core': true
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  canvas: true
+  esbuild: true
+  msgpackr-extract: true
+  msw: true
+  prisma: true
+  sharp: true
+  unrs-resolver: true
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@prisma/engines'
+  - '@scarf/scarf'
+  - canvas
+  - esbuild
+  - msgpackr-extract
+  - msw
+  - prisma
+  - sharp
+  - unrs-resolver

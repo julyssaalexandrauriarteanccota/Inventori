@@ -105,9 +105,9 @@ Desde la raíz del repo:
 
 - registra metadata global
 - declara `manifest: /manifest.json`
-- monta `AccentScript` y `ToneScript` en `<head>`
+- monta `AtmosphereScript` en `<head>` (preferencia de atmósfera antes de hidratación)
 - carga `src/app/globals.css`
-- envuelve toda la app con `Providers`
+- envuelve toda la app con `Providers` (incluye `AtmosphereProvider`)
 
 ### Archivos globales
 
@@ -341,6 +341,7 @@ Define:
 
 Monta:
 
+- `AtmosphereProvider`
 - `next-themes`
 - `QueryClientProvider`
 - `TooltipProvider`
@@ -588,19 +589,19 @@ Estado actual verificado:
 - define tokens de color con `@theme`
 - redefine superficies y semánticas vía `@theme inline`
 - soporta modo oscuro
-- soporta sistema de acento por `data-accent`
-- soporta sistema de tono por `data-tone`
+- soporta sistema de 3 atmósferas vía `data-atmosphere` (`industrial`, `tecnologica`, `comercial`)
+- cada atmósfera define: acento OKLCH, luminosidad de fondos, pareja tipográfica, calidez de grises
 - aplica overrides visuales a componentes mediante selectores `data-slot`
-- incluye reglas específicas para el tono cálido estilo POS
+- soporta modo oscuro con recálculo automático de acento y luminosidad por atmósfera
 
 ### Scripts de preferencia visual
 
-- `src/lib/accent.tsx`:
-  - guarda el acento en `localStorage`
-  - aplica `data-accent` antes de la hidratación
-- `src/lib/tone.tsx`:
-  - guarda el tono en `localStorage`
-  - aplica `data-tone` antes de la hidratación
+- `src/lib/atmosphere.tsx`:
+  - `AtmosphereProvider` con React Context + localStorage
+  - `AtmosphereScript` aplica `data-atmosphere` antes de la hidratación (previene FOUC)
+  - sincroniza preferencia entre pestañas vía `StorageEvent`
+  - default: `"industrial"`
+  - valores: `"industrial"`, `"tecnologica"`, `"comercial"`
 
 ## Datos locales
 

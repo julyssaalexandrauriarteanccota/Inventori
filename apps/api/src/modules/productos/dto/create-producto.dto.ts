@@ -158,13 +158,15 @@ export class CreateProductoDto {
   @Min(0)
   precioCompra: number;
 
-  @ApiProperty({ description: 'Precio de venta (sin IGV)' })
+  @ApiProperty({ description: 'Precio de venta con IGV incluido' })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   precioVenta: number;
 
-  @ApiProperty({ description: 'Precio mínimo permitido (sin IGV)' })
+  @ApiProperty({
+    description: 'Precio mínimo de venta permitido con IGV incluido',
+  })
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)

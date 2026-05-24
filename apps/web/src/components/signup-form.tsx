@@ -10,7 +10,7 @@ import {
   registerRequestSchema,
   type RegisterRequestSchema,
 } from '@erp/shared'
-import { AlertCircle, Eye, EyeOff, Loader2, Wand2 } from 'lucide-react'
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, User, Wand2 } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 import { api, ApiError } from '@/lib/api'
@@ -28,7 +28,6 @@ import {
   Field,
   FieldContent,
   FieldDescription,
-  FieldError,
   FieldGroup,
   FieldLabel,
 } from '@/components/ui/field'
@@ -99,11 +98,11 @@ export function SignupForm({
   return (
     <div className={cn('flex w-full flex-col', className)} {...props}>
       <Card className="overflow-hidden rounded-2xl border-border/70 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
-        <CardContent className="grid p-0 md:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="flex items-center justify-center p-6 md:p-9">
-            <div className="w-full max-w-[380px]">
+        <CardContent className="grid p-0 md:grid-cols-2">
+          <div className="flex items-center justify-center p-8 md:p-12">
+            <div className="w-full max-w-[400px]">
               <CardHeader className="px-0 pb-0">
-                <CardTitle className="text-3xl font-semibold tracking-tight">
+                <CardTitle className="font-display text-3xl font-bold tracking-tight text-foreground/90">
                   Crea tu cuenta
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
@@ -111,138 +110,224 @@ export function SignupForm({
                 </CardDescription>
               </CardHeader>
 
-              <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5">
+              <div className="h-px bg-border/60 my-6" />
+
+              <form onSubmit={handleSubmit(onSubmit)} className="mt-0 space-y-4">
                 {error ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div
+                    className="flex items-start gap-2 rounded-xl border px-3 py-2 text-sm"
+                    style={{
+                      color: 'oklch(0.60 0.22 25)',
+                      borderColor: 'oklch(0.60 0.22 25 / 0.3)',
+                      backgroundColor: 'oklch(0.60 0.22 25 / 0.05)',
+                    }}
+                  >
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
                     <span>{error}</span>
                   </div>
                 ) : null}
 
-                <FieldGroup className="gap-5">
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Field data-invalid={!!errors.nombre}>
-                      <FieldLabel htmlFor="signup-nombre">Nombre</FieldLabel>
-                      <FieldContent>
+                <FieldGroup className="gap-4">
+                  <Field data-invalid={!!errors.nombre}>
+                    <FieldLabel htmlFor="signup-nombre">Nombre</FieldLabel>
+                    <FieldContent>
+                      <div className="relative">
+                        <User className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
                         <Input
                           id="signup-nombre"
                           placeholder="Juan"
                           disabled={isSubmitting}
-                          className="h-11 rounded-xl border-border/70 shadow-none"
+                          className={cn(
+                            "h-12 rounded-xl py-3 pl-11 pr-4 border-border/70 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.nombre && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.nombre ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.nombre}
                           {...register('nombre')}
                         />
-                        <FieldError errors={[errors.nombre]} />
-                      </FieldContent>
-                    </Field>
+                      </div>
+                      {errors.nombre?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.nombre.message}</span>
+                        </div>
+                      )}
+                    </FieldContent>
+                  </Field>
 
-                    <Field data-invalid={!!errors.apellido}>
-                      <FieldLabel htmlFor="signup-apellido">Apellido</FieldLabel>
-                      <FieldContent>
+                  <Field data-invalid={!!errors.apellido}>
+                    <FieldLabel htmlFor="signup-apellido">Apellido</FieldLabel>
+                    <FieldContent>
+                      <div className="relative">
+                        <User className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
                         <Input
                           id="signup-apellido"
                           placeholder="Perez"
                           disabled={isSubmitting}
-                          className="h-11 rounded-xl border-border/70 shadow-none"
+                          className={cn(
+                            "h-12 rounded-xl py-3 pl-11 pr-4 border-border/70 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.apellido && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.apellido ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.apellido}
                           {...register('apellido')}
                         />
-                        <FieldError errors={[errors.apellido]} />
-                      </FieldContent>
-                    </Field>
-                  </div>
+                      </div>
+                      {errors.apellido?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.apellido.message}</span>
+                        </div>
+                      )}
+                    </FieldContent>
+                  </Field>
 
                   <Field data-invalid={!!errors.email}>
                     <FieldLabel htmlFor="signup-email">Correo electronico</FieldLabel>
                     <FieldContent>
-                      <Input
-                        id="signup-email"
-                        type="email"
-                        placeholder="m@ejemplo.com"
-                        autoComplete="email"
-                        disabled={isSubmitting}
-                        className="h-11 rounded-xl border-border/70 shadow-none"
-                        {...register('email')}
-                      />
+                      <div className="relative">
+                        <Mail className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
+                        <Input
+                          id="signup-email"
+                          type="email"
+                          placeholder="m@ejemplo.com"
+                          autoComplete="email"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "h-12 rounded-xl py-3 pl-11 pr-4 border-border/70 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.email && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.email ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.email}
+                          {...register('email')}
+                        />
+                      </div>
                       <FieldDescription>
                         Usaremos este correo para avisarte cuando tu cuenta este activa.
                       </FieldDescription>
-                      <FieldError errors={[errors.email]} />
+                      {errors.email?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.email.message}</span>
+                        </div>
+                      )}
                     </FieldContent>
                   </Field>
 
-                  <div className="grid gap-5 sm:grid-cols-2">
-                    <Field data-invalid={!!errors.password}>
-                      <div className="flex items-center justify-between gap-2">
-                        <FieldLabel htmlFor="signup-password">Contrasena</FieldLabel>
+                  <Field data-invalid={!!errors.password}>
+                    <div className="flex items-center justify-between gap-2">
+                      <FieldLabel htmlFor="signup-password">Contrasena</FieldLabel>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 rounded-lg px-2 text-xs active:scale-95 transition-all duration-150 ease-out"
+                        onClick={handleGeneratePassword}
+                        disabled={isSubmitting}
+                      >
+                        <Wand2 className="mr-1 size-3.5" />
+                        Generar
+                      </Button>
+                    </div>
+                    <FieldContent>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
+                        <Input
+                          id="signup-password"
+                          type={showPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "h-12 rounded-xl py-3 pl-11 pr-12 border-border/70 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.password && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.password ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.password}
+                          {...register('password')}
+                        />
                         <Button
                           type="button"
                           variant="ghost"
-                          size="sm"
-                          className="h-7 rounded-lg px-2 text-xs"
-                          onClick={handleGeneratePassword}
-                          disabled={isSubmitting}
+                          size="icon"
+                          aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
+                          className="absolute right-1.5 top-1.5 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-transform active:scale-95 duration-150 ease-out"
+                          onClick={() => setShowPassword((current) => !current)}
                         >
-                          <Wand2 className="mr-1 size-3.5" />
-                          Generar
+                          {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                         </Button>
                       </div>
-                      <FieldContent>
-                        <div className="relative">
-                          <Input
-                            id="signup-password"
-                            type={showPassword ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            disabled={isSubmitting}
-                            className="h-11 rounded-xl border-border/70 pr-11 shadow-none"
-                            {...register('password')}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'}
-                            className="absolute right-1 top-1 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => setShowPassword((current) => !current)}
-                          >
-                            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                          </Button>
+                      <FieldDescription>{PASSWORD_REQUIREMENTS_TEXT}</FieldDescription>
+                      {errors.password?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.password.message}</span>
                         </div>
-                        <FieldDescription>{PASSWORD_REQUIREMENTS_TEXT}</FieldDescription>
-                        <FieldError errors={[errors.password]} />
-                      </FieldContent>
-                    </Field>
+                      )}
+                    </FieldContent>
+                  </Field>
 
-                    <Field data-invalid={!!errors.confirmPassword}>
-                      <FieldLabel htmlFor="signup-confirm-password">Confirmar contrasena</FieldLabel>
-                      <FieldContent>
-                        <div className="relative">
-                          <Input
-                            id="signup-confirm-password"
-                            type={showConfirmPassword ? 'text' : 'password'}
-                            autoComplete="new-password"
-                            disabled={isSubmitting}
-                            className="h-11 rounded-xl border-border/70 pr-11 shadow-none"
-                            {...register('confirmPassword')}
-                          />
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label={showConfirmPassword ? 'Ocultar confirmacion de contrasena' : 'Mostrar confirmacion de contrasena'}
-                            className="absolute right-1 top-1 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => setShowConfirmPassword((current) => !current)}
-                          >
-                            {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                          </Button>
+                  <Field data-invalid={!!errors.confirmPassword}>
+                    <FieldLabel htmlFor="signup-confirm-password">Confirmar contrasena</FieldLabel>
+                    <FieldContent>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute left-4 top-1/2 z-10 size-5 -translate-y-1/2 text-primary/60" />
+                        <Input
+                          id="signup-confirm-password"
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          disabled={isSubmitting}
+                          className={cn(
+                            "h-12 rounded-xl py-3 pl-11 pr-12 border-border/70 shadow-none focus-visible:ring-primary/20 focus-visible:ring-[3px] focus-visible:border-primary transition-all duration-200",
+                            errors.confirmPassword && "border-[oklch(0.60_0.22_25)] focus-visible:border-[oklch(0.60_0.22_25)] focus-visible:ring-[oklch(0.60_0.22_25)/20]"
+                          )}
+                          style={errors.confirmPassword ? { borderColor: 'oklch(0.60 0.22 25)' } : undefined}
+                          aria-invalid={!!errors.confirmPassword}
+                          {...register('confirmPassword')}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={showConfirmPassword ? 'Ocultar confirmacion de contrasena' : 'Mostrar confirmacion de contrasena'}
+                          className="absolute right-1.5 top-1.5 size-9 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-transform active:scale-95 duration-150 ease-out"
+                          onClick={() => setShowConfirmPassword((current) => !current)}
+                        >
+                          {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                        </Button>
+                      </div>
+                      {errors.confirmPassword?.message && (
+                        <div
+                          className="flex items-center gap-1.5 text-sm mt-1.5 font-normal"
+                          style={{ color: 'oklch(0.60 0.22 25)' }}
+                          role="alert"
+                        >
+                          <AlertCircle className="size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
+                          <span>{errors.confirmPassword.message}</span>
                         </div>
-                        <FieldError errors={[errors.confirmPassword]} />
-                      </FieldContent>
-                    </Field>
-                  </div>
+                      )}
+                    </FieldContent>
+                  </Field>
                 </FieldGroup>
 
                 <Button
                   type="submit"
-                  className="h-11 w-full rounded-xl text-sm font-medium"
+                  className="h-12 w-full rounded-xl py-3 px-8 text-sm font-medium transition-all duration-150 ease-out active:scale-95 hover:bg-primary/95"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (
@@ -256,7 +341,9 @@ export function SignupForm({
                 </Button>
               </form>
 
-              <p className="mt-6 text-center text-sm text-muted-foreground">
+              <div className="h-px bg-border/60 my-6" />
+
+              <p className="mt-0 text-center text-sm text-muted-foreground">
                 Ya tienes una cuenta?{' '}
                 <Link
                   href="/auth/login"

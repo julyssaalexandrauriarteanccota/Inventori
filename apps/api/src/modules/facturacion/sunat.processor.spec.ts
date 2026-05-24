@@ -783,6 +783,101 @@ describe('SunatProcessor', () => {
     );
   });
 
+  it('regenera XML firmado al reintentar un comprobante RECHAZADO', async () => {
+    const mockBuilder = {
+      buildInvoice: jest.fn().mockReturnValue({
+        fileName: '20123456789-03-B001-1',
+        xmlFileName: '20123456789-03-B001-1.xml',
+        documentCode: '03',
+        xml: '<Invoice />',
+      }),
+    };
+    const mockSigner = {
+      sign: jest.fn().mockResolvedValue({
+        signedXml: '<Invoice><Signature /></Invoice>',
+        certificateId: 'cert-1',
+        certificateFingerprintSha256: 'fingerprint',
+      }),
+    };
+    const mockGateway = {
+      sendBill: jest.fn().mockResolvedValue({
+        accepted: true,
+        codigoRespuesta: '0',
+        mensaje: 'Aceptado',
+        requestPayload: {},
+        responsePayload: {},
+      }),
+    };
+    (mockStorage.readObjectText as jest.Mock).mockResolvedValueOnce(
+      '<Invoice Id="_0"><Signature /></Invoice>',
+    );
+    processor = new SunatProcessor(
+      mockPrisma,
+      mockConfig,
+      mockEvents,
+      mockVentaReversoFiscal,
+      mockStorage,
+      mockPdfService,
+      mockEmailService,
+      mockSunatQueue,
+      mockBuilder as never,
+      mockSigner as never,
+      mockGateway as never,
+    );
+    (mockPrisma.comprobante.findUnique as jest.Mock).mockResolvedValue({
+      id: 'comp-rechazado-1',
+      ventaId: 'venta-rechazada-1',
+      numero: 'B001-00000001',
+      serie: 'B001',
+      correlativo: 1,
+      tipo: 'BOLETA',
+      estado: EstadoComprobante.RECHAZADO,
+      payloadHash: 'hash-xml-antiguo',
+      fechaEmision: new Date().toISOString(),
+      clienteDocTipo: '1',
+      clienteDocNum: '99988999',
+      clienteNombre: 'Cliente Demo',
+      clienteDireccion: 'Av. Demo',
+      emisorRuc: '20123456789',
+      emisorRazonSocial: 'Empresa Demo SAC',
+      emisorDireccionFiscal: 'Av. Fiscal',
+      subtotal: 100,
+      igv: 18,
+      total: 118,
+      intentosEnvio: 1,
+      detallesFiscales: [
+        {
+          item: 1,
+          codigoInterno: 'EQP-001',
+          descripcion: 'Equipo',
+          unidadSunat: 'NIU',
+          cantidad: 1,
+          valorUnitario: 100,
+          precioUnitario: 118,
+          baseImponible: 100,
+          igv: 18,
+          total: 118,
+        },
+      ],
+      venta: {
+        cliente: {},
+        detalles: [],
+      },
+    });
+
+    await processor.process({
+      name: 'enviar-comprobante',
+      data: { comprobanteId: 'comp-rechazado-1' },
+    } as never);
+
+    expect(mockSigner.sign).toHaveBeenCalledWith('<Invoice />');
+    expect(mockGateway.sendBill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        signedXml: '<Invoice><Signature /></Invoice>',
+      }),
+    );
+  });
+
   describe('comunicar-baja → consultar-ticket-baja', () => {
     const FISCAL_DIR = join(tmpdir(), `fiscal-baja-${Date.now()}`);
     const baseComunicacion = {

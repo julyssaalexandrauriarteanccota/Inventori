@@ -60,9 +60,10 @@ export function NavUser() {
             <SidebarMenuButton
               size="lg"
               tooltip={displayName}
-              className="h-12 gap-3 rounded-xl border border-transparent bg-transparent !transition-[background-color,color,border-color] data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!w-full group-data-[collapsible=icon]:!pl-2 group-data-[collapsible=icon]:!pr-0 group-data-[collapsible=icon]:!py-0 dark:border-sidebar-border/80 dark:bg-sidebar-accent/55 dark:text-sidebar-foreground dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] dark:hover:bg-sidebar-accent/72 dark:data-[state=open]:bg-sidebar-accent/80"
+              aria-label={cargoLabel ? `Menú de usuario: ${displayName} (${cargoLabel})` : `Menú de usuario: ${displayName}`}
+              className="group/user h-12 gap-3 rounded-xl border border-transparent bg-transparent !transition-[background-color,color,border-color] data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:p-0 dark:border-sidebar-border/80 dark:bg-sidebar-accent/55 dark:text-sidebar-foreground dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] dark:hover:bg-sidebar-accent/72 dark:data-[state=open]:bg-sidebar-accent/80"
             >
-              <Avatar className="size-9 rounded-md group-data-[collapsible=icon]:size-8">
+              <Avatar className="size-9 rounded-md transition-transform duration-300 ease-out group-hover/user:scale-105 group-data-[collapsible=icon]:size-8">
                 {avatarUrl ? (
                   <AvatarImage
                     src={avatarUrl}
@@ -82,7 +83,7 @@ export function NavUser() {
                   {cargoLabel}
                 </span>
               </div>
-              <ChevronsUpDown className="ml-auto size-3.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+              <ChevronsUpDown className="ml-auto size-3.5 text-muted-foreground transition-transform duration-300 group-hover/user:translate-y-px group-data-[collapsible=icon]:hidden" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -106,7 +107,7 @@ export function NavUser() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 leading-tight">
-                  <span className="truncate text-[13px] font-medium">
+                  <span className="truncate font-display text-[13px] font-medium">
                     {displayName}
                   </span>
                   <span className="truncate text-[11px] text-muted-foreground">
@@ -117,7 +118,7 @@ export function NavUser() {
                       {user.cargo.trim()}
                     </span>
                   ) : null}
-                  <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-[var(--sidebar-primary)]/25 bg-[var(--sidebar-primary)]/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--sidebar-active-fg)]">
+                  <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-md border border-[var(--sidebar-primary)]/20 bg-[var(--sidebar-primary)]/8 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wider text-foreground dark:text-[var(--sidebar-primary)]">
                     {rolLabel}
                   </span>
                 </div>
@@ -139,7 +140,7 @@ export function NavUser() {
               Ayuda y soporte
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <DropdownMenuLabel className="font-display text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Tema
             </DropdownMenuLabel>
             <DropdownMenuRadioGroup

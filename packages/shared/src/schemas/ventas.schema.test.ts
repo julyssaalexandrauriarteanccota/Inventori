@@ -28,9 +28,11 @@ describe('ventas schemas', () => {
     const parsed = confirmarVentaSchema.parse({
       metodoPagoId: '33333333-3333-4333-8333-000000000001',
       almacenId: '44444444-4444-4444-8444-000000000001',
+      ventaInterna: true,
     })
 
     expect(parsed.almacenId).toBe('44444444-4444-4444-8444-000000000001')
+    expect(parsed.ventaInterna).toBe(true)
   })
 
   it('valida respuesta paginada de ventas', () => {

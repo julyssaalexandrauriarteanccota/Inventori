@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, Matches } from 'class-validator';
 
 export class CreateClienteValidacionSunatDto {
   @ApiPropertyOptional()
@@ -33,14 +33,42 @@ export class CreateClienteValidacionSunatDto {
   @IsString()
   nombreNormalizado?: string;
 
+  @ApiPropertyOptional({
+    enum: ['SUNAT_PADRON_LOCAL', 'DECOLECTA', 'APISPERU', 'MANUAL'],
+  })
+  @IsOptional()
+  @IsIn(['SUNAT_PADRON_LOCAL', 'DECOLECTA', 'APISPERU', 'MANUAL'])
+  proveedor?: 'SUNAT_PADRON_LOCAL' | 'DECOLECTA' | 'APISPERU' | 'MANUAL';
+
   @ApiPropertyOptional({ example: 'Av. Cliente 123' })
   @IsOptional()
   @IsString()
   direccionFiscal?: string;
 
-  @ApiProperty({ enum: ['PENDIENTE', 'VALIDO', 'INVALIDO', 'ERROR'] })
-  @IsIn(['PENDIENTE', 'VALIDO', 'INVALIDO', 'ERROR'])
-  estado!: 'PENDIENTE' | 'VALIDO' | 'INVALIDO' | 'ERROR';
+  @ApiPropertyOptional({ example: '150131' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6}$/, { message: 'El ubigeo debe tener 6 dígitos' })
+  ubigeo?: string;
+
+  @ApiPropertyOptional({ example: 'LIMA' })
+  @IsOptional()
+  @IsString()
+  departamento?: string;
+
+  @ApiPropertyOptional({ example: 'LIMA' })
+  @IsOptional()
+  @IsString()
+  provincia?: string;
+
+  @ApiPropertyOptional({ example: 'SAN ISIDRO' })
+  @IsOptional()
+  @IsString()
+  distrito?: string;
+
+  @ApiProperty({ enum: ['PENDIENTE', 'VALIDO', 'ACTIVO', 'INVALIDO', 'ERROR'] })
+  @IsIn(['PENDIENTE', 'VALIDO', 'ACTIVO', 'INVALIDO', 'ERROR'])
+  estado!: 'PENDIENTE' | 'VALIDO' | 'ACTIVO' | 'INVALIDO' | 'ERROR';
 
   @ApiPropertyOptional({ example: 'HABIDO' })
   @IsOptional()

@@ -29,10 +29,12 @@ export class QueryClienteValidacionSunatDto {
   @IsUUID()
   clienteId?: string;
 
-  @ApiPropertyOptional({ enum: ['PENDIENTE', 'VALIDO', 'INVALIDO', 'ERROR'] })
+  @ApiPropertyOptional({
+    enum: ['PENDIENTE', 'VALIDO', 'ACTIVO', 'INVALIDO', 'ERROR'],
+  })
   @IsOptional()
-  @IsIn(['PENDIENTE', 'VALIDO', 'INVALIDO', 'ERROR'])
-  estado?: 'PENDIENTE' | 'VALIDO' | 'INVALIDO' | 'ERROR';
+  @IsIn(['PENDIENTE', 'VALIDO', 'ACTIVO', 'INVALIDO', 'ERROR'])
+  estado?: 'PENDIENTE' | 'VALIDO' | 'ACTIVO' | 'INVALIDO' | 'ERROR';
 
   @ApiPropertyOptional({
     description: 'Buscar por documento, nombre o dirección',

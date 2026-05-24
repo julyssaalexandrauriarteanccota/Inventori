@@ -82,6 +82,7 @@ enum EstadoVenta {
 // Solo lo modifica el dominio Comprobantes vía eventos.
 enum EstadoFacturacionVenta {
   SIN_COMPROBANTE
+  VENTA_INTERNA
   EN_EMISION
   EMITIDA
   EMITIDA_CON_OBS
@@ -829,6 +830,9 @@ model Comprobante {
   emisorNombreComercial       String?
   emisorDireccionFiscal       String?
   emisorUbigeoFiscal          String?
+  emisorDepartamentoFiscal    String?
+  emisorProvinciaFiscal       String?
+  emisorDistritoFiscal        String?
   emisorCodigoEstablecimiento String?
   subtotal                    Decimal           @db.Decimal(10, 2)
   igv                         Decimal           @db.Decimal(10, 2)
@@ -1037,6 +1041,9 @@ model ConfigEmpresaFiscal {
   nombreComercial         String?
   direccionFiscal         String
   ubigeoFiscal            String?
+  departamentoFiscal      String?
+  provinciaFiscal         String?
+  distritoFiscal          String?
   codigoEstablecimiento   String?
   correoSee               String?
   regimenTributario       String?
@@ -1176,8 +1183,13 @@ model ClienteValidacionSunat {
   clienteId          String?
   tipoDocumentoSunat String
   numeroDocumento    String
+  proveedor          String?
   nombreNormalizado  String?
   direccionFiscal    String?
+  ubigeo             String?
+  departamento       String?
+  provincia          String?
+  distrito           String?
   estado             String
   condicionDomicilio String?
   ultimaValidacionAt DateTime?
@@ -1189,7 +1201,82 @@ model ClienteValidacionSunat {
   @@unique([tipoDocumentoSunat, numeroDocumento])
   @@index([clienteId])
   @@index([estado])
+  @@index([proveedor])
+  @@index([ubigeo])
   @@map("cliente_validaciones_sunat")
+}
+
+model PadronSunatRuc {
+  id                  String   @id @default(uuid())
+  ruc                 String   @unique
+  razonSocial         String
+  estado              String
+  condicionDomicilio  String?
+  ubigeo              String?
+  departamento        String?
+  provincia           String?
+  distrito            String?
+  direccionFiscal     String?
+  sourceUpdatedAt     DateTime?
+  importedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([estado])
+  @@index([condicionDomicilio])
+  @@index([ubigeo])
+  @@map("padron_sunat_ruc")
+}
+
+model PadronSunatRucImportJob {
+  id          String    @id @default(uuid())
+  status      String
+  stage       String
+  sourceUrl   String?
+  message     String
+  processed   Int       @default(0)
+  inserted    Int       @default(0)
+  discarded   Int       @default(0)
+  totalLines  Int?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  durationMs  Int?
+  importedAt  DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  stagingRows PadronSunatRucStaging[]
+
+  @@index([status])
+  @@index([stage])
+  @@index([createdAt])
+  @@map("padron_sunat_ruc_import_jobs")
+}
+
+model PadronSunatRucStaging {
+  id                  String   @id @default(uuid())
+  jobId               String
+  ruc                 String
+  razonSocial         String
+  estado              String
+  condicionDomicilio  String?
+  ubigeo              String?
+  departamento        String?
+  provincia           String?
+  distrito            String?
+  direccionFiscal     String?
+  sourceUpdatedAt     DateTime?
+  importedAt          DateTime
+  createdAt           DateTime @default(now())
+
+  job PadronSunatRucImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, ruc])
+  @@index([jobId])
+  @@index([estado])
+  @@index([ubigeo])
+  @@map("padron_sunat_ruc_staging")
 }
 
 // NotaCredito y NotaDebito legacy eliminados (doc 01 §arch + doc 08 §1).

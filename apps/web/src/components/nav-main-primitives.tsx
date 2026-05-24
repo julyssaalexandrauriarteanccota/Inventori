@@ -11,7 +11,7 @@ export const navButtonClasses = cn(
   "data-[active=true]:hover:bg-[var(--sidebar-active-bg)] data-[active=true]:hover:text-[var(--sidebar-active-fg)]",
   "data-[active=true]:before:absolute data-[active=true]:before:inset-y-1.5 data-[active=true]:before:left-0",
   "data-[active=true]:before:w-[3px] data-[active=true]:before:rounded-full data-[active=true]:before:bg-[var(--sidebar-primary)]",
-  "group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!h-9 group-data-[collapsible=icon]:!w-full group-data-[collapsible=icon]:!pl-3 group-data-[collapsible=icon]:!pr-0 group-data-[collapsible=icon]:!py-0",
+  "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:p-0",
   "group-data-[collapsible=icon]:before:hidden",
 )
 
@@ -28,10 +28,12 @@ export function SidebarNavIconTile({
   icon: Icon,
   active,
   badge,
+  className,
 }: {
   icon?: LucideIcon
   active: boolean
   badge?: NavBadgeValue
+  className?: string
 }) {
   if (!Icon) {
     return null
@@ -40,13 +42,19 @@ export function SidebarNavIconTile({
   return (
     <span
       className={cn(
-        "relative flex size-6 shrink-0 items-center justify-center rounded-[6px] transition-colors",
+        "relative flex size-7 group-data-[collapsible=icon]:size-8 shrink-0 items-center justify-center rounded-[8px] transition-all duration-300",
         active
-          ? "bg-black/8 text-inherit ring-1 ring-inset ring-black/8"
+          ? "bg-[var(--sidebar-primary)]/10 text-[var(--sidebar-primary)] ring-1 ring-[var(--sidebar-primary)]/20"
           : "text-[var(--sidebar-icon-fg)] group-hover/item:text-foreground",
       )}
     >
-      <Icon className="size-4" strokeWidth={1.85} />
+      <Icon
+        className={cn(
+          "size-4.5 group-data-[collapsible=icon]:size-5 transition-transform duration-300 ease-out group-hover/item:scale-115",
+          className
+        )}
+        strokeWidth={1.85}
+      />
       {badge != null ? (
         <span
           aria-hidden

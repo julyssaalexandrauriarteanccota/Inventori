@@ -27,19 +27,15 @@ import {
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
-import {
-  readStoredSoporteAutoRefreshPreference,
-  writeStoredSoporteAutoRefreshPreference,
-} from "@/lib/soporte-auto-refresh";
 import { useAuth } from "@/hooks/use-auth";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useTickets,
   useDeleteTicket,
   useCreateTicket,
   useUpdateTicket,
 } from "@/hooks/use-soporte";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -125,14 +121,7 @@ function hasNuevoParam() {
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-];
-
 const SOPORTE_REFRESH_TOAST_ID = "soporte-refresh";
-const SOPORTE_AUTO_REFRESH_TOAST_ID = "soporte-auto-refresh";
 
 /* ── Page ───────────────────────────────────────────── */
 
@@ -200,55 +189,13 @@ export default function SoportePage() {
     RolUsuario.TECNICO,
   );
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", {
-      id: SOPORTE_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    void refetch();
-    showRefreshToast();
-  }, [refetch, showRefreshToast]);
-
-  const handleAutoRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
-  const {
-    enabled: autoRefresh,
-    interval: refreshInterval,
-    setEnabled: setAutoRefresh,
-    setInterval: setRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredSoporteAutoRefreshPreference,
-    writePreference: writeStoredSoporteAutoRefreshPreference,
-    onRefresh: handleAutoRefresh,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "soporte",
+    toastLabel: "Tickets",
+    manualToastMessage: "Lista actualizada",
+    toastId: SOPORTE_REFRESH_TOAST_ID,
   });
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const label =
-        REFRESH_INTERVALS.find((r) => r.value === refreshInterval)?.label ??
-        "intervalo actual";
-      const message = enabled
-        ? `Auto-refresh activado cada ${label}`
-        : "Auto-refresh desactivado";
-      if (enabled) {
-        toast.success(message, {
-          id: SOPORTE_AUTO_REFRESH_TOAST_ID,
-          duration: 1800,
-        });
-      } else {
-        toast.info(message, {
-          id: SOPORTE_AUTO_REFRESH_TOAST_ID,
-          duration: 1800,
-        });
-      }
-    },
-    [refreshInterval],
-  );
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const handleCreate = useCallback(
     (payload: TicketFormPayload) => {
@@ -582,18 +529,7 @@ export default function SoportePage() {
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefresh}
-              interval={refreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="soporte-auto-refresh"
-              onEnabledChange={(value) => {
-                setAutoRefresh(value);
-                showAutoRefreshToast(value);
-              }}
-              onIntervalChange={setRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               items={[
                 {

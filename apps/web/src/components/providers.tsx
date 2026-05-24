@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ThemeProvider as NextThemesProvider } from 'next-themes'
 import { useState } from 'react'
+import { AtmosphereProvider } from '@/lib/atmosphere'
 
 const toasterClassNames = {
   toast:
@@ -47,30 +48,32 @@ export function Providers({ children }: { children: React.ReactNode }) {
   )
 
   return (
-    <NextThemesProvider
-      attribute="class"
-      defaultTheme="system"
-      enableSystem
-      disableTransitionOnChange
-    >
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          {children}
-          <Toaster
-            className="toaster group"
-            position="bottom-right"
-            expand
-            gap={10}
-            visibleToasts={3}
-            offset={{ bottom: 20, right: 20 }}
-            mobileOffset={{ bottom: 16, left: 16, right: 16 }}
-            toastOptions={{
-              classNames: toasterClassNames,
-            }}
-          />
-        </TooltipProvider>
-        <ReactQueryDevtools initialIsOpen={false} />
-      </QueryClientProvider>
-    </NextThemesProvider>
+    <AtmosphereProvider>
+      <NextThemesProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            {children}
+            <Toaster
+              className="toaster group"
+              position="bottom-right"
+              expand
+              gap={10}
+              visibleToasts={3}
+              offset={{ bottom: 20, right: 20 }}
+              mobileOffset={{ bottom: 16, left: 16, right: 16 }}
+              toastOptions={{
+                classNames: toasterClassNames,
+              }}
+            />
+          </TooltipProvider>
+          <ReactQueryDevtools initialIsOpen={false} />
+        </QueryClientProvider>
+      </NextThemesProvider>
+    </AtmosphereProvider>
   )
 }

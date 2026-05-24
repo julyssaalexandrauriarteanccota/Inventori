@@ -39,12 +39,8 @@ import {
 
 import { cn } from "@/lib/utils";
 import { ProductoThumbnail } from "@/components/products/producto-thumbnail";
-import {
-  readStoredEquiposAutoRefreshPreference,
-  writeStoredEquiposAutoRefreshPreference,
-} from "@/lib/equipos-auto-refresh";
 import { useAuth } from "@/hooks/use-auth";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useEquipos,
   useDeleteEquipo,
@@ -53,7 +49,7 @@ import {
 } from "@/hooks/use-equipos";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePublicBranding } from "@/hooks/use-public-branding";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -112,12 +108,6 @@ import type { ProductoDetailItem, ProductoListItem } from "@erp/shared";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-];
 
 const VIEW_MODE_STORAGE_KEY = "erp:equipos:view-mode";
 
@@ -451,48 +441,12 @@ export default function EquiposPage() {
     estado: EstadoEquipo.EN_REPARACION,
   });
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", { duration: 2000 });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    void refetch();
-    showRefreshToast();
-  }, [refetch, showRefreshToast]);
-
-  const handleAutoRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
-  const {
-    enabled: autoRefresh,
-    interval: refreshInterval,
-    setEnabled: setAutoRefresh,
-    setInterval: setRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredEquiposAutoRefreshPreference,
-    writePreference: writeStoredEquiposAutoRefreshPreference,
-    onRefresh: handleAutoRefresh,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "equipos",
+    toastLabel: "Equipos",
+    manualToastMessage: "Lista actualizada",
   });
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const label =
-        REFRESH_INTERVALS.find((option) => option.value === refreshInterval)
-          ?.label ?? "intervalo actual";
-      const message = enabled
-        ? `Auto-refresh activado cada ${label}`
-        : "Auto-refresh desactivado";
-
-      if (enabled) {
-        toast.success(message, { duration: 2000 });
-        return;
-      }
-
-      toast.info(message, { duration: 2000 });
-    },
-    [refreshInterval],
-  );
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const deleteMutation = useDeleteEquipo();
   const createMutation = useCreateEquipo();
@@ -921,18 +875,7 @@ export default function EquiposPage() {
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefresh}
-              interval={refreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="auto-refresh-equipos"
-              onEnabledChange={(enabled) => {
-                setAutoRefresh(enabled);
-                showAutoRefreshToast(enabled);
-              }}
-              onIntervalChange={setRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               items={[
                 {

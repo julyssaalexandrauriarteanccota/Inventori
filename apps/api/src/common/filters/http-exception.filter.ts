@@ -30,8 +30,18 @@ export class HttpExceptionFilter implements ExceptionFilter {
         exceptionResponse !== null
       ) {
         const resp = exceptionResponse as Record<string, unknown>;
-        message = (resp.message as string) || message;
-        code = (resp.error as string) || code;
+        const responseMessage = resp.message;
+        message = Array.isArray(responseMessage)
+          ? responseMessage.join(', ')
+          : typeof responseMessage === 'string'
+            ? responseMessage
+            : message;
+        code =
+          typeof resp.code === 'string'
+            ? resp.code
+            : typeof resp.error === 'string'
+              ? resp.error
+              : code;
       }
     } else {
       this.logger.error(
@@ -40,11 +50,26 @@ export class HttpExceptionFilter implements ExceptionFilter {
       );
     }
 
+    const details =
+      exception instanceof HttpException &&
+      typeof exception.getResponse() === 'object' &&
+      exception.getResponse() !== null
+        ? Object.fromEntries(
+            Object.entries(
+              exception.getResponse() as Record<string, unknown>,
+            ).filter(
+              ([key]) =>
+                !['code', 'error', 'message', 'statusCode'].includes(key),
+            ),
+          )
+        : {};
+
     response.status(status).json({
       error: {
         code,
         message,
         statusCode: status,
+        ...details,
       },
     });
   }

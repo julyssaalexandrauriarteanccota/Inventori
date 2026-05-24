@@ -69,7 +69,7 @@ export const POS_NAVIGATION: PosNavGroup[] = [
       },
       {
         title: 'Historial de ventas',
-        url: '/pos/historial',
+        url: '/ventas',
         description: 'Ventas confirmadas, entregadas y canceladas.',
         icon: History,
         roles: POS_ROLES,

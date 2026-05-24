@@ -3,33 +3,44 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useForm, useWatch, useFieldArray, type Resolver } from "react-hook-form";
+import {
+  useForm,
+  useWatch,
+  useFieldArray,
+  type Resolver,
+} from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowDown,
   ArrowUp,
   Barcode,
   Boxes,
+  Cable,
   Clock,
   DollarSign,
+  FileText,
+  Hash,
   ImagePlus,
+  Laptop,
+  Layers,
   Loader2,
   Package,
-  type LucideIcon,
   Plus,
   QrCode,
   Sparkles,
+  Tag,
+  Wrench,
   X,
   RefreshCcw,
   Settings2,
   Trash2,
   Upload,
-  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   CondicionProducto,
   productoFormSchema,
+  SUNAT_UNIDAD_MEDIDA_CODES,
   TipoProducto,
   type ProductoFormPayload,
   type ProductoImagenPayload,
@@ -54,7 +65,6 @@ import {
   useUnidadesMedida,
 } from "@/hooks/use-productos";
 import { useAlmacenes } from "@/hooks/use-inventario";
-import { ProductCodePreview } from "@/components/products/product-code-preview";
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -69,9 +79,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -82,11 +90,10 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
-  FieldDescription,
   FieldError,
-  FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { RichDescriptionEditor } from "@/components/forms/rich-description-editor";
 
 export interface ProductoFormSubmitContext {
   initialStock?: {
@@ -106,6 +113,7 @@ interface ProductoFormProps {
   isLoading?: boolean;
   mode: "create" | "edit";
   canViewInternalCosts?: boolean;
+  hideBottomActions?: boolean;
   /**
    * Si se define, el selector de tipo queda oculto y el formulario se inicializa
    * con ese tipo. Útil para pantallas dedicadas (ej. /erp/servicios).
@@ -121,14 +129,12 @@ const TIPO_LABELS: Record<TipoProducto, string> = {
   [TipoProducto.ACCESORIO]: "Accesorio",
 };
 
-const TIPO_DESCRIPTIONS: Record<TipoProducto, string> = {
-  [TipoProducto.EQUIPO]: "Unidades o activos físicos serializables.",
-  [TipoProducto.REPUESTO]:
-    "Piezas o componentes usados en soporte, reparación o mantenimiento.",
-  [TipoProducto.INSUMO]: "Materiales consumibles generales.",
-  [TipoProducto.SERVICIO]:
-    "Concepto vendible sin inventario propio. Si usa repuestos o insumos, estos se descuentan por separado.",
-  [TipoProducto.ACCESORIO]: "Complementos y accesorios comerciales.",
+const TIPO_ICONS: Record<TipoProducto, React.ComponentType<{ className?: string }>> = {
+  [TipoProducto.EQUIPO]: Laptop,
+  [TipoProducto.REPUESTO]: Wrench,
+  [TipoProducto.INSUMO]: Layers,
+  [TipoProducto.SERVICIO]: Sparkles,
+  [TipoProducto.ACCESORIO]: Cable,
 };
 
 const CONDICION_LABELS: Record<CondicionProducto, string> = {
@@ -140,56 +146,103 @@ const CONDICION_LABELS: Record<CondicionProducto, string> = {
 };
 
 const DEFAULT_UNIDAD_CODES_BY_TIPO: Record<TipoProducto, string[]> = {
-  [TipoProducto.EQUIPO]: ["UND"],
-  [TipoProducto.REPUESTO]: ["UND"],
-  [TipoProducto.INSUMO]: ["UND", "CAJ", "PQT", "RES", "LT", "KG"],
-  [TipoProducto.SERVICIO]: ["SERV", "HR", "HRS"],
-  [TipoProducto.ACCESORIO]: ["UND", "KIT"],
+  [TipoProducto.EQUIPO]: ["NIU"],
+  [TipoProducto.REPUESTO]: ["NIU"],
+  [TipoProducto.INSUMO]: ["NIU", "BX", "PK", "LTR", "KGM"],
+  [TipoProducto.SERVICIO]: ["ZZ", "HUR", "DAY"],
+  [TipoProducto.ACCESORIO]: ["NIU", "SET"],
 };
 
-const UNIDAD_HINTS: Record<TipoProducto, string> = {
-  [TipoProducto.EQUIPO]: "Suele usarse UND para un equipo individual.",
-  [TipoProducto.REPUESTO]:
-    "Normalmente UND, KIT o piezas según cómo lo vendas.",
-  [TipoProducto.INSUMO]:
-    "Puede ser UND, CAJA, PAQUETE, RESMA, LITRO o KG según el insumo.",
-  [TipoProducto.SERVICIO]: "Para servicios suele usarse SERV, HORA o VISITA.",
-  [TipoProducto.ACCESORIO]: "Usa UND o KIT según cómo se comercialice.",
+type AttributePreset = { clave: string; valor: string };
+type AttributeUiConfig = {
+  title: string;
+  description: string;
+  emptyText: string;
+  keyPlaceholder: string;
+  valuePlaceholder: string;
+  buttonLabel: string;
+  presets: AttributePreset[];
 };
 
-type ProductSectionTone = "blue" | "green" | "orange" | "purple";
-
-const PRODUCT_SECTION_STYLES: Record<
-  ProductSectionTone,
-  {
-    container: string;
-    number: string;
-    icon: string;
-  }
-> = {
-  blue: {
-    container: "border-l-sky-400/75",
-    number:
-      "bg-sky-500/12 text-sky-700 ring-sky-500/14 dark:bg-sky-400/16 dark:text-sky-100 dark:ring-sky-400/18",
-    icon: "bg-sky-500/12 text-sky-700 ring-sky-500/14 dark:bg-sky-400/16 dark:text-sky-100 dark:ring-sky-400/18",
+const ATTRIBUTE_UI_BY_TIPO: Record<TipoProducto, AttributeUiConfig> = {
+  [TipoProducto.EQUIPO]: {
+    title: "Ficha técnica del modelo",
+    description:
+      "Datos comunes del modelo vendible. La serie, QR, contador, ubicación y estado real se registran en Equipos.",
+    emptyText:
+      "Agrega características del modelo como velocidad, dúplex, conectividad o voltaje.",
+    keyPlaceholder: "Dato técnico (ej. dúplex)",
+    valuePlaceholder: "Valor (ej. Sí, A3, 220V)",
+    buttonLabel: "Agregar dato técnico",
+    presets: [
+      { clave: "Velocidad", valor: "" },
+      { clave: "Formato", valor: "" },
+      { clave: "Dúplex", valor: "" },
+      { clave: "Conectividad", valor: "" },
+      { clave: "Voltaje", valor: "" },
+    ],
   },
-  green: {
-    container: "border-l-emerald-400/75",
-    number:
-      "bg-emerald-500/12 text-emerald-700 ring-emerald-500/14 dark:bg-emerald-400/16 dark:text-emerald-100 dark:ring-emerald-400/18",
-    icon: "bg-emerald-500/12 text-emerald-700 ring-emerald-500/14 dark:bg-emerald-400/16 dark:text-emerald-100 dark:ring-emerald-400/18",
+  [TipoProducto.REPUESTO]: {
+    title: "Compatibilidad y especificación",
+    description:
+      "Datos para identificar si el repuesto sirve para un modelo, parte o mantenimiento específico.",
+    emptyText:
+      "Agrega compatibilidad, código OEM, rendimiento, color o tipo de pieza.",
+    keyPlaceholder: "Dato (ej. código OEM)",
+    valuePlaceholder: "Valor (ej. TN-324K, Bizhub 808)",
+    buttonLabel: "Agregar especificación",
+    presets: [
+      { clave: "Compatible con", valor: "" },
+      { clave: "Código OEM", valor: "" },
+      { clave: "Color", valor: "" },
+      { clave: "Rendimiento", valor: "" },
+    ],
   },
-  orange: {
-    container: "border-l-amber-400/80",
-    number:
-      "bg-amber-500/12 text-amber-700 ring-amber-500/14 dark:bg-amber-400/16 dark:text-amber-100 dark:ring-amber-400/18",
-    icon: "bg-amber-500/12 text-amber-700 ring-amber-500/14 dark:bg-amber-400/16 dark:text-amber-100 dark:ring-amber-400/18",
+  [TipoProducto.INSUMO]: {
+    title: "Presentación y consumo",
+    description:
+      "Datos de empaque, rendimiento o uso del material consumible. El stock se controla por inventario.",
+    emptyText:
+      "Agrega presentación, capacidad, rendimiento o unidad de consumo.",
+    keyPlaceholder: "Dato (ej. presentación)",
+    valuePlaceholder: "Valor (ej. caja x 10, 1L)",
+    buttonLabel: "Agregar dato de consumo",
+    presets: [
+      { clave: "Presentación", valor: "" },
+      { clave: "Capacidad", valor: "" },
+      { clave: "Rendimiento", valor: "" },
+      { clave: "Uso recomendado", valor: "" },
+    ],
   },
-  purple: {
-    container: "border-l-violet-400/75",
-    number:
-      "bg-violet-500/12 text-violet-700 ring-violet-500/14 dark:bg-violet-400/16 dark:text-violet-100 dark:ring-violet-400/18",
-    icon: "bg-violet-500/12 text-violet-700 ring-violet-500/14 dark:bg-violet-400/16 dark:text-violet-100 dark:ring-violet-400/18",
+  [TipoProducto.ACCESORIO]: {
+    title: "Características comerciales",
+    description:
+      "Datos visibles para venta: compatibilidad, medidas, material, color o contenido del kit.",
+    emptyText:
+      "Agrega compatibilidad, medidas, color, material o contenido incluido.",
+    keyPlaceholder: "Dato (ej. compatibilidad)",
+    valuePlaceholder: "Valor (ej. Bizhub series 8)",
+    buttonLabel: "Agregar característica",
+    presets: [
+      { clave: "Compatible con", valor: "" },
+      { clave: "Color", valor: "" },
+      { clave: "Material", valor: "" },
+      { clave: "Incluye", valor: "" },
+    ],
+  },
+  [TipoProducto.SERVICIO]: {
+    title: "Alcance del servicio",
+    description:
+      "Datos opcionales para describir duración, cobertura o condiciones del servicio.",
+    emptyText: "Agrega duración, cobertura, requisitos o condiciones.",
+    keyPlaceholder: "Dato (ej. duración)",
+    valuePlaceholder: "Valor (ej. 2 horas)",
+    buttonLabel: "Agregar alcance",
+    presets: [
+      { clave: "Duración", valor: "" },
+      { clave: "Cobertura", valor: "" },
+      { clave: "Incluye", valor: "" },
+    ],
   },
 };
 
@@ -254,42 +307,6 @@ function normalizeInitialImages(defaultValues?: Partial<ProductoFormPayload>) {
   return [];
 }
 
-function ProductSectionHeader({
-  step,
-  title,
-  tone,
-  icon: Icon,
-}: {
-  step: string;
-  title: string;
-  tone: ProductSectionTone;
-  icon: LucideIcon;
-}) {
-  const styles = PRODUCT_SECTION_STYLES[tone];
-
-  return (
-    <div className="mb-4 flex items-center gap-3">
-      <span
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ring-1",
-          styles.number,
-        )}
-      >
-        {step}
-      </span>
-      <div
-        className={cn(
-          "flex size-7 shrink-0 items-center justify-center rounded-xl ring-1 shadow-sm",
-          styles.icon,
-        )}
-      >
-        <Icon className="size-4" />
-      </div>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-    </div>
-  );
-}
-
 export function ProductoForm({
   defaultValues,
   onSubmit,
@@ -298,6 +315,7 @@ export function ProductoForm({
   isLoading = false,
   mode,
   canViewInternalCosts = true,
+  hideBottomActions = false,
   lockedTipo,
 }: ProductoFormProps) {
   const [isUploadingImages, setIsUploadingImages] = useState(false);
@@ -313,6 +331,9 @@ export function ProductoForm({
   const [barcodeManuallyEdited, setBarcodeManuallyEdited] = useState(
     () => mode === "edit" || Boolean(defaultValues?.codigoBarras),
   );
+  const [qrManuallyEdited, setQrManuallyEdited] = useState(
+    () => mode === "edit" || Boolean(defaultValues?.codigoQr),
+  );
   const [manualSelectedImageUrl, setManualSelectedImageUrl] = useState<
     string | null
   >(null);
@@ -324,6 +345,7 @@ export function ProductoForm({
   const [stockInicialError, setStockInicialError] = useState<string | null>(
     null,
   );
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   const {
     register,
@@ -365,7 +387,9 @@ export function ProductoForm({
   const marcaId = useWatch({ control, name: "marcaId" });
   const modeloId = useWatch({ control, name: "modeloId" });
   const watchedImagenes = useWatch({ control, name: "imagenes" });
+  const watchedAtributos = useWatch({ control, name: "atributos" });
   const imagenes = useMemo(() => watchedImagenes ?? [], [watchedImagenes]);
+  const atributos = useMemo(() => watchedAtributos ?? [], [watchedAtributos]);
   const {
     fields: atributoFields,
     append: appendAtributo,
@@ -379,6 +403,8 @@ export function ProductoForm({
   const activo = watch("activo");
   const isServicio = tipo === TipoProducto.SERVICIO;
   const isEquipo = tipo === TipoProducto.EQUIPO;
+  const attributeUi = ATTRIBUTE_UI_BY_TIPO[tipo];
+  const descripcion = useWatch({ control, name: "descripcion" }) ?? "";
   const canViewServicioCostoReferencial = !isServicio || canViewInternalCosts;
 
   const { data: categoriasRes } = useCategorias(tipo);
@@ -420,25 +446,6 @@ export function ProductoForm({
   const hasInitialStockDraft =
     mode === "create" && !isServicio && !isEquipo && stockInicialValue > 0;
 
-  const unidadesMedidaForTipo = useMemo(() => {
-    const recommended = DEFAULT_UNIDAD_CODES_BY_TIPO[tipo] ?? [];
-    if (recommended.length === 0) return unidadesMedida;
-    const recommendedSet = new Set(recommended);
-    const filtered = unidadesMedida.filter((unidad) =>
-      recommendedSet.has(unidad.codigo),
-    );
-    // Always include the currently-selected unit even if it doesn't match the tipo (edit mode).
-    if (unidadMedidaId) {
-      const current = unidadesMedida.find(
-        (unidad) => unidad.id === unidadMedidaId,
-      );
-      if (current && !filtered.some((unidad) => unidad.id === current.id)) {
-        filtered.push(current);
-      }
-    }
-    return filtered.length > 0 ? filtered : unidadesMedida;
-  }, [tipo, unidadesMedida, unidadMedidaId]);
-
   const categoriaOptions = useMemo(
     () => flattenCategorias(categorias),
     [categorias],
@@ -472,19 +479,68 @@ export function ProductoForm({
     };
   }, []);
 
-  useEffect(() => {
-    onDirtyChange?.(isDirty || hasInitialStockDraft);
-  }, [hasInitialStockDraft, isDirty, onDirtyChange]);
+  const nombreWatch = watch("nombre");
+  const categoriaIdWatch = watch("categoriaId");
+  const precioVentaWatch = watch("precioVenta");
+  const precioCompraWatch = watch("precioCompra");
+  const precioMinimoWatch = watch("precioMinimo");
+  const stockMinimoWatch = watch("stockMinimo");
+  const tiempoEstimadoMinWatch = watch("tiempoEstimadoMin");
+  const mesesGarantiaWatch = watch("mesesGarantia");
+  const garantiaMaxCopiasWatch = watch("garantiaMaxCopias");
+  const stockInicialWatch = stockInicialValue;
+  const descripcionWatch = watch("descripcion");
+
+  const isReallyDirty = useMemo(() => {
+    if (nombreWatch && nombreWatch.trim() !== "") return true;
+    if (categoriaIdWatch && categoriaIdWatch !== "") return true;
+    if (marcaId || modeloId) return true;
+    if ((precioVentaWatch ?? 0) > 0 || (precioCompraWatch ?? 0) > 0 || (precioMinimoWatch ?? 0) > 0) return true;
+    if ((stockMinimoWatch ?? 0) > 0 || (tiempoEstimadoMinWatch ?? 0) > 0) return true;
+    if (mesesGarantiaWatch !== 12 && mesesGarantiaWatch !== undefined) return true;
+    if (garantiaMaxCopiasWatch !== null && garantiaMaxCopiasWatch !== undefined) return true;
+    if (stockInicialWatch > 0) return true;
+    if (descripcionWatch && descripcionWatch.trim() !== "") return true;
+    if (atributos.length > 0) return true;
+    if (imagenes.length > 0) return true;
+    if (skuManuallyEdited || barcodeManuallyEdited || qrManuallyEdited) return true;
+    return false;
+  }, [
+    nombreWatch,
+    categoriaIdWatch,
+    marcaId,
+    modeloId,
+    precioVentaWatch,
+    precioCompraWatch,
+    precioMinimoWatch,
+    stockMinimoWatch,
+    tiempoEstimadoMinWatch,
+    mesesGarantiaWatch,
+    garantiaMaxCopiasWatch,
+    stockInicialWatch,
+    descripcionWatch,
+    atributos,
+    imagenes,
+    skuManuallyEdited,
+    barcodeManuallyEdited,
+    qrManuallyEdited,
+  ]);
+
+  const isFormDirty = mode === "create" ? isReallyDirty : isDirty;
 
   useEffect(() => {
-    if (!isDirty && !hasInitialStockDraft) return;
+    onDirtyChange?.(isFormDirty || hasInitialStockDraft);
+  }, [hasInitialStockDraft, isFormDirty, onDirtyChange]);
+
+  useEffect(() => {
+    if (!isFormDirty && !hasInitialStockDraft) return;
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
-  }, [hasInitialStockDraft, isDirty]);
+  }, [hasInitialStockDraft, isFormDirty]);
 
   useEffect(() => {
     if (mode !== "create" || isServicio || isEquipo || almacenInicialId) {
@@ -513,25 +569,6 @@ export function ProductoForm({
       setStockInicialError(null);
     }
   }, [isEquipo, isServicio, stockInicial, stockInicialError]);
-
-  const previousTipoRef = useRef<TipoProducto>(tipo);
-  useEffect(() => {
-    if (previousTipoRef.current === tipo) return;
-    previousTipoRef.current = tipo;
-    if (!unidadMedidaId) return;
-    const recommended = DEFAULT_UNIDAD_CODES_BY_TIPO[tipo] ?? [];
-    if (recommended.length === 0) return;
-    const current = unidadesMedida.find(
-      (unidad) => unidad.id === unidadMedidaId,
-    );
-    if (current && !recommended.includes(current.codigo)) {
-      setValue("unidadMedidaId", "", {
-        shouldDirty: true,
-        shouldTouch: false,
-        shouldValidate: false,
-      });
-    }
-  }, [tipo, unidadMedidaId, unidadesMedida, setValue]);
 
   // Force tipo-driven boolean rules so UI and payload stay in sync.
   useEffect(() => {
@@ -586,7 +623,12 @@ export function ProductoForm({
           unidadesMedida.find((unidad) => unidad.codigo === codigo),
         )
         .find(Boolean) ??
-      unidadesMedida.find((unidad) => unidad.codigo === "UND") ??
+      unidadesMedida.find((unidad) => unidad.codigo === "NIU") ??
+      unidadesMedida.find((unidad) =>
+        (SUNAT_UNIDAD_MEDIDA_CODES as readonly string[]).includes(
+          unidad.codigo,
+        ),
+      ) ??
       unidadesMedida[0];
 
     if (!defaultUnidad) {
@@ -679,6 +721,18 @@ export function ProductoForm({
     });
   }, [barcodeManuallyEdited, mode, setValue, sku]);
 
+  useEffect(() => {
+    if (mode !== "create" || qrManuallyEdited) {
+      return;
+    }
+
+    setValue("codigoQr", sku?.trim() ? `PRD:${sku.trim()}` : "", {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [qrManuallyEdited, mode, setValue, sku]);
+
   function handleTipoChange(nextTipo: TipoProducto) {
     setValue("tipo", nextTipo, {
       shouldDirty: true,
@@ -716,6 +770,14 @@ export function ProductoForm({
 
     if (!barcodeManuallyEdited) {
       setValue("codigoBarras", "", {
+        shouldDirty: false,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+
+    if (!qrManuallyEdited) {
+      setValue("codigoQr", "", {
         shouldDirty: false,
         shouldTouch: false,
         shouldValidate: false,
@@ -783,6 +845,20 @@ export function ProductoForm({
       shouldDirty: true,
       shouldValidate: false,
     });
+  }
+
+  function handleAppendAttributePreset(preset: AttributePreset) {
+    if (atributoFields.length >= 30) return;
+    const alreadyExists = atributos.some(
+      (atributo) =>
+        atributo?.clave?.trim().toLowerCase() ===
+        preset.clave.trim().toLowerCase(),
+    );
+    if (alreadyExists) {
+      toast.info(`"${preset.clave}" ya está en la ficha.`);
+      return;
+    }
+    appendAtributo(preset);
   }
 
   function handleModeloChange(nextModeloId: string) {
@@ -856,6 +932,7 @@ export function ProductoForm({
       ? `PRD:${base}`
       : `PRD:${tipo}-${buildLocalCodeSuffix()}`;
 
+    setQrManuallyEdited(true);
     setValue("codigoQr", nextQr, {
       shouldDirty: true,
       shouldTouch: true,
@@ -1170,1073 +1247,129 @@ export function ProductoForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(submitForm)} noValidate>
-      <FieldGroup className="gap-3 sm:gap-7">
-        <div
-          className={cn(
-            "rounded-2xl border border-border/60 border-l-[3px] bg-card/95 p-4 shadow-sm sm:p-5",
-            PRODUCT_SECTION_STYLES.blue.container,
-          )}
-        >
-          <ProductSectionHeader
-            step="1"
-            title="Clasificación y datos base"
-            tone="blue"
-            icon={Package}
-          />
-
-          <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {lockedTipo ? null : (
-            <Field
-              data-invalid={errors.tipo ? true : undefined}
-              className="md:col-span-2 lg:col-span-3"
-            >
-              <FieldLabel>Tipo *</FieldLabel>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {Object.values(TipoProducto)
-                  .filter(
-                    (tipoOption) =>
-                      tipoOption !== TipoProducto.SERVICIO ||
-                      lockedTipo === TipoProducto.SERVICIO,
-                  )
-                  .map((tipoOption) => (
-                  <button
-                    key={tipoOption}
-                    type="button"
-                    className={cn(
-                      "group relative flex min-h-20 flex-col items-start gap-1 rounded-xl border px-3 py-2.5 text-left transition-all",
-                      tipo === tipoOption
-                        ? "border-primary bg-primary/5 text-primary shadow-sm ring-1 ring-primary/20"
-                        : "border-border/80 bg-muted/20 hover:border-primary/30 hover:bg-muted/50 text-foreground",
-                    )}
-                    onClick={() => handleTipoChange(tipoOption)}
-                  >
-                    <span className={cn("text-sm font-bold", tipo === tipoOption ? "text-primary" : "")}>
-                      {TIPO_LABELS[tipoOption]}
-                    </span>
-                    <span className="text-xs leading-snug text-muted-foreground">
-                      {TIPO_DESCRIPTIONS[tipoOption]}
-                    </span>
-                    {tipo === tipoOption ? (
-                      <div className="absolute right-2 top-2 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                      </div>
-                    ) : null}
-                  </button>
-                ))}
-              </div>
-              <FieldError>{errors.tipo?.message}</FieldError>
-            </Field>
-            )}
-
-            {!isServicio ? (
-              <Field data-invalid={errors.sku ? true : undefined}>
-                <FieldLabel>SKU</FieldLabel>
-                <div className="relative">
-                  <Input
-                    {...register("sku", {
-                      onChange: () => setSkuManuallyEdited(true),
-                    })}
-                    className="pr-10"
-                    placeholder="Auto: SKU-0001"
-                    aria-invalid={!!errors.sku}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground"
-                    title="Autogenerar SKU"
-                    disabled={isFetchingSuggestedSku}
-                    onClick={() => void handleGenerateSku()}
-                  >
-                    {isFetchingSuggestedSku ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <RefreshCcw className="size-4" />
-                    )}
-                    <span className="sr-only">Autogenerar SKU</span>
-                  </Button>
-                </div>
-                <FieldDescription>
-                  {sku
-                    ? "Puedes editarlo si usas un código propio. Usa el botón para traer el sugerido por tipo y categoría."
-                    : "Si lo dejas vacío, el sistema lo genera por tipo y categoría."}
-                </FieldDescription>
-                <FieldError>{errors.sku?.message}</FieldError>
-              </Field>
-            ) : null}
-
-            <Field
-              data-invalid={errors.nombre ? true : undefined}
-              className="lg:col-span-2"
-            >
-              <FieldLabel>
-                {isServicio ? "Nombre del servicio *" : "Nombre *"}
-              </FieldLabel>
-              <Input
-                {...register("nombre")}
-                placeholder={
-                  isServicio
-                    ? "Servicio de mantenimiento preventivo"
-                    : "Nombre del producto"
-                }
-                aria-invalid={!!errors.nombre}
-              />
-              <FieldError>{errors.nombre?.message}</FieldError>
-            </Field>
-
-            <Field data-invalid={errors.categoriaId ? true : undefined}>
-              <FieldLabel>Categoría / subcategoría *</FieldLabel>
-              <SearchableSelect
-                value={categoriaId}
-                onChange={(value) =>
-                  setValue("categoriaId", value, { shouldValidate: true })
-                }
-                options={categoriaOptions}
-                placeholder="Seleccionar categoría"
-                searchPlaceholder="Buscar categoría..."
-                emptyLabel="No hay categorías para este tipo."
-                ariaLabel="Seleccionar categoría"
-                disabled={categoriaOptions.length === 0}
-                invalid={!!errors.categoriaId}
-                clearable
-                clearLabel="Quitar categoría"
-              />
-              <FieldError>{errors.categoriaId?.message}</FieldError>
-            </Field>
-
-            {!isServicio ? (
-              <Field data-invalid={errors.marcaId ? true : undefined}>
-                <FieldLabel>Marca</FieldLabel>
-                <SearchableSelect
-                  value={watch("marcaId") ?? undefined}
-                  onChange={(value) =>
-                    setValue("marcaId", value || null, {
-                      shouldValidate: true,
-                      shouldDirty: true,
-                    })
-                  }
-                  options={marcas.map((marca) => ({
-                    value: marca.id,
-                    label: marca.nombre,
-                  }))}
-                  placeholder="Seleccionar marca"
-                  searchPlaceholder="Buscar o crear marca..."
-                  emptyLabel="No hay marcas registradas"
-                  ariaLabel="Seleccionar marca"
-                  invalid={!!errors.marcaId}
-                  clearable
-                  clearLabel="Sin marca"
-                  createLabel="Crear marca"
-                  onCreateOption={async (nombre) => {
-                    try {
-                      const created = await createMarcaMutation.mutateAsync({
-                        nombre,
-                        tipos: [tipo],
-                      });
-                      const newMarca = (created as { data?: { id: string } })
-                        ?.data;
-                      if (newMarca?.id) {
-                        setValue("marcaId", newMarca.id, {
-                          shouldValidate: true,
-                          shouldDirty: true,
-                        });
-                        toast.success("Marca creada y seleccionada");
-                      }
-                    } catch (error) {
-                      toast.error(
-                        error instanceof Error
-                          ? error.message
-                          : "No se pudo crear la marca",
-                      );
-                      throw error;
-                    }
-                  }}
-                />
-                <FieldError>{errors.marcaId?.message}</FieldError>
-              </Field>
-            ) : null}
-
-            <Field data-invalid={errors.unidadMedidaId ? true : undefined}>
-              <FieldLabel>Unidad de medida *</FieldLabel>
-              <SearchableSelect
-                value={unidadMedidaId}
-                onChange={(value) =>
-                  setValue("unidadMedidaId", value, {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                  })
-                }
-                options={unidadesMedidaForTipo.map((unidad) => ({
-                  value: unidad.id,
-                  label: `${unidad.codigo} · ${unidad.nombre}`,
-                }))}
-                placeholder="Seleccionar unidad"
-                searchPlaceholder="Buscar o crear unidad..."
-                emptyLabel="No se encontraron unidades"
-                ariaLabel="Seleccionar unidad de medida"
-                invalid={!!errors.unidadMedidaId}
-                createLabel="Crear unidad"
-                onCreateOption={(label) => {
-                  const trimmed = label.trim();
-                  setUnidadDialogCodigo(trimmed.slice(0, 16).toUpperCase());
-                  setUnidadDialogNombre(trimmed);
-                  setUnidadDialogOpen(true);
-                }}
-              />
-              <FieldDescription>{UNIDAD_HINTS[tipo]}</FieldDescription>
-              <FieldError>{errors.unidadMedidaId?.message}</FieldError>
-            </Field>
-
-            {!isServicio ? (
-              <Field
-                data-invalid={
-                  errors.modeloId || errors.modelo ? true : undefined
-                }
-              >
-                <FieldLabel>
-                  {isEquipo ? "Modelo" : "Modelo / compatibilidad"}
-                </FieldLabel>
-                <SearchableSelect
-                  value={modeloId ?? undefined}
-                  onChange={handleModeloChange}
-                  options={modeloOptions}
-                  placeholder={
-                    isEquipo ? "Seleccionar modelo" : "Seleccionar modelo base"
-                  }
-                  searchPlaceholder={
-                    isEquipo
-                      ? "Buscar o crear modelo..."
-                      : "Buscar o crear compatibilidad base..."
-                  }
-                  emptyLabel="No hay modelos todavía para este tipo."
-                  ariaLabel={
-                    isEquipo
-                      ? "Seleccionar modelo"
-                      : "Seleccionar modelo o compatibilidad"
-                  }
-                  disabled={createModeloMutation.isPending}
-                  invalid={!!errors.modeloId || !!errors.modelo}
-                  clearable
-                  clearLabel="Quitar modelo"
-                  onCreateOption={handleCreateModelo}
-                  createLabel="Crear modelo"
-                />
-                <FieldDescription>
-                  Busca un modelo ya registrado o créalo ahí mismo. Si un
-                  repuesto aplica a varios, luego puedes ampliar
-                  compatibilidades.
-                </FieldDescription>
-                <FieldError>
-                  {errors.modeloId?.message || errors.modelo?.message}
-                </FieldError>
-              </Field>
-            ) : null}
-
-            {!isServicio && tipo !== TipoProducto.INSUMO ? (
-              <Field data-invalid={errors.condicion ? true : undefined}>
-                <FieldLabel>Condición</FieldLabel>
-                <Select
-                  value={watch("condicion") ?? "none"}
-                  onValueChange={(value) =>
-                    setValue(
-                      "condicion",
-                      value === "none"
-                        ? undefined
-                        : (value as CondicionProducto),
-                      { shouldValidate: true },
-                    )
-                  }
+    <form
+      id="producto-form"
+      onSubmit={handleSubmit(submitForm)}
+      noValidate
+      className="w-full"
+    >
+      {lockedTipo ? null : (
+        <div className="mb-6 flex w-full gap-1 p-1 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/40">
+          {Object.values(TipoProducto)
+            .filter(
+              (tipoOption) =>
+                tipoOption !== TipoProducto.SERVICIO ||
+                lockedTipo === TipoProducto.SERVICIO,
+            )
+            .map((tipoOption) => {
+              const isActive = tipo === tipoOption;
+              const Icon = TIPO_ICONS[tipoOption];
+              return (
+                <button
+                  key={tipoOption}
+                  type="button"
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all duration-300 relative select-none",
+                    isActive
+                      ? "bg-background text-primary shadow-xs border border-border/80 font-bold scale-[1.01]"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground active:scale-[0.99]"
+                  )}
+                  onClick={() => handleTipoChange(tipoOption)}
                 >
-                  <SelectTrigger aria-invalid={!!errors.condicion}>
-                    <SelectValue placeholder="Seleccionar condición" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectItem value="none">Sin condición</SelectItem>
-                      {Object.values(CondicionProducto).map((condicion) => (
-                        <SelectItem key={condicion} value={condicion}>
-                          {CONDICION_LABELS[condicion]}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldError>{errors.condicion?.message}</FieldError>
-              </Field>
-            ) : null}
-          </div>
+                  {Icon && <Icon className={cn("size-3.5 transition-transform duration-300", isActive ? "scale-110 text-primary" : "text-muted-foreground/75")} />}
+                  <span>{TIPO_LABELS[tipoOption]}</span>
+                </button>
+              );
+            })}
         </div>
+      )}
 
-        <div
-          className={cn(
-            "rounded-2xl border border-border/60 border-l-[3px] bg-card/95 p-4 shadow-sm sm:p-5",
-            PRODUCT_SECTION_STYLES.green.container,
-          )}
-        >
-          <ProductSectionHeader
-            step="2"
-            title="Precios, stock y reglas"
-            tone="green"
-            icon={DollarSign}
-          />
-
-          <div
-            className={cn(
-              "grid gap-4 sm:gap-6",
-              isServicio && !canViewServicioCostoReferencial
-                ? "md:grid-cols-2"
-                : "md:grid-cols-3",
-            )}
-          >
-            {canViewServicioCostoReferencial ? (
-              <Field data-invalid={errors.precioCompra ? true : undefined}>
-                <FieldLabel>
-                  {isServicio
-                    ? "Costo referencial (S/) *"
-                    : "Precio compra (S/) *"}
-                </FieldLabel>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  {...register("precioCompra", { valueAsNumber: true })}
-                  aria-invalid={!!errors.precioCompra}
-                />
-                <FieldError>{errors.precioCompra?.message}</FieldError>
+      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs">
+        <div className="grid grid-cols-1 lg:grid-cols-12">
+          <div className="lg:col-span-6">
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className="flex items-center gap-2 border-b border-border/40 pb-3">
+              <Package className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold text-foreground">Clasificación y Datos Base</h3>
+            </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field data-invalid={errors.nombre ? true : undefined} className="sm:col-span-2">
+                <FieldLabel>{isServicio ? "Nombre del servicio *" : "Nombre *"}</FieldLabel>
+                <Input {...register("nombre")} startIcon={FileText} placeholder={isServicio ? "Servicio de mantenimiento preventivo" : "Nombre del producto"} aria-invalid={!!errors.nombre} />
+                <FieldError>{errors.nombre?.message}</FieldError>
               </Field>
-            ) : null}
-
-            <Field data-invalid={errors.precioVenta ? true : undefined}>
-              <FieldLabel>
-                {isServicio ? "Precio base (S/) *" : "Precio venta (S/) *"}
-              </FieldLabel>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                {...register("precioVenta", { valueAsNumber: true })}
-                aria-invalid={!!errors.precioVenta}
-              />
-              <FieldError>{errors.precioVenta?.message}</FieldError>
-            </Field>
-
-            {!isServicio ? (
-              <Field data-invalid={errors.precioMinimo ? true : undefined}>
-                <FieldLabel>Precio mínimo (S/) *</FieldLabel>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  {...register("precioMinimo", { valueAsNumber: true })}
-                  aria-invalid={!!errors.precioMinimo}
-                />
-                <FieldDescription>
-                  Precio piso autorizado para descuentos.
-                </FieldDescription>
-                <FieldError>{errors.precioMinimo?.message}</FieldError>
+              <Field data-invalid={errors.categoriaId ? true : undefined}>
+                <FieldLabel>Categoría / subcategoría *</FieldLabel>
+                <SearchableSelect value={categoriaId} onChange={(value) => setValue("categoriaId", value, { shouldValidate: true })} options={categoriaOptions} placeholder="Seleccionar categoría" searchPlaceholder="Buscar categoría..." emptyLabel="No hay categorías para este tipo." ariaLabel="Seleccionar categoría" disabled={categoriaOptions.length === 0} invalid={!!errors.categoriaId} clearable clearLabel="Quitar categoría" />
+                <FieldError>{errors.categoriaId?.message}</FieldError>
               </Field>
-            ) : null}
-
-            {!isServicio ? (
-              <Field data-invalid={errors.stockMinimo ? true : undefined}>
-                <FieldLabel>Stock mínimo de alerta</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  {...register("stockMinimo", { valueAsNumber: true })}
-                  aria-invalid={!!errors.stockMinimo}
-                />
-                <FieldDescription>
-                  No es stock inicial. Sirve como umbral para alertas; el stock
-                  real ingresa por compras o movimientos de inventario.
-                </FieldDescription>
-                <FieldError>{errors.stockMinimo?.message}</FieldError>
-              </Field>
-            ) : (
-              <Field data-invalid={errors.tiempoEstimadoMin ? true : undefined}>
-                <FieldLabel>Tiempo estimado (min)</FieldLabel>
-                <Input
-                  type="number"
-                  min="0"
-                  step="1"
-                  {...register("tiempoEstimadoMin", { valueAsNumber: true })}
-                  aria-invalid={!!errors.tiempoEstimadoMin}
-                />
-                <FieldError>{errors.tiempoEstimadoMin?.message}</FieldError>
-              </Field>
-            )}
-
-            {tieneNumeroSerie ? (
-              <>
-                <Field data-invalid={errors.mesesGarantia ? true : undefined}>
-                  <FieldLabel>Meses de garantía</FieldLabel>
-                  <Input
-                    type="number"
-                    min="0"
-                    max="120"
-                    step="1"
-                    placeholder="12"
-                    {...register("mesesGarantia", {
-                      setValueAs: (value) => {
-                        if (value === "" || value === null || value === undefined) {
-                          return undefined;
-                        }
-                        const num = Number(value);
-                        return Number.isFinite(num) ? num : undefined;
-                      },
-                    })}
-                    aria-invalid={!!errors.mesesGarantia}
-                  />
-                  <FieldDescription>
-                    Cobertura estándar al vender este equipo. Por defecto 12
-                    meses.
-                  </FieldDescription>
-                  <FieldError>{errors.mesesGarantia?.message}</FieldError>
+              {!isServicio ? (
+                <Field data-invalid={errors.marcaId ? true : undefined}>
+                  <FieldLabel>Marca</FieldLabel>
+                  <SearchableSelect value={watch("marcaId") ?? undefined} onChange={(value) => setValue("marcaId", value || null, { shouldValidate: true, shouldDirty: true })} options={marcas.map((marca) => ({ value: marca.id, label: marca.nombre }))} placeholder="Seleccionar marca" searchPlaceholder="Buscar o crear marca..." emptyLabel="No hay marcas registradas" ariaLabel="Seleccionar marca" invalid={!!errors.marcaId} clearable clearLabel="Sin marca" createLabel="Crear marca" onCreateOption={async (nombre) => { try { const created = await createMarcaMutation.mutateAsync({ nombre, tipos: [tipo] }); const newMarca = (created as { data?: { id: string } })?.data; if (newMarca?.id) { setValue("marcaId", newMarca.id, { shouldValidate: true, shouldDirty: true }); toast.success("Marca creada y seleccionada"); } } catch (error) { toast.error(error instanceof Error ? error.message : "No se pudo crear la marca"); throw error; } }} />
+                  <FieldError>{errors.marcaId?.message}</FieldError>
                 </Field>
-
-                <Field
-                  data-invalid={errors.garantiaMaxCopias ? true : undefined}
-                >
-                  <FieldLabel>Garantía máxima por copias (opcional)</FieldLabel>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    placeholder="Ej: 50000"
-                    {...register("garantiaMaxCopias", {
-                      setValueAs: (value) => {
-                        if (value === "" || value === null || value === undefined) {
-                          return null;
-                        }
-                        const num = Number(value);
-                        return Number.isFinite(num) ? num : null;
-                      },
-                    })}
-                    aria-invalid={!!errors.garantiaMaxCopias}
-                  />
-                  <FieldDescription>
-                    Tope de copias cubiertas. Si se alcanza antes de vencer la
-                    garantía por tiempo, esta se considera consumida. Déjalo
-                    vacío si la garantía solo depende del tiempo.
-                  </FieldDescription>
-                  <FieldError>{errors.garantiaMaxCopias?.message}</FieldError>
-                </Field>
-              </>
-            ) : null}
-
-            {mode === "create" && !isServicio && !isEquipo ? (
-              <>
-                <Field data-invalid={stockInicialError ? true : undefined}>
-                  <FieldLabel>Stock inicial (opcional)</FieldLabel>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="1"
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={stockInicial}
-                    onChange={(event) => {
-                      setStockInicial(event.target.value);
-                      if (stockInicialError) setStockInicialError(null);
-                    }}
-                    aria-invalid={!!stockInicialError}
-                  />
-                  <FieldDescription>
-                    Genera un movimiento AJUSTE_POSITIVO al guardar. Déjalo en 0
-                    si vas a registrar la entrada por compras.
-                  </FieldDescription>
-                  <FieldError>{stockInicialError ?? undefined}</FieldError>
-                </Field>
-
-                <Field>
-                  <FieldLabel>Almacén destino</FieldLabel>
-                  <SearchableSelect
-                    value={almacenInicialId || undefined}
-                    onChange={(value) => setAlmacenInicialId(value || "")}
-                    options={almacenesActivos.map((almacen) => ({
-                      value: almacen.id,
-                      label: almacen.esPrincipal
-                        ? `${almacen.nombre} · principal`
-                        : almacen.nombre,
-                    }))}
-                    placeholder={
-                      almacenesActivos.length === 0
-                        ? "Sin almacenes activos"
-                        : "Seleccionar almacén"
-                    }
-                    searchPlaceholder="Buscar almacén..."
-                    emptyLabel="No hay almacenes activos"
-                    ariaLabel="Almacén destino del stock inicial"
-                    disabled={almacenesActivos.length === 0}
-                  />
-                  <FieldDescription>
-                    Por defecto se elige el almacén principal.
-                  </FieldDescription>
-                </Field>
-              </>
-            ) : mode === "create" && isEquipo ? (
-              <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-xs text-muted-foreground md:col-span-2">
-                En Productos solo se crea la ficha de catálogo del equipo. Las
-                unidades físicas, series, almacén real y garantía se registran
-                después desde el módulo Equipos.
-              </div>
-            ) : null}
-
-            {!isServicio ? (
-              <Field data-invalid={errors.codigoBarras ? true : undefined}>
-                <FieldLabel>Código de barras</FieldLabel>
-                <div className="relative">
-                  <Barcode className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    {...register("codigoBarras", {
-                      onChange: () => setBarcodeManuallyEdited(true),
-                    })}
-                    className="pl-9 pr-10"
-                    placeholder="Se autocompleta con el SKU o escanéalo"
-                    aria-invalid={!!errors.codigoBarras}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground"
-                    title="Autogenerar código de barras"
-                    onClick={handleGenerateBarcode}
-                  >
-                    <RefreshCcw className="size-4" />
-                    <span className="sr-only">Autogenerar código de barras</span>
-                  </Button>
-                </div>
-                <FieldDescription>
-                  Si el proveedor ya trae código, escanéalo. Si no, el sistema usa
-                  el SKU como código interno.
-                </FieldDescription>
-                <FieldError>{errors.codigoBarras?.message}</FieldError>
+              ) : null}
+              <Field data-invalid={errors.unidadMedidaId ? true : undefined}>
+                <FieldLabel>Unidad de medida *</FieldLabel>
+                <SearchableSelect value={unidadMedidaId} onChange={(value) => setValue("unidadMedidaId", value, { shouldValidate: true, shouldDirty: true })} options={unidadesMedida.map((unidad) => ({ value: unidad.id, label: unidad.codigo + " · " + unidad.nombre }))} placeholder="Seleccionar unidad" searchPlaceholder="Buscar o crear unidad..." emptyLabel="No se encontraron unidades" ariaLabel="Seleccionar unidad de medida" invalid={!!errors.unidadMedidaId} createLabel="Crear unidad" onCreateOption={(label) => { const trimmed = label.trim(); setUnidadDialogCodigo(trimmed.slice(0, 16).toUpperCase()); setUnidadDialogNombre(trimmed); setUnidadDialogOpen(true); }} />
+                <FieldError>{errors.unidadMedidaId?.message}</FieldError>
               </Field>
-            ) : null}
-
-            {!isEquipo && !isServicio ? (
-              <Field data-invalid={errors.codigoQr ? true : undefined}>
-                <FieldLabel>Código QR</FieldLabel>
-                <div className="relative">
-                  <QrCode className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    {...register("codigoQr")}
-                    className="pl-9 pr-10"
-                    placeholder="Se autogenera si lo dejas vacío"
-                    aria-invalid={!!errors.codigoQr}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground"
-                    title="Autogenerar código QR"
-                    onClick={handleGenerateQr}
-                  >
-                    <RefreshCcw className="size-4" />
-                    <span className="sr-only">Autogenerar código QR</span>
-                  </Button>
-                </div>
-                <FieldError>{errors.codigoQr?.message}</FieldError>
-              </Field>
-            ) : isEquipo ? (
-              <div className="rounded-xl border border-border/60 bg-muted/20 px-3 py-3 text-xs text-muted-foreground md:col-span-2">
-                El producto tipo equipo usa SKU y código de barras como ficha de
-                catálogo. El QR operativo se genera en cada unidad física desde
-                Equipos.
-              </div>
-            ) : null}
+              {!isServicio ? (
+                <Field data-invalid={errors.modeloId || errors.modelo ? true : undefined}>
+                  <FieldLabel>{isEquipo ? "Modelo" : "Modelo / compatibilidad"}</FieldLabel>
+                  <SearchableSelect value={modeloId ?? undefined} onChange={handleModeloChange} options={modeloOptions} placeholder={isEquipo ? "Seleccionar modelo" : "Seleccionar modelo base"} searchPlaceholder={isEquipo ? "Buscar o crear modelo..." : "Buscar o crear compatibilidad base..."} emptyLabel="No hay modelos todavía para este tipo." ariaLabel={isEquipo ? "Seleccionar modelo" : "Seleccionar modelo o compatibilidad"} disabled={createModeloMutation.isPending} invalid={!!errors.modeloId || !!errors.modelo} clearable clearLabel="Quitar modelo" onCreateOption={handleCreateModelo} createLabel="Crear modelo" />
+                  <FieldError>{errors.modeloId?.message || errors.modelo?.message}</FieldError>
+                </Field>
+              ) : null}
+              {!isServicio && tipo !== TipoProducto.INSUMO ? (
+                <Field data-invalid={errors.condicion ? true : undefined}>
+                  <FieldLabel>Condición</FieldLabel>
+                  <Select value={watch("condicion") ?? "none"} onValueChange={(value) => setValue("condicion", value === "none" ? undefined : (value as CondicionProducto), { shouldValidate: true })}>
+                    <SelectTrigger aria-invalid={!!errors.condicion}><SelectValue placeholder="Seleccionar condición" /></SelectTrigger>
+                    <SelectContent><SelectGroup><SelectItem value="none">Sin condición</SelectItem>{Object.values(CondicionProducto).map((condicion) => (<SelectItem key={condicion} value={condicion}>{CONDICION_LABELS[condicion]}</SelectItem>))}</SelectGroup></SelectContent>
+                  </Select>
+                  <FieldError>{errors.condicion?.message}</FieldError>
+                </Field>
+              ) : null}
+            </div>
           </div>
-
-          {!isServicio ? (
-            <ProductCodePreview
-              sku={sku}
-              barcodeValue={watch("codigoBarras")}
-              qrValue={isEquipo ? undefined : watch("codigoQr")}
-              showQr={!isEquipo}
-              className="mt-4"
-              compact
-            />
-          ) : null}
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Regla de stock</p>
-              <p>
-                {isServicio
-                  ? "No maneja inventario."
-                  : isEquipo
-                    ? "El stock físico se controla por unidades registradas en Equipos."
-                  : "Maneja inventario y movimientos de stock."}
-              </p>
+          <div className="border-t border-border/40" />
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className="flex items-center gap-2 border-b border-border/40 pb-3"><DollarSign className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Precios y Finanzas</h3></div>
+            <div className="space-y-4">
+              {canViewServicioCostoReferencial ? (<Field data-invalid={errors.precioCompra ? true : undefined}><FieldLabel>{isServicio ? "Costo referencial (S/) *" : "Precio compra (S/) *"}</FieldLabel><Input type="number" step="0.01" min="0" startIcon={DollarSign} {...register("precioCompra", { valueAsNumber: true })} aria-invalid={!!errors.precioCompra} /><FieldError>{errors.precioCompra?.message}</FieldError></Field>) : null}
+              <Field data-invalid={errors.precioVenta ? true : undefined}><FieldLabel>{isServicio ? "Precio base (S/) *" : "Precio venta (S/) *"}</FieldLabel><Input type="number" step="0.01" min="0" startIcon={DollarSign} {...register("precioVenta", { valueAsNumber: true })} aria-invalid={!!errors.precioVenta} /><FieldError>{errors.precioVenta?.message}</FieldError></Field>
+              {!isServicio ? (<Field data-invalid={errors.precioMinimo ? true : undefined}><FieldLabel>Precio mínimo (S/) *</FieldLabel><Input type="number" step="0.01" min="0" startIcon={DollarSign} {...register("precioMinimo", { valueAsNumber: true })} aria-invalid={!!errors.precioMinimo} /><FieldError>{errors.precioMinimo?.message}</FieldError></Field>) : null}
             </div>
-
-            <div className="rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Serialización</p>
-              <p>
-                {isEquipo
-                  ? "Cada unidad física se registra luego en Equipos."
-                  : "No usa número de serie por unidad."}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-              <p className="font-medium text-foreground">Consumo</p>
-              <p>
-                {tipo === TipoProducto.INSUMO
-                  ? "Se consume en operación o soporte."
-                  : "No se marca como consumible."}
-              </p>
-            </div>
-
-            <Field orientation="horizontal">
-              <FieldLabel>Activo</FieldLabel>
-              <Switch
-                checked={Boolean(activo)}
-                onCheckedChange={(value) =>
-                  setValue("activo", value, {
-                    shouldValidate: true,
-                    shouldDirty: true,
-                  })
-                }
-              />
-            </Field>
           </div>
-
-          {isServicio ? (
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <Field orientation="horizontal">
-                <FieldLabel>Requiere repuestos</FieldLabel>
-                <Switch
-                  checked={Boolean(requiereRepuestos)}
-                  onCheckedChange={(value) =>
-                    setValue("requiereRepuestos", value, {
-                      shouldValidate: true,
-                    })
-                  }
-                />
-              </Field>
-              <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                <Clock className="size-4" />
-                Los servicios quedan fuera del stock y pueden venderse como
-                actividad.
-              </div>
+          <div className="border-t border-border/40" />
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className="flex items-center gap-2 border-b border-border/40 pb-3"><Boxes className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Inventario y Códigos</h3></div>
+            <div className="space-y-4">
+              {!isServicio ? (<Field data-invalid={errors.sku ? true : undefined}><FieldLabel>SKU</FieldLabel><div className="relative"><Input startIcon={Hash} {...register("sku", { onChange: () => setSkuManuallyEdited(true) })} className="pr-10 text-left font-mono text-xs sm:text-sm" placeholder="Auto: SKU-0001" aria-invalid={!!errors.sku} /><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground" title="Autogenerar SKU" disabled={isFetchingSuggestedSku} onClick={() => void handleGenerateSku()}>{isFetchingSuggestedSku ? <Loader2 className="size-4 animate-spin" /> : <RefreshCcw className="size-4" />}</Button></div><FieldError>{errors.sku?.message}</FieldError></Field>) : null}
+              {!isServicio ? (<Field data-invalid={errors.codigoBarras ? true : undefined}><FieldLabel>Código de barras</FieldLabel><div className="relative"><Input startIcon={Barcode} {...register("codigoBarras", { onChange: () => setBarcodeManuallyEdited(true) })} className="pr-10 text-left font-mono text-xs sm:text-sm" placeholder="Se autocompleta con el SKU" aria-invalid={!!errors.codigoBarras} /><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground" title="Autogenerar código" onClick={handleGenerateBarcode}><RefreshCcw className="size-4" /></Button></div><FieldError>{errors.codigoBarras?.message}</FieldError></Field>) : null}
+              {!isEquipo && !isServicio ? (<Field data-invalid={errors.codigoQr ? true : undefined}><FieldLabel>Código QR</FieldLabel><div className="relative"><Input startIcon={QrCode} {...register("codigoQr", { onChange: () => setQrManuallyEdited(true) })} className="pr-10 text-left font-mono text-xs sm:text-sm" placeholder="QR automático" aria-invalid={!!errors.codigoQr} /><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground" title="Autogenerar QR" onClick={handleGenerateQr}><RefreshCcw className="size-4" /></Button></div><FieldError>{errors.codigoQr?.message}</FieldError></Field>) : null}
+              {!isServicio ? (<Field data-invalid={errors.stockMinimo ? true : undefined}><FieldLabel>Stock mínimo de alerta</FieldLabel><Input type="number" min="0" step="1" startIcon={Hash} {...register("stockMinimo", { valueAsNumber: true })} aria-invalid={!!errors.stockMinimo} /><FieldError>{errors.stockMinimo?.message}</FieldError></Field>) : (<Field data-invalid={errors.tiempoEstimadoMin ? true : undefined}><FieldLabel>Tiempo estimado (min)</FieldLabel><Input type="number" min="0" step="1" startIcon={Clock} {...register("tiempoEstimadoMin", { valueAsNumber: true })} aria-invalid={!!errors.tiempoEstimadoMin} /><FieldError>{errors.tiempoEstimadoMin?.message}</FieldError></Field>)}
+              {tieneNumeroSerie ? (<><Field data-invalid={errors.mesesGarantia ? true : undefined}><FieldLabel>Meses de garantía</FieldLabel><Input type="number" min="0" max="120" step="1" placeholder="12" startIcon={Clock} {...register("mesesGarantia", { setValueAs: (value) => value === "" || value === null || value === undefined ? undefined : Number(value) })} aria-invalid={!!errors.mesesGarantia} /><FieldError>{errors.mesesGarantia?.message}</FieldError></Field><Field data-invalid={errors.garantiaMaxCopias ? true : undefined}><FieldLabel>Garantía máxima por copias</FieldLabel><Input type="number" min="0" step="1" placeholder="Ej: 50000" startIcon={Hash} {...register("garantiaMaxCopias", { setValueAs: (value) => value === "" || value === null || value === undefined ? null : Number(value) })} aria-invalid={!!errors.garantiaMaxCopias} /><FieldError>{errors.garantiaMaxCopias?.message}</FieldError></Field></>) : null}
+              {mode === "create" && !isServicio && !isEquipo ? (<><Field data-invalid={stockInicialError ? true : undefined}><FieldLabel>Stock inicial (opcional)</FieldLabel><Input type="number" min="0" step="1" placeholder="0" startIcon={Boxes} value={stockInicial} onChange={(event) => { setStockInicial(event.target.value); if (stockInicialError) setStockInicialError(null); }} aria-invalid={!!stockInicialError} /><FieldError>{stockInicialError ?? undefined}</FieldError></Field><Field><FieldLabel>Almacén destino</FieldLabel><SearchableSelect value={almacenInicialId || undefined} onChange={(value) => setAlmacenInicialId(value || "")} options={almacenesActivos.map((almacen) => ({ value: almacen.id, label: almacen.esPrincipal ? almacen.nombre + " · principal" : almacen.nombre }))} placeholder={almacenesActivos.length === 0 ? "Sin almacenes" : "Seleccionar almacén"} searchPlaceholder="Buscar almacén..." emptyLabel="No hay almacenes activos" ariaLabel="Almacén destino del stock inicial" disabled={almacenesActivos.length === 0} /></Field></>) : mode === "create" && isEquipo ? (<div className="rounded-xl border border-border bg-muted/20 p-3 text-[10px] leading-relaxed text-muted-foreground">En Productos solo se crea la ficha del equipo. Las series y almacenes reales se registran desde el módulo Equipos.</div>) : null}
             </div>
-          ) : null}
-        </div>
-
-        <div
-          className={cn(
-            "rounded-2xl border border-border/60 border-l-[3px] bg-card/95 p-4 shadow-sm sm:p-5",
-            PRODUCT_SECTION_STYLES.orange.container,
-          )}
-        >
-          <ProductSectionHeader
-            step="3"
-            title="Imágenes y descripción"
-            tone="orange"
-            icon={ImagePlus}
-          />
-
-          <div className="space-y-4">
-            <Field data-invalid={errors.descripcion ? true : undefined}>
-              <FieldLabel>Descripción</FieldLabel>
-              <Textarea
-                {...register("descripcion")}
-                placeholder="Descripción, compatibilidad, observaciones comerciales o alcance del servicio"
-                rows={4}
-                aria-invalid={!!errors.descripcion}
-              />
-              <FieldError>{errors.descripcion?.message}</FieldError>
-            </Field>
-
-            {!isServicio && (
-            <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)] xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start">
-              <Tabs defaultValue="upload" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-3">
-                  <TabsTrigger value="upload" className="text-xs">Subir archivo</TabsTrigger>
-                  <TabsTrigger value="url" className="text-xs">Por URL</TabsTrigger>
-                </TabsList>
-                <TabsContent value="upload" className="mt-0 space-y-3">
-                  <Field>
-                    <label
-                      className={cn(
-                        "flex h-[180px] cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed px-4 py-5 text-center transition-colors",
-                        isDraggingImages
-                          ? "border-primary bg-primary/6 text-foreground"
-                          : "border-border/80 bg-muted/25 text-muted-foreground hover:bg-muted/40",
-                      )}
-                      onDragOver={(event) => {
-                        event.preventDefault();
-                        setIsDraggingImages(true);
-                      }}
-                      onDragLeave={(event) => {
-                        event.preventDefault();
-                        setIsDraggingImages(false);
-                      }}
-                      onDrop={(event) => void handleImageDrop(event)}
-                    >
-                      <div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10">
-                        {isUploadingImages ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Upload className="size-4" />
-                        )}
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-xs font-medium text-foreground">
-                          {isUploadingImages
-                            ? "Subiendo..."
-                            : "Arrastra o haz clic aquí"}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground leading-snug">
-                          JPG, PNG, WEBP hasta 5MB.
-                        </p>
-                      </div>
-                      <Input
-                        type="file"
-                        accept={getUploadAcceptAttr("image")}
-                        multiple
-                        className="hidden"
-                        disabled={isUploadingImages || isLoading}
-                        onChange={(event) =>
-                          void handleImageFiles(event.target.files)
-                        }
-                      />
-                    </label>
-                  </Field>
-                </TabsContent>
-                <TabsContent value="url" className="mt-0 space-y-3">
-                  <Field>
-                    <div className="flex h-[180px] flex-col justify-center gap-3 rounded-xl border border-border/80 bg-muted/10 px-4 py-5">
-                      <FieldLabel className="text-xs">URL directa de la imagen</FieldLabel>
-                      <div className="flex flex-col gap-2">
-                        <Input
-                          value={manualImageUrl}
-                          onChange={(event) =>
-                            setManualImageUrl(event.target.value)
-                          }
-                          placeholder="https://..."
-                          className="text-xs h-9"
-                        />
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          className="h-9 w-full text-xs"
-                          onClick={() => void addManualImage()}
-                        >
-                          Agregar imagen
-                        </Button>
-                      </div>
-                    </div>
-                  </Field>
-                </TabsContent>
-              </Tabs>
-
-              <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      Archivos cargados
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {imagenes.length > 0
-                        ? `${imagenes.length} imagen${imagenes.length === 1 ? "" : "es"} lista${imagenes.length === 1 ? "" : "s"} para este producto.`
-                        : "Las imágenes que subas aparecerán aquí para elegir la principal."}
-                    </p>
-                  </div>
-                  {imagenes.length > 0 ? (
-                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                      {imagenes.length}
-                    </span>
-                  ) : null}
-                </div>
-
-                {imagenes.length > 0 ? (
-                  <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                    {imagenes.map((image, index) => {
-                      return (
-                        <div
-                          key={`${image.url}-${index}`}
-                          className={cn(
-                            "group relative w-36 shrink-0 overflow-hidden rounded-xl border bg-card text-left shadow-sm transition-all",
-                            image.esPrincipal
-                              ? "border-primary ring-1 ring-primary/20"
-                              : "border-border/70 hover:border-primary/40",
-                          )}
-                        >
-                          <div className="aspect-square bg-muted/30">
-                            <img
-                              src={
-                                imagePreviewUrls[image.url] ??
-                                getApiAssetUrl(image.url)
-                              }
-                              alt={image.nombre ?? "Imagen"}
-                              className="size-full object-cover mix-blend-multiply"
-                              referrerPolicy="no-referrer"
-                            />
-                          </div>
-                          <div className="absolute inset-x-0 top-0 flex justify-between p-1.5 opacity-0 transition-opacity group-hover:opacity-100 bg-gradient-to-b from-black/50 to-transparent">
-                            <div className="flex gap-1">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon-sm"
-                                className="h-6 w-6 rounded text-[10px] bg-white/90 text-foreground hover:bg-white"
-                                disabled={index <= 0}
-                                aria-label="Mover a la izquierda"
-                                onClick={() => {
-                                  setManualSelectedImageUrl(image.url);
-                                  moveSelectedImage("up");
-                                }}
-                              >
-                                <ArrowUp className="size-3 -rotate-90" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon-sm"
-                                className="h-6 w-6 rounded text-[10px] bg-white/90 text-foreground hover:bg-white"
-                                disabled={index >= imagenes.length - 1}
-                                aria-label="Mover a la derecha"
-                                onClick={() => {
-                                  setManualSelectedImageUrl(image.url);
-                                  moveSelectedImage("down");
-                                }}
-                              >
-                                <ArrowDown className="size-3 -rotate-90" />
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="icon-sm"
-                                className="h-6 w-6 rounded text-[10px] bg-white/90 text-foreground hover:bg-white ml-1"
-                                onClick={() => {
-                                  window.open(imagePreviewUrls[image.url] ?? getApiAssetUrl(image.url), '_blank');
-                                }}
-                                aria-label="Ver imagen completa"
-                              >
-                                <Eye className="size-3" />
-                              </Button>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="icon-sm"
-                              className="h-6 w-6 rounded"
-                              aria-label="Eliminar"
-                              onClick={() => removeImageAt(index)}
-                            >
-                              <Trash2 className="size-3" />
-                            </Button>
-                          </div>
-                          <div className="flex flex-col gap-1.5 p-2">
-                            <span className="truncate text-[10px] font-medium text-foreground">
-                              {image.nombre ?? `Img ${index + 1}`}
-                            </span>
-                            <Button
-                              type="button"
-                              variant={image.esPrincipal ? "secondary" : "outline"}
-                              size="sm"
-                              className={cn("h-6 w-full text-[10px] font-semibold px-2", image.esPrincipal && "bg-primary/10 text-primary hover:bg-primary/20 border-0")}
-                              onClick={() => {
-                                setManualSelectedImageUrl(image.url);
-                                setTimeout(() => markSelectedImageAsPrincipal(), 0);
-                              }}
-                            >
-                              {image.esPrincipal ? "Principal" : "Marcar"}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="flex min-h-40 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/70 bg-muted/15 px-4 py-6 text-center">
-                    <div className="flex size-10 items-center justify-center rounded-2xl bg-muted/80 text-muted-foreground">
-                      <ImagePlus className="size-5" />
-                    </div>
-                    <p className="text-sm font-medium text-foreground">
-                      Todavía no hay imágenes cargadas
-                    </p>
-                    <p className="max-w-sm text-xs text-muted-foreground">
-                      Puedes arrastrarlas, elegir varias a la vez o pegar un
-                      enlace directo para completar la ficha visual del
-                      producto.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-            )}
           </div>
         </div>
-
-        {!isServicio && (
-        <div
-          className={cn(
-            "rounded-2xl border border-border/60 border-l-[3px] bg-card/95 p-4 shadow-sm sm:p-5",
-            PRODUCT_SECTION_STYLES.purple.container,
-          )}
-        >
-          <ProductSectionHeader
-            step="4"
-            title="Atributos técnicos"
-            tone="purple"
-            icon={Sparkles}
-          />
-
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">
-              Agrega características flexibles del producto: USB, táctil,
-              dúplex, conexión Wi-Fi, voltaje, etc. Se mostrarán en la ficha del
-              producto y en el catálogo público.
-            </p>
-
-            <div className="space-y-2">
-              {atributoFields.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/70 bg-muted/15 p-4 text-center text-xs text-muted-foreground">
-                  Aún no agregaste atributos. Pulsa “Agregar atributo” para
-                  empezar.
-                </div>
-              ) : (
-                atributoFields.map((field, index) => {
-                  const claveError =
-                    errors.atributos?.[index]?.clave?.message;
-                  const valorError =
-                    errors.atributos?.[index]?.valor?.message;
-                  return (
-                    <div
-                      key={field.id}
-                      className="group flex gap-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,2fr)_auto] items-start"
-                    >
-                      <div className="flex flex-col gap-0.5 pt-1.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <button
-                          type="button"
-                          className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-                          onClick={() => moveAtributo(index, index - 1)}
-                          disabled={index <= 0}
-                          aria-label="Mover atributo hacia arriba"
-                        >
-                          <ArrowUp className="size-3" />
-                        </button>
-                        <button
-                          type="button"
-                          className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent"
-                          onClick={() => moveAtributo(index, index + 1)}
-                          disabled={index >= atributoFields.length - 1}
-                          aria-label="Mover atributo hacia abajo"
-                        >
-                          <ArrowDown className="size-3" />
-                        </button>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <Input
-                          {...register(`atributos.${index}.clave` as const)}
-                          placeholder="Clave (ej. usb, tactil)"
-                          aria-invalid={!!claveError}
-                        />
-                        {claveError ? (
-                          <p className="mt-1 text-xs text-destructive">
-                            {claveError}
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex-[2] min-w-0">
-                        <Input
-                          {...register(`atributos.${index}.valor` as const)}
-                          placeholder="Valor (ej. sí, 3.0, 220V)"
-                          aria-invalid={!!valorError}
-                        />
-                        {valorError ? (
-                          <p className="mt-1 text-xs text-destructive">
-                            {valorError}
-                          </p>
-                        ) : null}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeAtributo(index)}
-                        aria-label={`Eliminar atributo ${index + 1}`}
-                        className="size-9 self-start text-muted-foreground hover:text-destructive shrink-0"
-                      >
-                        <X className="size-4" />
-                      </Button>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              onClick={() =>
-                appendAtributo({ clave: "", valor: "" })
-              }
-              disabled={atributoFields.length >= 30}
-            >
-              <Plus className="size-4" />
-              Agregar atributo
-            </Button>
-
-            {errors.atributos &&
-            typeof errors.atributos.message === "string" ? (
-              <p className="text-xs text-destructive">
-                {errors.atributos.message}
-              </p>
-            ) : null}
-          </div>
+          <div className="border-t border-border/40 lg:col-span-6 lg:border-l lg:border-t-0">
+          {!isServicio && (<div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Imágenes del producto</h3></div><div className="space-y-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-muted/10">{selectedImageUrl ? (<><img src={imagePreviewUrls[selectedImageUrl] ?? getApiAssetUrl(selectedImageUrl)} alt={selectedImage?.nombre ?? "Vista previa"} className="size-full object-contain mix-blend-multiply" referrerPolicy="no-referrer" /><div className="absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-black/50 to-transparent p-2"><span className="rounded-md bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">{selectedImage?.esPrincipal ? "Principal" : "Secundaria"}</span><Button type="button" variant="destructive" size="icon" className="size-6 rounded-lg bg-red-600 text-white hover:bg-red-700" onClick={() => selectedImageIndex >= 0 && removeImageAt(selectedImageIndex)}><Trash2 className="size-3" /></Button></div>{!selectedImage?.esPrincipal && (<div className="absolute bottom-2 left-2"><Button type="button" variant="secondary" size="sm" className="h-6 rounded-lg bg-white/95 text-[9px] font-bold text-foreground hover:bg-white" onClick={() => { setTimeout(() => markSelectedImageAsPrincipal(), 0); }}>Principal</Button></div>)}</>) : (<div className="flex flex-col items-center justify-center p-4 text-center text-muted-foreground/60"><ImagePlus className="mb-2 size-8 stroke-[1.5]" /><p className="text-xs font-semibold text-foreground">Sin imágenes</p><p className="text-[10px] text-muted-foreground">Sube archivos a la galería</p></div>)}</div><Field><label className={cn("flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-all duration-300 hover:border-primary/50", isDraggingImages ? "scale-[1.01] border-primary bg-primary/5" : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/30")} onDragOver={(event) => { event.preventDefault(); setIsDraggingImages(true); }} onDragLeave={(event) => { event.preventDefault(); setIsDraggingImages(false); }} onDrop={(event) => void handleImageDrop(event)}><div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">{isUploadingImages ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}</div><div className="space-y-0.5"><p className="text-xs font-semibold text-foreground">{isUploadingImages ? "Subiendo..." : "Arrastra o haz clic"}</p><p className="text-[9px] text-muted-foreground">Formatos: JPG, PNG, WEBP.</p></div><Input type="file" accept={getUploadAcceptAttr("image")} multiple className="hidden" disabled={isUploadingImages || isLoading} onChange={(event) => void handleImageFiles(event.target.files)} /></label></Field></div>{imagenes.length > 0 && (<div className="space-y-1.5"><span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Galería ({imagenes.length})</span><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">{imagenes.map((image, index) => (<div key={image.url + "-" + index} onClick={() => setManualSelectedImageUrl(image.url)} className={cn("relative size-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border bg-card transition-all", image.url === selectedImageUrl ? "scale-95 border-primary ring-2 ring-primary/20" : "border-border/70 hover:border-primary/40")}><img src={imagePreviewUrls[image.url] ?? getApiAssetUrl(image.url)} alt={image.nombre ?? "Imagen"} className="size-full object-cover mix-blend-multiply" referrerPolicy="no-referrer" />{image.esPrincipal && (<div className="absolute right-1 top-1 size-2 rounded-full bg-primary" />)}</div>))}</div></div>)}<div className="border-t border-border/40 pt-2">{!showUrlInput ? (<button type="button" className="text-[10px] font-bold text-primary hover:underline" onClick={() => setShowUrlInput(true)}>+ Agregar imagen por URL</button>) : (<div className="space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-foreground">Agregar imagen por URL</span><button type="button" className="text-[10px] text-muted-foreground hover:text-foreground" onClick={() => { setShowUrlInput(false); setManualImageUrl(""); }}>Ocultar</button></div><div className="flex gap-2"><Input value={manualImageUrl} onChange={(event) => setManualImageUrl(event.target.value)} placeholder="https://ejemplo.com/imagen.jpg" className="h-8 flex-1 text-xs" /><Button type="button" variant="secondary" size="sm" className="h-8 shrink-0 px-3 text-xs font-semibold" onClick={() => void addManualImage()}>Añadir</Button></div></div>)}</div></div></div>)}
+          {!isServicio && <div className="border-t border-border/40" />}
+          <div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Descripción comercial</h3></div><Field data-invalid={errors.descripcion ? true : undefined}>{(() => { const { ref: registeredRef, onBlur, name } = register("descripcion"); return (<RichDescriptionEditor ref={registeredRef} name={name} value={descripcion} onBlur={onBlur} onValueChange={(nextValue) => setValue("descripcion", nextValue, { shouldDirty: true, shouldTouch: true, shouldValidate: false })} aria-invalid={!!errors.descripcion} />); })()}<FieldError>{errors.descripcion?.message}</FieldError></Field></div>
+          {!isServicio && (<><div className="border-t border-border/40" /><div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Sparkles className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">{attributeUi.title}</h3></div><div className="space-y-4"><div className="rounded-xl border border-border/70 bg-muted/15 p-3.5"><p className="text-xs font-semibold text-foreground">{TIPO_LABELS[tipo]}</p><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{attributeUi.description}</p><div className="mt-2.5 flex flex-wrap gap-1.5">{attributeUi.presets.map((preset) => (<Button key={preset.clave} type="button" variant="outline" size="sm" className="h-7 rounded-full px-2.5 text-[10px]" onClick={() => handleAppendAttributePreset(preset)} disabled={atributoFields.length >= 30}><Plus className="size-3" />{preset.clave}</Button>))}</div></div><div className="space-y-2">{atributoFields.length === 0 ? (<div className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-center"><Sparkles className="size-4 text-muted-foreground/50" /><p className="text-xs font-semibold text-foreground">Sin datos adicionales</p><p className="max-w-md text-[10px] text-muted-foreground">{attributeUi.emptyText}</p></div>) : (atributoFields.map((field, index) => { const claveError = errors.atributos?.[index]?.clave?.message; const valorError = errors.atributos?.[index]?.valor?.message; const claveName = `atributos.${index}.clave` as const; const valorName = `atributos.${index}.valor` as const; return (<div key={field.id} className="group flex items-start gap-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,2fr)_auto]"><div className="flex flex-col gap-0.5 pt-1.5 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index - 1)} disabled={index <= 0}><ArrowUp className="size-3" /></button><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index + 1)} disabled={index >= atributoFields.length - 1}><ArrowDown className="size-3" /></button></div><div className="min-w-0 flex-1"><Input {...register(claveName)} placeholder={attributeUi.keyPlaceholder} />{claveError ? (<p className="mt-1 text-[10px] text-destructive">{claveError}</p>) : null}</div><div className="min-w-0 flex-[2]"><Input {...register(valorName)} placeholder={attributeUi.valuePlaceholder} />{valorError ? (<p className="mt-1 text-[10px] text-destructive">{valorError}</p>) : null}</div><Button type="button" variant="ghost" size="icon" onClick={() => removeAtributo(index)} className="size-9 shrink-0 self-start text-muted-foreground hover:text-destructive"><X className="size-4" /></Button></div>); }))}</div><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => appendAtributo({ clave: "", valor: "" })} disabled={atributoFields.length >= 30}><Plus className="size-3.5" />{attributeUi.buttonLabel}</Button></div></div></>)}
+          <div className="border-t border-border/40" />
+          <div className="space-y-3 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Settings2 className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Ficha activa</h3></div><div className="space-y-2"><Field orientation="horizontal" className="justify-between"><FieldLabel>Ficha activa</FieldLabel><Switch checked={Boolean(activo)} onCheckedChange={(value) => setValue("activo", value, { shouldValidate: true, shouldDirty: true })} /></Field>{isServicio && (<Field orientation="horizontal" className="justify-between"><FieldLabel>Requiere repuestos</FieldLabel><Switch checked={Boolean(requiereRepuestos)} onCheckedChange={(value) => setValue("requiereRepuestos", value, { shouldValidate: true })} /></Field>)}</div></div>
         </div>
-        )}
-
-        <div className="flex flex-wrap justify-end gap-2 pt-2">
-          {onCancel ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={isLoading || isUploadingImages}
-            >
-              Cancelar
-            </Button>
-          ) : null}
-          <Button
-            type="submit"
-            disabled={isLoading || isUploadingImages}
-            className="min-w-36 gap-2"
-          >
-            {isLoading || isUploadingImages ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {mode === "create" ? "Creando..." : "Guardando..."}
-              </>
-            ) : mode === "create" ? (
-              <>
-                <Boxes className="size-4" />
-                Crear registro
-              </>
-            ) : (
-              <>
-                <Settings2 className="size-4" />
-                Guardar cambios
-              </>
-            )}
-          </Button>
         </div>
-      </FieldGroup>
+        {!hideBottomActions && (<div className="flex w-full flex-wrap justify-end gap-2.5 border-t border-border/40 p-4 sm:p-5">{onCancel ? (<Button type="button" variant="outline" onClick={onCancel} disabled={isLoading || isUploadingImages} className="h-9 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150">Cancelar</Button>) : null}<Button type="submit" disabled={isLoading || isUploadingImages} className="h-9 min-w-36 gap-2 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150">{isLoading || isUploadingImages ? (<><Loader2 className="size-4 animate-spin" />{mode === "create" ? "Creando..." : "Guardando..."}</>) : mode === "create" ? (<><Boxes className="size-4" />Crear registro</>) : (<><Settings2 className="size-4" />Guardar cambios</>)}</Button></div>)}
+      </div>
 
       <Dialog open={unidadDialogOpen} onOpenChange={setUnidadDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader>
             <DialogTitle>Crear unidad de medida</DialogTitle>
             <DialogDescription>
@@ -2253,7 +1386,7 @@ export function ProductoForm({
                 onChange={(event) =>
                   setUnidadDialogCodigo(event.target.value.toUpperCase())
                 }
-                placeholder="UND, CAJ, KG..."
+                placeholder="NIU, BX, KGM..."
               />
             </Field>
             <Field>
@@ -2266,16 +1399,18 @@ export function ProductoForm({
               />
             </Field>
           </div>
-          <DialogFooter>
+          <DialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0 w-full">
             <Button
               type="button"
               variant="outline"
               onClick={() => setUnidadDialogOpen(false)}
+              className="w-full sm:w-auto rounded-xl hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
             >
               Cancelar
             </Button>
             <Button
               type="button"
+              className="w-full sm:w-auto rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               disabled={
                 createUnidadMutation.isPending ||
                 !unidadDialogCodigo.trim() ||

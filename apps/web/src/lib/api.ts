@@ -8,19 +8,28 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   skipAuth?: boolean
 }
 
+interface ApiErrorPayload {
+  code?: string
+  message?: string
+  statusCode?: number
+  [key: string]: unknown
+}
+
 interface ApiErrorResponse {
-  error?: { code?: string; message?: string; statusCode?: number }
+  error?: ApiErrorPayload
 }
 
 export class ApiError extends Error {
   code: string
   statusCode: number
+  details?: ApiErrorPayload
 
-  constructor(message: string, statusCode: number, code?: string) {
+  constructor(message: string, statusCode: number, code?: string, details?: ApiErrorPayload) {
     super(message)
     this.name = 'ApiError'
     this.statusCode = statusCode
     this.code = code || 'UNKNOWN_ERROR'
+    this.details = details
   }
 }
 
@@ -38,6 +47,14 @@ async function parseResponseJson<T>(response: Response): Promise<T> {
   }
 
   return JSON.parse(raw) as T
+}
+
+function filenameFromContentDisposition(value: string | null) {
+  if (!value) return null
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) return decodeURIComponent(utf8Match[1])
+  const asciiMatch = value.match(/filename="?([^";]+)"?/i)
+  return asciiMatch?.[1] ?? null
 }
 
 async function attemptRefresh(): Promise<boolean> {
@@ -116,6 +133,7 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
           errorData.error?.message || retryRes.statusText,
           retryRes.status,
           errorData.error?.code,
+          errorData.error,
         )
       }
 
@@ -135,10 +153,56 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
       errorData.error?.message || res.statusText,
       res.status,
       errorData.error?.code,
+      errorData.error,
     )
   }
 
   return parseResponseJson<T>(res)
+}
+
+async function fetchApiBlob(endpoint: string, options: FetchOptions = {}) {
+  const { token, headers, body: _body, skipAuth, ...rest } = options
+  const authToken = token || (!skipAuth ? getToken() : null)
+
+  const request = (currentToken: string | null) =>
+    fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+        ...(headers as Record<string, string>),
+      },
+      ...rest,
+    })
+
+  let res = await request(authToken)
+
+  if (res.status === 401 && !skipAuth && !endpoint.includes('/auth/')) {
+    const refreshed = await handleRefresh()
+    if (refreshed) {
+      res = await request(getToken())
+    } else {
+      clearTokens()
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('auth:expired'))
+      }
+      throw new ApiError('Sesion expirada', 401, 'SESSION_EXPIRED')
+    }
+  }
+
+  if (!res.ok) {
+    const errorData: ApiErrorResponse = await res.json().catch(() => ({}))
+    throw new ApiError(
+      errorData.error?.message || res.statusText,
+      res.status,
+      errorData.error?.code,
+      errorData.error,
+    )
+  }
+
+  return {
+    blob: await res.blob(),
+    filename: filenameFromContentDisposition(res.headers.get('content-disposition')),
+    contentType: res.headers.get('content-type'),
+  }
 }
 
 export const api = {
@@ -154,6 +218,9 @@ export const api = {
   delete: <T>(endpoint: string, options?: FetchOptions) =>
     fetchApi<T>(endpoint, { ...options, method: 'DELETE' }),
 
+  download: (endpoint: string, options?: FetchOptions) =>
+    fetchApiBlob(endpoint, { ...options, method: 'GET' }),
+
   upload: async <T>(endpoint: string, formData: FormData): Promise<T> => {
     const token = getToken()
     const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -167,6 +234,7 @@ export const api = {
         errorData.error?.message || res.statusText,
         res.status,
         errorData.error?.code,
+        errorData.error,
       )
     }
     return parseResponseJson<T>(res)

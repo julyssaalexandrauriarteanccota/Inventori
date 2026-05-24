@@ -19,14 +19,19 @@ import {
   UpdateClienteDto,
   QueryClienteDto,
   CreateContactoClienteDto,
+  ConsultaDocumentoClienteDto,
 } from './dto';
 import { Roles, CurrentUser } from '../../common/decorators';
+import { ConsultaDocumentoClienteService } from './consulta-documento-cliente.service';
 
 @ApiTags('Clientes')
 @ApiBearerAuth()
 @Controller('clientes')
 export class ClientesController {
-  constructor(private readonly clientesService: ClientesService) {}
+  constructor(
+    private readonly clientesService: ClientesService,
+    private readonly consultaDocumentoService: ConsultaDocumentoClienteService,
+  ) {}
 
   @Post()
   @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
@@ -40,6 +45,13 @@ export class ClientesController {
   @ApiOperation({ summary: 'Listar clientes (paginado)' })
   findAll(@Query() query: QueryClienteDto) {
     return this.clientesService.findAll(query);
+  }
+
+  @Post('consulta-documento')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Consultar DNI/RUC con proveedor documental' })
+  consultarDocumento(@Body() dto: ConsultaDocumentoClienteDto) {
+    return this.consultaDocumentoService.consultar(dto);
   }
 
   @Get(':id')

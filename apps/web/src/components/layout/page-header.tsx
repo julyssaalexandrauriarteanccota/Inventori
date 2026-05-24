@@ -37,7 +37,7 @@ export function PageHeader({
       <div className={cn('min-w-0', contentClassName)}>
         <h1
           className={cn(
-            'text-2xl font-semibold tracking-tight text-foreground',
+            'font-display text-2xl font-bold tracking-tight text-foreground',
             hideTitleVisually && 'sr-only',
             titleClassName,
           )}
@@ -45,7 +45,7 @@ export function PageHeader({
           {title}
         </h1>
         {description ? (
-          <p
+          <div
             className={cn(
               hideTitleVisually
                 ? 'mt-0 text-sm text-muted-foreground'
@@ -54,7 +54,7 @@ export function PageHeader({
             )}
           >
             {description}
-          </p>
+          </div>
         ) : null}
       </div>
 

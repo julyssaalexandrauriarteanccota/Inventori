@@ -37,6 +37,8 @@ export interface NextSerieDocumentoResult {
   source: 'serie-documento' | 'config-empresa-legacy';
 }
 
+export type SerieDocumentoPrefix = 'F' | 'B';
+
 @Injectable()
 export class SerieDocumentoService {
   /**
@@ -54,6 +56,7 @@ export class SerieDocumentoService {
     legacyConfig?: LegacySeriesConfig,
     ambiente?: AmbienteSunat,
     serieDocumentoId?: string,
+    seriePrefix?: SerieDocumentoPrefix,
   ): Promise<NextSerieDocumentoResult> {
     interface LockedRow {
       id: string;
@@ -70,6 +73,7 @@ export class SerieDocumentoService {
             AND activo = true
             AND "deletedAt" IS NULL
             ${ambiente ? Prisma.sql`AND ambiente = ${ambiente}::"AmbienteSunat"` : Prisma.empty}
+            ${seriePrefix ? Prisma.sql`AND serie LIKE ${`${seriePrefix}%`}` : Prisma.empty}
           LIMIT 1
           FOR UPDATE
         `
@@ -81,6 +85,7 @@ export class SerieDocumentoService {
             AND activo = true
             AND "deletedAt" IS NULL
             AND ambiente = ${ambiente}::"AmbienteSunat"
+            ${seriePrefix ? Prisma.sql`AND serie LIKE ${`${seriePrefix}%`}` : Prisma.empty}
           ORDER BY "codigoEstablecimiento" ASC, serie ASC
           LIMIT 1
           FOR UPDATE
@@ -91,6 +96,7 @@ export class SerieDocumentoService {
           WHERE tipo = ${tipo}::"TipoDocumento"
             AND activo = true
             AND "deletedAt" IS NULL
+            ${seriePrefix ? Prisma.sql`AND serie LIKE ${`${seriePrefix}%`}` : Prisma.empty}
           ORDER BY "codigoEstablecimiento" ASC, serie ASC
           LIMIT 1
           FOR UPDATE
@@ -118,13 +124,14 @@ export class SerieDocumentoService {
       );
     }
 
-    return this.nextFromLegacyConfig(tx, tipo, legacyConfig);
+    return this.nextFromLegacyConfig(tx, tipo, legacyConfig, seriePrefix);
   }
 
   private async nextFromLegacyConfig(
     tx: FacturacionTx,
     tipo: TipoDocumento,
     legacyConfig?: LegacySeriesConfig,
+    seriePrefix?: SerieDocumentoPrefix,
   ): Promise<NextSerieDocumentoResult> {
     // Lock pesimista también sobre la fila legacy de configEmpresa.
     interface LockedConfig {
@@ -168,7 +175,11 @@ export class SerieDocumentoService {
     }
 
     const fields = this.getLegacyFields(tipo);
-    const serie = config[fields.serieField];
+    const serie = this.normalizeSeriePrefix(
+      tipo,
+      config[fields.serieField],
+      seriePrefix,
+    );
     const correlativo = config[fields.correlativoField] + 1;
 
     await tx.configEmpresa.update({
@@ -213,5 +224,22 @@ export class SerieDocumentoService {
 
   private buildNumero(serie: string, correlativo: number) {
     return `${serie}-${String(correlativo).padStart(8, '0')}`;
+  }
+
+  private normalizeSeriePrefix(
+    tipo: TipoDocumento,
+    serie: string,
+    prefix?: SerieDocumentoPrefix,
+  ) {
+    if (
+      !prefix ||
+      (tipo !== TipoDocumento.NOTA_CREDITO &&
+        tipo !== TipoDocumento.NOTA_DEBITO) ||
+      !/^[FB][A-Z]\d{2}$/.test(serie)
+    ) {
+      return serie;
+    }
+
+    return `${prefix}${serie.slice(1)}`;
   }
 }

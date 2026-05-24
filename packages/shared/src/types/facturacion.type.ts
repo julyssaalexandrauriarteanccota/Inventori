@@ -65,9 +65,15 @@ export type FormatoImpresionDocumento = "A4" | "TICKET" | "AMBOS";
 export type EstadoValidacionSunat =
   | "PENDIENTE"
   | "VALIDO"
+  | "ACTIVO"
   | "INVALIDO"
   | "ERROR";
 export type TipoDocumentoSunatCliente = "6" | "1" | "0";
+export type ProveedorValidacionDocumento =
+  | "SUNAT_PADRON_LOCAL"
+  | "DECOLECTA"
+  | "APISPERU"
+  | "MANUAL";
 
 export interface ConfigEmpresaFiscalPayload {
   ruc: string;
@@ -75,6 +81,9 @@ export interface ConfigEmpresaFiscalPayload {
   nombreComercial?: string;
   direccionFiscal: string;
   ubigeoFiscal?: string;
+  departamentoFiscal?: string;
+  provinciaFiscal?: string;
+  distritoFiscal?: string;
   codigoEstablecimiento?: string;
   correoSee?: string;
   regimenTributario?: string;
@@ -178,8 +187,13 @@ export interface ClienteValidacionSunatPayload {
   clienteId?: string;
   tipoDocumentoSunat: TipoDocumentoSunatCliente;
   numeroDocumento: string;
+  proveedor?: ProveedorValidacionDocumento;
   nombreNormalizado?: string;
   direccionFiscal?: string;
+  ubigeo?: string;
+  departamento?: string;
+  provincia?: string;
+  distrito?: string;
   estado: EstadoValidacionSunat;
   condicionDomicilio?: string;
   ultimaValidacionAt?: string | null;

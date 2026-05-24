@@ -1,6 +1,7 @@
 import {
   ArrowRightLeft,
   CreditCard,
+  Database,
   FileText,
   FolderTree,
   Home,
@@ -22,6 +23,7 @@ export const quickSettingsSectionsList = [
 export const configurationSectionsList = [
   { id: "empresa", name: "Empresa", icon: Home },
   { id: "fiscal", name: "Tributario", icon: Landmark },
+  { id: "padron-sunat", name: "Padrón SUNAT", icon: Database },
   { id: "series", name: "Series", icon: FileText },
   { id: "usuarios", name: "Usuarios", icon: Users },
   { id: "almacenes", name: "Almacenes", icon: Warehouse },

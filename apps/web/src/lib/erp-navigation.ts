@@ -57,14 +57,7 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     url: "/productos",
     icon: Package,
     description: "Catalogo, repuestos, consumibles y estructura comercial.",
-    roles: ALL_ROLES,
-  },
-  {
-    title: "Servicios",
-    url: "/servicios",
-    icon: Wrench,
-    description: "Servicios técnicos: mantenimientos, instalaciones, diagnósticos.",
-    roles: ALL_ROLES,
+    roles: ADMIN_AND_ENCARGADO,
   },
   {
     title: "Inventario",
@@ -123,6 +116,26 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     icon: BarChart3,
     description: "Analitica de ventas, inventario y soporte.",
     roles: ADMIN_AND_ENCARGADO,
+    items: [
+      {
+        title: "Ventas",
+        url: "/reportes/ventas",
+        description: "Reporte detallado de ventas.",
+        roles: ADMIN_AND_ENCARGADO,
+      },
+      {
+        title: "Inventario",
+        url: "/reportes/inventario",
+        description: "Reporte detallado de inventario.",
+        roles: ADMIN_AND_ENCARGADO,
+      },
+      {
+        title: "Soporte",
+        url: "/reportes/soporte",
+        description: "Reporte detallado de soporte.",
+        roles: ADMIN_AND_ENCARGADO,
+      },
+    ],
   },
   {
     title: "Auditoria",
@@ -135,7 +148,7 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     title: "Configuración",
     url: "/configuracion",
     icon: Settings2,
-    description: "Empresa, series, usuarios y catálogos en una vista dedicada.",
+    description: "Empresa, SUNAT, usuarios y catálogos en una vista dedicada.",
     roles: ADMIN_ONLY,
   },
 ]
@@ -220,12 +233,6 @@ export const ERP_SPECIAL_ROUTES: ErpRouteDescriptor[] = [
     roles: ADMIN_AND_ENCARGADO,
   },
   {
-    title: "Historial de ventas",
-    url: "/pos/historial",
-    description: "Listado completo de ventas y anulaciones.",
-    roles: ADMIN_AND_ENCARGADO,
-  },
-  {
     title: "Comprobantes",
     url: "/comprobantes",
     description: "Hub fiscal: por emitir, emitidos y bajas SUNAT.",
@@ -295,10 +302,17 @@ export const ERP_SPECIAL_ROUTES: ErpRouteDescriptor[] = [
 
 export const ERP_DYNAMIC_ROUTES: ErpDynamicRouteDescriptor[] = [
   {
+    title: "Historial de ventas",
+    url: "/pos/historial",
+    description: "Ruta legacy que redirige a Ventas.",
+    roles: ADMIN_AND_ENCARGADO,
+    matcher: (pathname) => pathname === "/pos/historial",
+  },
+  {
     title: "Detalle de producto",
     url: "/productos/[id]",
     description: "Ficha completa del producto, servicio o repuesto.",
-    roles: ALL_ROLES,
+    roles: ADMIN_AND_ENCARGADO,
     matcher: (pathname) => /^\/productos\/[^/]+$/.test(pathname),
   },
   {

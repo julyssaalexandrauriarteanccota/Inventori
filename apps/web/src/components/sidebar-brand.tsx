@@ -27,21 +27,22 @@ export function SidebarBrand() {
               <SidebarMenuButton
                 size="lg"
                 tooltip="Inventori ERP"
-                className="group/brand h-12 rounded-xl border border-transparent bg-transparent !transition-[background-color,color,border-color] data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:justify-start group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!h-10 group-data-[collapsible=icon]:!w-full group-data-[collapsible=icon]:!pl-2 group-data-[collapsible=icon]:!pr-0 group-data-[collapsible=icon]:!py-0 dark:border-sidebar-border/80 dark:bg-sidebar-accent/55 dark:text-sidebar-foreground dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] dark:hover:bg-sidebar-accent/72 dark:data-[state=open]:bg-sidebar-accent/80"
+                aria-label="Inventori ERP - Selector de Workspace"
+                className="group/brand h-12 rounded-xl border border-transparent bg-transparent !transition-[background-color,color,border-color] data-[state=open]:bg-sidebar-accent group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:p-0 dark:border-sidebar-border/80 dark:bg-sidebar-accent/55 dark:text-sidebar-foreground dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] dark:hover:bg-sidebar-accent/72 dark:data-[state=open]:bg-sidebar-accent/80"
               >
-                <span className="relative flex aspect-square size-9 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[var(--sidebar-primary)] to-[color-mix(in_oklch,var(--sidebar-primary),black_18%)] text-sidebar-primary-foreground shadow-sm group-data-[collapsible=icon]:size-8 dark:from-[color-mix(in_oklch,var(--sidebar-primary),black_10%)] dark:to-[color-mix(in_oklch,var(--sidebar-primary),black_28%)] dark:shadow-none dark:ring-1 dark:ring-white/5">
+                <span className="relative flex aspect-square size-9 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-[var(--sidebar-primary)] to-[color-mix(in_oklch,var(--sidebar-primary),black_18%)] text-sidebar-primary-foreground shadow-sm group-hover/brand:scale-105 group-hover/brand:rotate-[-3deg] transition-all duration-300 group-data-[collapsible=icon]:size-8 dark:from-[color-mix(in_oklch,var(--sidebar-primary),black_10%)] dark:to-[color-mix(in_oklch,var(--sidebar-primary),black_28%)] dark:shadow-none dark:ring-1 dark:ring-white/5">
                   <ClipboardList className="size-4.5" strokeWidth={2.25} />
                   <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full border border-sidebar bg-emerald-500 group-data-[collapsible=icon]:hidden" />
                 </span>
                 <span className="grid flex-1 text-left leading-tight group-data-[collapsible=icon]:hidden">
-                  <span className="truncate text-[13px] font-semibold tracking-tight">
+                  <span className="truncate font-display text-[13.5px] font-bold tracking-tight text-foreground/90">
                     Inventori
                   </span>
                   <span className="truncate text-[11px] text-muted-foreground">
                     ERP · Sistema principal
                   </span>
                 </span>
-                <ChevronsUpDown className="ml-auto size-3.5 text-muted-foreground transition-colors group-hover/brand:text-foreground group-data-[collapsible=icon]:hidden" />
+                <ChevronsUpDown className="ml-auto size-3.5 text-muted-foreground transition-all duration-200 group-hover/brand:text-foreground group-hover/brand:translate-y-px group-data-[collapsible=icon]:hidden" />
               </SidebarMenuButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent

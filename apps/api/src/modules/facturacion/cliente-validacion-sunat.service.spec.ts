@@ -189,6 +189,25 @@ describe('ClienteValidacionSunatService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
+  it('rechaza vincular un cliente RUC con validación DNI', async () => {
+    (mockPrisma.cliente.findUnique as jest.Mock).mockResolvedValue({
+      id: 'cliente-1',
+      tipo: 'EMPRESA',
+      dni: null,
+      ruc: '20123456789',
+      esGenerico: false,
+    });
+
+    await expect(
+      service.upsert({
+        clienteId: 'cliente-1',
+        tipoDocumentoSunat: '1',
+        numeroDocumento: '12345678',
+        estado: 'VALIDO',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it('rechaza update duplicado', async () => {
     (
       mockPrisma.clienteValidacionSunat.findUnique as jest.Mock

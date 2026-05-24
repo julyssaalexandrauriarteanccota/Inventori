@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   AmbienteSunat,
+  normalizeSunatUnidadMedidaCode,
   TipoAfectacionIgv,
   TipoDocumento,
   TipoFiscalProducto,
@@ -53,6 +54,9 @@ interface ConfigEmpresaFiscalSnapshotSource {
   nombreComercial?: string | null;
   direccionFiscal?: string | null;
   ubigeoFiscal?: string | null;
+  departamentoFiscal?: string | null;
+  provinciaFiscal?: string | null;
+  distritoFiscal?: string | null;
   codigoEstablecimiento?: string | null;
 }
 
@@ -69,6 +73,9 @@ export interface EmisorComprobanteSnapshot {
   emisorNombreComercial: string | null;
   emisorDireccionFiscal: string | null;
   emisorUbigeoFiscal: string | null;
+  emisorDepartamentoFiscal: string | null;
+  emisorProvinciaFiscal: string | null;
+  emisorDistritoFiscal: string | null;
   emisorCodigoEstablecimiento: string | null;
 }
 
@@ -129,6 +136,9 @@ export class ComprobanteSnapshotService {
         direccionFiscal: {
           direccion: emisor.emisorDireccionFiscal,
           ubigeo: emisor.emisorUbigeoFiscal,
+          departamento: emisor.emisorDepartamentoFiscal,
+          provincia: emisor.emisorProvinciaFiscal,
+          distrito: emisor.emisorDistritoFiscal,
           codigoPais: 'PE',
         },
         codigoEstablecimiento: emisor.emisorCodigoEstablecimiento ?? '0000',
@@ -184,6 +194,9 @@ export class ComprobanteSnapshotService {
         this.cleanText(configFiscal?.direccionFiscal) ??
         this.cleanText(config.direccion),
       emisorUbigeoFiscal: this.cleanText(configFiscal?.ubigeoFiscal),
+      emisorDepartamentoFiscal: this.cleanText(configFiscal?.departamentoFiscal),
+      emisorProvinciaFiscal: this.cleanText(configFiscal?.provinciaFiscal),
+      emisorDistritoFiscal: this.cleanText(configFiscal?.distritoFiscal),
       emisorCodigoEstablecimiento: this.cleanText(
         configFiscal?.codigoEstablecimiento,
       ),
@@ -234,10 +247,14 @@ export class ComprobanteSnapshotService {
     return venta.detalles.map((detalle, index) => {
       const producto = detalle.producto;
       const baseImponible = this.roundMoney(detalle.subtotal);
-      const valorUnitario = this.roundQuantity(detalle.precioUnitario);
-      const precioUnitario = this.roundQuantity(valorUnitario * (1 + tasaIgv));
-      const igv = this.roundMoney(baseImponible * tasaIgv);
-      const total = this.roundMoney(baseImponible + igv);
+      const precioUnitario = this.roundQuantity(detalle.precioUnitario);
+      const valorUnitario = this.roundQuantity(precioUnitario / (1 + tasaIgv));
+      const descuentoInclIgv = this.roundMoney(detalle.descuento ?? 0);
+      const total = this.roundMoney(
+        Math.max(0, precioUnitario * detalle.cantidad - descuentoInclIgv),
+      );
+      const igv = this.roundMoney(total - baseImponible);
+      const descuento = this.roundMoney(descuentoInclIgv / (1 + tasaIgv));
 
       return {
         item: index + 1,
@@ -247,7 +264,10 @@ export class ComprobanteSnapshotService {
           this.cleanText(producto.descripcion) ??
           this.cleanText(producto.nombre) ??
           'Producto',
-        unidadSunat: this.cleanText(producto.unidadMedida?.codigo) ?? 'NIU',
+        unidadSunat: normalizeSunatUnidadMedidaCode(
+          this.cleanText(producto.unidadMedida?.codigo),
+          producto.tipo === 'SERVICIO' ? 'ZZ' : 'NIU',
+        ),
         tipoFiscalProducto:
           producto.tipo === 'SERVICIO'
             ? TipoFiscalProducto.SERVICIO
@@ -256,13 +276,14 @@ export class ComprobanteSnapshotService {
         cantidad: detalle.cantidad,
         valorUnitario,
         precioUnitario,
-        descuento: this.roundMoney(detalle.descuento ?? 0),
+        descuento,
         baseImponible,
         igv,
         total,
         metadataFiscal: {
           porcentajeIGV,
           productoTipo: producto.tipo,
+          precioUnitarioIncluyeIgv: true,
         },
       };
     });
@@ -270,8 +291,22 @@ export class ComprobanteSnapshotService {
 
   private cleanText(value: unknown) {
     if (typeof value !== 'string') return null;
-    const trimmed = value.trim();
+    const trimmed = this.plainText(value).trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private plainText(value: string) {
+    return value
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<\/(p|div|li|h[1-6])>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/\s+/g, ' ');
   }
 
   private roundMoney(value: unknown) {

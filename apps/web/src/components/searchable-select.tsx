@@ -123,7 +123,7 @@ export function SearchableSelect({
             aria-invalid={invalid}
             disabled={disabled}
             className={cn(
-              "h-11 w-full justify-between rounded-md border-input bg-background px-3 font-normal shadow-none",
+              "h-10 w-full justify-between rounded-xl border-input bg-background px-3.5 font-normal shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted/30 active:scale-[0.99] active:duration-150",
               !selectedOption && "text-muted-foreground",
               className,
             )}
@@ -138,7 +138,7 @@ export function SearchableSelect({
       <PopoverContent
         align="start"
         container={portalContainer}
-        className="overflow-hidden p-0"
+        className="overflow-hidden p-0 rounded-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]"
         style={{ width: "var(--radix-popover-trigger-width)" }}
         onWheel={(event) => event.stopPropagation()}
       >

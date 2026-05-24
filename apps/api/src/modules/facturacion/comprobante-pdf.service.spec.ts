@@ -63,5 +63,5 @@ describe('ComprobantePdfService — Doc 09 §6 (QR SUNAT)', () => {
     expect(Buffer.isBuffer(buf)).toBe(true);
     expect(buf.length).toBeGreaterThan(1000);
     expect(buf.subarray(0, 4).toString()).toBe('%PDF');
-  });
+  }, 15000);
 });

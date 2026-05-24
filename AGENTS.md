@@ -40,7 +40,7 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 
 - Prisma client is generated to `apps/api/generated/prisma` and `PrismaService` imports from that generated path (not `@prisma/client` directly).
 - **Prisma v7 adapter**: uses `@prisma/adapter-pg` with `PrismaPg(connectionString)` — datasource has NO `url`; config lives in `prisma.config.ts`. Never call `new PrismaClient()` without the adapter.
-- `apps/api/prisma/schema.prisma` currently has 55 `model` blocks. Historical table ownership notes live in [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md); verify against Prisma before relying on them.
+- `apps/api/prisma/schema.prisma` currently has 61 `model` blocks. Historical table ownership notes live in [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md); verify against Prisma before relying on them.
 - Migration workflow: `pnpm --filter @erp/api exec prisma migrate dev --name <description>`, then `pnpm --filter @erp/api exec prisma generate`.
 - CI API tests require PostgreSQL + Redis service containers and run `npx prisma migrate deploy` before tests.
 - `docker-compose.yml` provisions local `postgres` (pgvector/pgvector:pg16, host port `5433` mapped to container `5432`), `redis` (7-alpine, `6379`), `minio` (`9000/9001`), and cron-based `backup`/`minio-backup` services.

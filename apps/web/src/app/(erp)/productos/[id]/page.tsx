@@ -28,13 +28,17 @@ import {
   type ProductoImagenListItem,
 } from "@erp/shared";
 
-import { getApiAssetUrl } from "@/lib/api";
+import { getApiAssetUrl, getApiAssetUrlCandidates } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useEquipos } from "@/hooks/use-equipos";
 import { useStock } from "@/hooks/use-inventario";
 import { useProducto } from "@/hooks/use-productos";
 import { PageHeader } from "@/components/layout/page-header";
+import {
+  RichDescriptionViewer,
+  isRichDescriptionHtml,
+} from "@/components/forms/rich-description-editor";
 import { ProductCodePreview } from "@/components/products/product-code-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -159,6 +163,160 @@ function getClienteNombre(
   );
 }
 
+function ProductDetailImage({ src, alt }: { src: string; alt: string }) {
+  const [attemptIndex, setAttemptIndex] = useState(0);
+  const candidates = useMemo(() => getApiAssetUrlCandidates(src), [src]);
+  const currentSrc = candidates[attemptIndex];
+
+  if (!currentSrc) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground/60">
+        <ImageIcon className="size-10 opacity-30" />
+        <span className="text-xs font-medium">No se pudo cargar</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={currentSrc}
+      alt={alt}
+      className="h-full w-full object-contain mix-blend-multiply"
+      referrerPolicy="no-referrer"
+      onError={() => setAttemptIndex((index) => index + 1)}
+    />
+  );
+}
+
+function renderWebFormattedDescription(text: string) {
+  if (!text) return null;
+  if (isRichDescriptionHtml(text)) {
+    return <RichDescriptionViewer value={text} />;
+  }
+
+  const lines = text.split(/\r?\n/);
+  const elements: React.JSX.Element[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmedRaw = rawLine.trim();
+
+    if (!trimmedRaw) {
+      // Empty line acts as paragraph spacer
+      elements.push(<div key={`space-${i}`} className="h-3" />);
+      continue;
+    }
+
+    // Check for markdown headers
+    const headerMatch = trimmedRaw.match(/^(#{1,6})\s+(.*)$/);
+    if (headerMatch) {
+      const headerLevel = headerMatch[1].length;
+      const headerText = headerMatch[2].trim();
+
+      const headerClasses = cn(
+        "font-bold text-foreground mt-4 mb-2 tracking-tight",
+        headerLevel === 1 && "text-xl",
+        headerLevel === 2 && "text-lg",
+        headerLevel >= 3 && "text-base"
+      );
+
+      elements.push(
+        <h3 key={`header-${i}`} className={headerClasses}>
+          {headerText}
+        </h3>
+      );
+      continue;
+    }
+
+    // Treat as subheading if it ends with colon or originally started with an emoji icon and is short
+    const startsWithEmoji = /^([\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F9FF}]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF])/u.test(trimmedRaw);
+    const isSubheading = (trimmedRaw.endsWith(":") && trimmedRaw.length < 60) || (startsWithEmoji && trimmedRaw.length < 60);
+
+    if (isSubheading) {
+      const headingText = trimmedRaw.endsWith(":") ? trimmedRaw.slice(0, -1).trim() : trimmedRaw;
+      elements.push(
+        <h4 key={`subheader-${i}`} className="text-sm font-bold text-foreground mt-4 mb-2 flex items-center gap-1.5">
+          {headingText}
+        </h4>
+      );
+      continue;
+    }
+
+    // Check list matches
+    const bulletMatch = trimmedRaw.match(/^([-\*•\+])\s*(.*)$/);
+    const numberMatch = trimmedRaw.match(/^(\d+[\.\)])\s*(.*)$/);
+
+    if (bulletMatch) {
+      const content = bulletMatch[2].trim();
+      const inlineBoldMatch = content.match(/^([^:]+):\s*(.*)$/);
+
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 40 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <div key={`bullet-${i}`} className="flex items-start gap-2 py-0.5 pl-2 text-sm text-muted-foreground">
+            <span className="text-primary font-bold mt-1 shrink-0 select-none">•</span>
+            <span className="leading-relaxed">
+              <strong className="font-semibold text-foreground">{boldPart}:</strong> {normalPart}
+            </span>
+          </div>
+        );
+      } else {
+        elements.push(
+          <div key={`bullet-${i}`} className="flex items-start gap-2 py-0.5 pl-2 text-sm text-muted-foreground">
+            <span className="text-primary font-bold mt-1 shrink-0 select-none">•</span>
+            <span className="leading-relaxed">{content}</span>
+          </div>
+        );
+      }
+    } else if (numberMatch) {
+      const numPrefix = numberMatch[1];
+      const content = numberMatch[2].trim();
+      const inlineBoldMatch = content.match(/^([^:]+):\s*(.*)$/);
+
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 40 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <div key={`num-${i}`} className="flex items-start gap-2 py-0.5 pl-2 text-sm text-muted-foreground">
+            <span className="text-primary font-bold shrink-0 select-none">{numPrefix}</span>
+            <span className="leading-relaxed">
+              <strong className="font-semibold text-foreground">{boldPart}:</strong> {normalPart}
+            </span>
+          </div>
+        );
+      } else {
+        elements.push(
+          <div key={`num-${i}`} className="flex items-start gap-2 py-0.5 pl-2 text-sm text-muted-foreground">
+            <span className="text-primary font-bold shrink-0 select-none">{numPrefix}</span>
+            <span className="leading-relaxed">{content}</span>
+          </div>
+        );
+      }
+    } else {
+      // Normal paragraph line. Check for colon-bold pattern
+      const inlineBoldMatch = trimmedRaw.match(/^([^:]+):\s*(.*)$/);
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 40 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <p key={`para-bold-${i}`} className="text-sm leading-relaxed text-muted-foreground my-1.5">
+            <strong className="font-semibold text-foreground">{boldPart}:</strong> {normalPart}
+          </p>
+        );
+      } else {
+        elements.push(
+          <p key={`para-${i}`} className="text-sm leading-relaxed text-muted-foreground my-1.5">
+            {trimmedRaw}
+          </p>
+        );
+      }
+    }
+  }
+
+  return <div className="flex flex-col gap-1">{elements}</div>;
+}
+
 export default function ProductoDetallePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -240,7 +398,7 @@ export default function ProductoDetallePage() {
             {canEdit && producto ? (
               <Button
                 type="button"
-                onClick={() => router.push(`/productos/${id}/editar`)}
+                onClick={() => router.push(`/productos?editar=${id}`)}
               >
                 <Pencil className="size-4" />
                 Editar
@@ -283,16 +441,10 @@ export default function ProductoDetallePage() {
             <div className="overflow-hidden rounded-xl border border-border/70 bg-muted/30">
               {selectedImage ? (
                 <div className="h-44 md:h-52 w-full flex items-center justify-center p-2 relative group">
-                  <img
-                    src={getApiAssetUrl(selectedImage.url)}
+                  <ProductDetailImage
+                    key={selectedImage.url}
+                    src={selectedImage.url}
                     alt={selectedImage.nombre ?? producto.nombre}
-                    className="h-full w-full object-contain mix-blend-multiply"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%23cbd5e1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Ccircle cx='8.5' cy='8.5' r='1.5'%3E%3C/circle%3E%3Cpolyline points='21 15 16 10 5 21'%3E%3C/polyline%3E%3C/svg%3E";
-                      e.currentTarget.className = "h-16 w-16 opacity-30 mix-blend-normal object-contain";
-                    }}
                   />
                 </div>
               ) : (
@@ -333,7 +485,12 @@ export default function ProductoDetallePage() {
             ) : null}
 
             <div className="flex flex-wrap gap-2 pt-2 border-t border-border/40">
-              <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/15 border-0 font-semibold">{TIPO_LABELS[producto.tipo]}</Badge>
+              <Badge
+                variant="secondary"
+                className="bg-primary/10 text-primary hover:bg-primary/15 border-0 font-semibold"
+              >
+                {TIPO_LABELS[producto.tipo]}
+              </Badge>
               {producto.condicion ? (
                 <Badge variant="outline">
                   {CONDICION_LABELS[producto.condicion]}
@@ -376,7 +533,11 @@ export default function ProductoDetallePage() {
                 ) : null}
                 <InfoItem
                   label="Categoría"
-                  value={producto.categoria?.nombre}
+                  value={producto.categoria?.padre?.nombre ?? producto.categoria?.nombre}
+                />
+                <InfoItem
+                  label="Subcategoría"
+                  value={producto.categoria?.padre ? producto.categoria.nombre : "—"}
                 />
                 <InfoItem label="Marca" value={producto.marca?.nombre} />
                 <InfoItem
@@ -420,7 +581,8 @@ export default function ProductoDetallePage() {
                 <h2 className="text-sm font-semibold">Precios y reglas</h2>
               </div>
               <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                {producto.tipo !== TipoProducto.SERVICIO || canViewInternalCosts ? (
+                {producto.tipo !== TipoProducto.SERVICIO ||
+                canViewInternalCosts ? (
                   <InfoItem
                     label="Precio compra"
                     value={formatCurrency(producto.precioCompra)}
@@ -608,13 +770,13 @@ export default function ProductoDetallePage() {
                 ))}
               </div>
               {producto.descripcion ? (
-                <div className="mt-4 rounded-xl border border-border/60 bg-background px-3 py-3">
-                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+                <div className="mt-4 rounded-xl border border-border/60 bg-background px-4 py-4">
+                  <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Descripción
                   </p>
-                  <p className="whitespace-pre-wrap text-sm leading-6 text-foreground/90">
-                    {producto.descripcion}
-                  </p>
+                  <div className="text-sm leading-6 text-foreground/90">
+                    {renderWebFormattedDescription(producto.descripcion)}
+                  </div>
                 </div>
               ) : null}
             </section>

@@ -128,100 +128,64 @@ export function ServicioFormModal({
     }
   }
 
-  function handleOpenChange(next: boolean) {
-    if (!next && isDirty) {
-      setConfirmCloseOpen(true);
-      return;
-    }
-    setIsDirty(false);
-    onOpenChange(next);
-  }
-
-  function discardChangesAndClose() {
-    setConfirmCloseOpen(false);
-    setIsDirty(false);
-    onOpenChange(false);
-  }
-
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl">
-          <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
-                  isEdit
-                    ? "bg-orange-100 text-orange-700"
-                    : "bg-primary/10 text-primary"
-                }`}
-              >
-                {isEdit ? (
-                  <Pencil className="size-5" />
-                ) : (
-                  <Wrench className="size-5" />
-                )}
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="truncate text-base">
-                  {isEdit
-                    ? servicio?.nombre ?? "Editar servicio"
-                    : "Nuevo servicio"}
-                </DialogTitle>
-                <DialogDescription>
-                  {isEdit
-                    ? "Actualiza precio, categoria, duracion y alcance."
-                    : "Define mantenimientos, instalaciones, diagnósticos, recargas, etc."}
-                </DialogDescription>
-              </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl rounded-3xl border border-border/60 shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+        <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
+          <div className="flex items-center gap-3">
+            <div
+              className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
+                isEdit
+                  ? "bg-[var(--semantic-warning-soft)] text-[var(--semantic-warning)]"
+                  : "bg-[var(--semantic-primary-soft)] text-[var(--semantic-primary)]"
+              }`}
+            >
+              {isEdit ? (
+                <Pencil className="size-5" />
+              ) : (
+                <Wrench className="size-5" />
+              )}
             </div>
-          </DialogHeader>
-
-          <div className="px-5 py-4">
-            {isEdit && loadingDetail ? (
-              <div className="grid gap-3">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-16 rounded-xl" />
-                ))}
-              </div>
-            ) : isEdit && !defaultValues ? (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                No se pudo cargar el servicio.
-              </div>
-            ) : (
-              <ServicioForm
-                mode={isEdit ? "edit" : "create"}
-                defaultValues={defaultValues}
-                onSubmit={handleSubmit}
-                onCancel={() => handleOpenChange(false)}
-                onDirtyChange={setIsDirty}
-                canViewInternalCosts={canViewInternalCosts}
-                isLoading={isPending}
-              />
-            )}
+            <div className="min-w-0">
+              <DialogTitle className="truncate text-base">
+                {isEdit
+                  ? servicio?.nombre ?? "Editar servicio"
+                  : "Nuevo servicio"}
+              </DialogTitle>
+              <DialogDescription>
+                {isEdit
+                  ? "Actualiza precio, categoria, duracion y alcance."
+                  : "Define mantenimientos, instalaciones, diagnósticos, recargas, etc."}
+              </DialogDescription>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </DialogHeader>
 
-      <AlertDialog open={confirmCloseOpen} onOpenChange={setConfirmCloseOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Descartar cambios?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tienes cambios sin guardar. Si sales ahora, se perdera la
-              informacion ingresada.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
-            <AlertDialogAction onClick={discardChangesAndClose}>
-              Descartar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
+        <div className="px-5 py-4">
+          {isEdit && loadingDetail ? (
+            <div className="grid gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 rounded-xl" />
+              ))}
+            </div>
+          ) : isEdit && !defaultValues ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              No se pudo cargar el servicio.
+            </div>
+          ) : (
+            <ServicioForm
+              mode={isEdit ? "edit" : "create"}
+              defaultValues={defaultValues}
+              onSubmit={handleSubmit}
+              onCancel={() => onOpenChange(false)}
+              canViewInternalCosts={canViewInternalCosts}
+              isLoading={isPending}
+            />
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

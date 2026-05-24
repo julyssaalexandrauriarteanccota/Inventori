@@ -37,13 +37,13 @@ export function ServicioCard({
 }: ServicioCardProps) {
   return (
     <div
-      className={cn(
-        "group relative flex min-h-0 flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm transition-colors duration-200 animate-fade-up",
-        isSelected
-          ? "border-primary/45 bg-primary/[0.03] ring-1 ring-primary/15"
-          : "border-border/70 hover:border-primary/30",
-        onToggleSelect && "cursor-pointer",
-      )}
+  className={cn(
+    "group relative flex min-h-0 flex-col gap-4 rounded-2xl border bg-card p-4 shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:shadow-md hover:scale-[1.015] hover:-translate-y-0.5 animate-fade-up",
+    isSelected
+      ? "border-primary/45 bg-primary/[0.03] ring-1 ring-primary/15"
+      : "border-border/70 hover:border-border-strong/80",
+    onToggleSelect && "cursor-pointer",
+  )}
       style={
         animationDelay !== undefined
           ? { animationDelay: `${animationDelay}ms` }
@@ -89,7 +89,7 @@ export function ServicioCard({
           onToggleSelect ? "pl-6 pr-7" : "pr-7",
         )}
       >
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--semantic-primary-soft)] text-[var(--semantic-primary)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 group-hover:rotate-[2deg]">
           <Wrench className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -162,7 +162,7 @@ export function ServicioCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-8 flex-1 gap-1.5 rounded-lg border-border/70 text-xs font-semibold"
+          className="h-8 flex-1 gap-1.5 rounded-xl border-border/70 text-xs font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
           onClick={(e) => {
             e.stopPropagation();
             onView();
@@ -175,7 +175,7 @@ export function ServicioCard({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 flex-1 gap-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            className="h-8 flex-1 gap-1.5 rounded-xl text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(e) => {
               e.stopPropagation();
               onEdit();

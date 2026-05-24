@@ -363,6 +363,7 @@ export async function createTestApp() {
   });
 
   const uploadsMock = {
+    validateFile: jest.fn(),
     saveFile: jest.fn(() => ({
       filename: 'mock-file.pdf',
       path: '/uploads/mock-file.pdf',
@@ -387,6 +388,10 @@ export async function createTestApp() {
     .overrideProvider(UploadsService)
     .useValue(uploadsMock)
     .overrideProvider(getQueueToken('sunat'))
+    .useValue(sunatQueueMock)
+    .overrideProvider(getQueueToken('cola-envio-cpe'))
+    .useValue(sunatQueueMock)
+    .overrideProvider(getQueueToken('cola-baja'))
     .useValue(sunatQueueMock)
     .overrideProvider(BullRegistrar)
     .useValue({ onModuleInit() {}, register() {} })

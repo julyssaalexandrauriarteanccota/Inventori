@@ -59,10 +59,10 @@ export function ServicioDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-2xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-2xl rounded-3xl border border-border/60 shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
         <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--semantic-primary-soft)] text-[var(--semantic-primary)] transition-all duration-300">
               <Wrench className="size-5" />
             </div>
             <div className="min-w-0">
@@ -163,6 +163,7 @@ export function ServicioDetailModal({
                 <div className="flex justify-end border-t border-border/60 pt-4">
                   <Button
                     type="button"
+                    className="rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                     onClick={() => {
                       onOpenChange(false);
                       onEdit?.(servicio.id);

@@ -12,6 +12,7 @@ import {
   EstadoComercialEquipo,
   EstadoFacturacionVenta,
   EstadoVenta,
+  LIMITE_VENTA_INTERNA_LEGAL,
   ModalidadEnvioBoletas,
   TipoDocumento,
   TipoMovimiento,
@@ -107,30 +108,50 @@ export class VentasService {
   }
 
   private buildTotales(detalles: CreateVentaDto['detalles']) {
-    const detallesCalc = detalles.map((detalle) => {
+    const detallesConTotales = detalles.map((detalle) => {
       const descuento = detalle.descuento ?? 0;
-      const subtotal = +(
-        detalle.precioUnitario * detalle.cantidad -
-        descuento
-      ).toFixed(2);
+      const totalLinea = this.roundMoney(
+        Math.max(0, detalle.precioUnitario * detalle.cantidad - descuento),
+      );
+      const subtotal = this.roundMoney(totalLinea / 1.18);
+      const igv = this.roundMoney(totalLinea - subtotal);
+
       return {
         productoId: detalle.productoId,
         cantidad: detalle.cantidad,
         precioUnitario: detalle.precioUnitario,
         descuento,
         subtotal,
+        igv,
+        totalLinea,
         equipoSerie: detalle.equipoSerie ?? null,
       };
     });
 
-    const subtotal = +detallesCalc
-      .reduce((acc, detalle) => acc + detalle.subtotal, 0)
-      .toFixed(2);
+    const detallesCalc = detallesConTotales.map((detalle) => ({
+      productoId: detalle.productoId,
+      cantidad: detalle.cantidad,
+      precioUnitario: detalle.precioUnitario,
+      descuento: detalle.descuento,
+      subtotal: detalle.subtotal,
+      equipoSerie: detalle.equipoSerie,
+    }));
+    const subtotal = this.roundMoney(
+      detallesConTotales.reduce((acc, detalle) => acc + detalle.subtotal, 0),
+    );
     const descuentoGlobal = 0;
-    const igv = +(subtotal * 0.18).toFixed(2);
-    const total = +(subtotal + igv).toFixed(2);
+    const igv = this.roundMoney(
+      detallesConTotales.reduce((acc, detalle) => acc + detalle.igv, 0),
+    );
+    const total = this.roundMoney(
+      detallesConTotales.reduce((acc, detalle) => acc + detalle.totalLinea, 0),
+    );
 
     return { detallesCalc, subtotal, descuentoGlobal, igv, total };
+  }
+
+  private roundMoney(value: number) {
+    return +value.toFixed(2);
   }
 
   // ═══════════════════════════════════════════
@@ -261,6 +282,20 @@ export class VentasService {
           select: { id: true, nombre: true, apellido: true, email: true },
         },
         metodoPago: { select: { id: true, codigo: true, nombre: true } },
+        comprobante: {
+          select: {
+            id: true,
+            numero: true,
+            tipo: true,
+            estado: true,
+            fechaEmision: true,
+            pdfStorageKey: true,
+            xmlStorageKey: true,
+            cdrStorageKey: true,
+            hashCpe: true,
+            hashSunat: true,
+          },
+        },
         detalles: {
           include: {
             producto: {
@@ -395,7 +430,12 @@ export class VentasService {
   async confirmar(id: string, dto: ConfirmarVentaDto, userId: string) {
     const venta = await this.prisma.venta.findFirst({
       where: { id, deletedAt: null },
-      include: { detalles: { include: { producto: true } } },
+      include: {
+        cliente: {
+          select: { id: true, dni: true, ruc: true, esGenerico: true },
+        },
+        detalles: { include: { producto: true } },
+      },
     });
     if (!venta) {
       throw new NotFoundException(`Venta ${id} no encontrada`);
@@ -431,6 +471,13 @@ export class VentasService {
       throw new BadRequestException(
         'No tienes una caja abierta. Debes abrir caja antes de confirmar ventas.',
       );
+    }
+
+    if (dto.ventaInterna) {
+      this.assertVentaInternaPermitida({
+        total: Number(venta.total),
+        cliente: venta.cliente,
+      });
     }
 
     // === TRANSACCIÓN ===
@@ -596,6 +643,9 @@ export class VentasService {
         where: { id },
         data: {
           estado: EstadoVenta.ORDEN_CONFIRMADA,
+          ...(dto.ventaInterna
+            ? { estadoFacturacion: EstadoFacturacionVenta.VENTA_INTERNA }
+            : {}),
           metodoPagoId: dto.metodoPagoId,
           referenciaPago: dto.referenciaPago ?? null,
         },
@@ -655,6 +705,12 @@ export class VentasService {
   }
 
   async cobrarEmitirPos(dto: CobrarEmitirPosDto, userId: string) {
+    if (dto.ventaInterna) {
+      throw new BadRequestException(
+        'ventaInterna no es compatible con cobrar-emitir; usa confirmar venta sin emitir comprobante.',
+      );
+    }
+
     const cliente = await this.prisma.cliente.findFirst({
       where: { id: dto.clienteId, deletedAt: null },
     });
@@ -832,8 +888,8 @@ export class VentasService {
       }),
       this.prisma.fiscalSecret.findMany({
         where: {
-          scope: 'sunat',
-          name: { in: ['sol_username', 'sol_password'] },
+          scope: 'sunat-direct:sol-credentials',
+          name: { in: ['sol-username', 'sol-user', 'sol-password'] },
           deletedAt: null,
         },
         select: { name: true },
@@ -853,12 +909,39 @@ export class VentasService {
     }
 
     const credentialNames = new Set(credenciales.map((item) => item.name));
-    if (
-      !credentialNames.has('sol_username') ||
-      !credentialNames.has('sol_password')
-    ) {
+    const hasDbCredentials =
+      (credentialNames.has('sol-username') || credentialNames.has('sol-user')) &&
+      credentialNames.has('sol-password');
+
+    const hasEnvCredentials =
+      (!!process.env.SUNAT_SOL_USERNAME || !!process.env.SUNAT_SOL_USER) &&
+      !!process.env.SUNAT_SOL_PASSWORD;
+
+    if (!hasDbCredentials && !hasEnvCredentials) {
       throw new BadRequestException(
         'La empresa no tiene credenciales SOL configuradas',
+      );
+    }
+  }
+
+  private assertVentaInternaPermitida(input: {
+    total: number;
+    cliente: { esGenerico: boolean; dni?: string | null; ruc?: string | null };
+  }) {
+    const isClienteGenerico =
+      input.cliente.esGenerico ||
+      input.cliente.dni === '00000000' ||
+      (!input.cliente.dni && !input.cliente.ruc);
+
+    if (!isClienteGenerico) {
+      throw new BadRequestException(
+        'Solo las ventas a Público en general pueden cerrarse como venta interna.',
+      );
+    }
+
+    if (input.total > LIMITE_VENTA_INTERNA_LEGAL) {
+      throw new BadRequestException(
+        `Solo las ventas hasta S/ ${LIMITE_VENTA_INTERNA_LEGAL.toFixed(2)} pueden cerrarse como internas.`,
       );
     }
   }
@@ -1135,7 +1218,7 @@ export class VentasService {
     }
 
     // ORDEN_CONFIRMADA o ENTREGADA con backout completo (stock + caja + comprobante fiscal).
-    // ENTREGADA solo llega aquí si estadoFacturacion ∈ {SIN_COMPROBANTE, RECHAZADA, ANULADA_FISCAL}.
+    // ENTREGADA solo llega aquí si no tiene un comprobante SUNAT aceptado o en emisión.
     const movimientoVenta = await this.prisma.movimientoStock.findFirst({
       where: { referenciaTipo: 'VENTA', referenciaId: venta.id },
       select: { almacenOrigenId: true },
@@ -1244,6 +1327,29 @@ export class VentasService {
       `Venta ${updated.numero} anulada con reverso completo por usuario ${userId}`,
     );
     return updated;
+  }
+
+  async remove(id: string) {
+    const venta = await this.prisma.venta.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, numero: true, estado: true },
+    });
+    if (!venta) {
+      throw new NotFoundException(`Venta ${id} no encontrada`);
+    }
+    if ((venta.estado as EstadoVenta) !== EstadoVenta.CANCELADA) {
+      throw new BadRequestException(
+        'Primero cancela la venta para revertir stock, garantías y caja antes de eliminarla.',
+      );
+    }
+
+    const deleted = await this.prisma.venta.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+
+    this.logger.log(`Venta cancelada eliminada del historial: ${venta.numero}`);
+    return deleted;
   }
 
   // ═══════════════════════════════════════════

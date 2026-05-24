@@ -2,11 +2,16 @@ import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsNotEmpty,
+  IsIn,
   IsOptional,
   IsString,
   MaxLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  SUNAT_UNIDAD_MEDIDA_CODES,
+  sunatUnidadMedidaHelpText,
+} from '@erp/shared';
 
 const normalizeString = (
   value: unknown,
@@ -20,13 +25,20 @@ const normalizeString = (
 };
 
 export class CreateUnidadMedidaDto {
-  @ApiProperty({ description: 'Código corto de la unidad', example: 'UND' })
+  @ApiProperty({
+    description: 'Código SUNAT/UBL de unidad de medida',
+    example: 'NIU',
+    enum: SUNAT_UNIDAD_MEDIDA_CODES,
+  })
   @Transform(({ value }: { value: unknown }) =>
     normalizeString(value, (text) => text.toUpperCase()),
   )
   @IsString()
   @IsNotEmpty()
   @MaxLength(16)
+  @IsIn(SUNAT_UNIDAD_MEDIDA_CODES, {
+    message: `Código de unidad no válido para SUNAT/UBL. ${sunatUnidadMedidaHelpText()}`,
+  })
   codigo: string;
 
   @ApiProperty({

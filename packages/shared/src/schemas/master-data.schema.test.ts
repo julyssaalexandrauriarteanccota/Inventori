@@ -8,6 +8,7 @@ import {
   clientesPaginatedResponseSchema,
   productoFiltersSchema,
   productoFormSchema,
+  unidadMedidaFormSchema,
 } from "./master-data.schema";
 
 describe("master data schemas", () => {
@@ -23,6 +24,18 @@ describe("master data schemas", () => {
 
     expect(parsed.tipo).toBe(TipoCliente.NATURAL);
     expect(parsed.latitud).toBe(-15.8402);
+  });
+
+  it("acepta cliente natural sin email", () => {
+    const parsed = clienteFormSchema.parse({
+      tipo: TipoCliente.NATURAL,
+      nombre: "Maria",
+      apellido: "Perez",
+      dni: "12345678",
+      email: "",
+    });
+
+    expect(parsed.email).toBeUndefined();
   });
 
   it("rechaza DNI reservado para publico general del sistema", () => {
@@ -89,6 +102,22 @@ describe("master data schemas", () => {
     });
 
     expect(parsed.sku).toBe("KM-BZ-001");
+  });
+
+  it("valida unidades de medida contra códigos SUNAT/UBL", () => {
+    const parsed = unidadMedidaFormSchema.parse({
+      codigo: "niu",
+      nombre: "Unidad",
+      activo: true,
+    });
+
+    expect(parsed.codigo).toBe("NIU");
+    expect(() =>
+      unidadMedidaFormSchema.parse({
+        codigo: "UND",
+        nombre: "Unidad legacy",
+      }),
+    ).toThrow(/SUNAT\/UBL/);
   });
 
   it("rechaza servicio con stock mínimo o inventario", () => {

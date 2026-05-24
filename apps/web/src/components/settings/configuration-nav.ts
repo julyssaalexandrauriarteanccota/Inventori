@@ -15,7 +15,7 @@ export const CONFIGURATION_SECTION_GROUPS: Array<{
   },
   {
     label: "Tributario",
-    items: ["fiscal"],
+    items: ["fiscal", "padron-sunat"],
   },
   {
     label: "Seguridad y personas",

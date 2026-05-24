@@ -88,6 +88,28 @@ interface SunatCdrMetadata {
   xmlFileName?: string;
 }
 
+interface SunatOutboundXmlDiagnostics {
+  xmlFileName: string;
+  zipEntries: string[];
+  zipEntrySize: number | null;
+  zipFirstBytesHex: string | null;
+  xmlSha256: string;
+  declaredEncoding: string | null;
+  firstLine: string | null;
+  rootName: string | null;
+  ublVersionId: string | null;
+  customizationId: string | null;
+  issueDate: string | null;
+  issueTime: string | null;
+  invoiceTypeCode: string | null;
+  documentCurrencyCode: string | null;
+  hasProfileId: boolean;
+  noteCount: number;
+  hasSignatureId: boolean;
+  signatureReferenceUri: string | null;
+  cacSignatureUri: string | null;
+}
+
 type SunatSendBillParseResult =
   | SunatFaultParseResult
   | SunatSendBillSuccessParseResult;
@@ -175,11 +197,24 @@ export class SunatDirectGateway {
     const zipBuffer = this.buildZip(input.xmlFileName, input.signedXml);
     const zipFileName = `${input.fileName}.zip`;
     const zipSha256 = createHash('sha256').update(zipBuffer).digest('hex');
+    const diagnostics = this.describeOutboundXml(
+      input.xmlFileName,
+      input.signedXml,
+      zipBuffer,
+    );
     const soapEnvelope = this.buildSendBillEnvelope(
       credentials.username,
       credentials.password,
       zipFileName,
       zipBuffer.toString('base64'),
+    );
+    this.logger.warn(
+      `SUNAT sendBill payload diag ${JSON.stringify({
+        fileName: zipFileName,
+        ambiente: input.ambiente,
+        zipSha256,
+        ...diagnostics,
+      })}`,
     );
 
     const response = await this.soapFetch(endpoint, {
@@ -198,6 +233,9 @@ export class SunatDirectGateway {
       fileName: zipFileName,
       xmlFileName: input.xmlFileName,
       zipSha256,
+      credentialsSource: credentials.source,
+      usernameMode: credentials.usernameMode,
+      diagnostics,
     };
 
     if (!response.ok || parsed.fault) {
@@ -212,6 +250,7 @@ export class SunatDirectGateway {
           httpStatus: response.status,
           faultCode: fault.faultCode,
           faultMessage: fault.faultMessage,
+          responseSnippet: this.snippet(responseText),
         },
       };
     }
@@ -445,8 +484,73 @@ export class SunatDirectGateway {
 
   private buildZip(xmlFileName: string, signedXml: string) {
     const zip = new AdmZip();
-    zip.addFile(xmlFileName, Buffer.from(signedXml, 'latin1'));
+    zip.addFile(xmlFileName, this.xmlBuffer(signedXml));
     return zip.toBuffer();
+  }
+
+  private xmlBuffer(xml: string) {
+    return Buffer.from(xml, this.xmlEncoding(xml));
+  }
+
+  private xmlEncoding(xml: string): BufferEncoding {
+    const declared =
+      xml.match(/<\?xml[^>]*encoding=["']([^"']+)["']/i)?.[1]?.toUpperCase() ??
+      '';
+    return declared === 'UTF-8' || declared === 'UTF8' ? 'utf8' : 'latin1';
+  }
+
+  private xmlText(buffer: Buffer) {
+    const head = buffer.subarray(0, 128).toString('latin1');
+    return /encoding=["']UTF-?8["']/i.test(head)
+      ? buffer.toString('utf8')
+      : buffer.toString('latin1');
+  }
+
+  private describeOutboundXml(
+    xmlFileName: string,
+    signedXml: string,
+    zipBuffer: Buffer,
+  ): SunatOutboundXmlDiagnostics {
+    const zip = new AdmZip(zipBuffer);
+    const entries = zip.getEntries().map((entry) => entry.entryName);
+    const entry = zip.getEntry(xmlFileName);
+    const entryBuffer = entry?.getData() ?? null;
+    const xml = entryBuffer ? this.xmlText(entryBuffer) : signedXml;
+    const signatureTag = xml.match(/<ds:Signature\b[^>]*>/)?.[0] ?? null;
+
+    return {
+      xmlFileName,
+      zipEntries: entries,
+      zipEntrySize: entryBuffer?.length ?? null,
+      zipFirstBytesHex: entryBuffer?.subarray(0, 16).toString('hex') ?? null,
+      xmlSha256: createHash('sha256')
+        .update(entryBuffer ?? this.xmlBuffer(signedXml))
+        .digest('hex'),
+      declaredEncoding:
+        xml.match(/<\?xml[^>]*encoding=["']([^"']+)["']/i)?.[1] ?? null,
+      firstLine: xml.split(/\r?\n/, 1)[0] ?? null,
+      rootName: xml.match(/<([A-Za-z]+)\b/)?.[1] ?? null,
+      ublVersionId: this.tagText(xml, 'cbc:UBLVersionID'),
+      customizationId: this.tagText(xml, 'cbc:CustomizationID'),
+      issueDate: this.tagText(xml, 'cbc:IssueDate'),
+      issueTime: this.tagText(xml, 'cbc:IssueTime'),
+      invoiceTypeCode: this.tagText(xml, 'cbc:InvoiceTypeCode'),
+      documentCurrencyCode: this.tagText(xml, 'cbc:DocumentCurrencyCode'),
+      hasProfileId: /<cbc:ProfileID\b/.test(xml),
+      noteCount: xml.match(/<cbc:Note\b/g)?.length ?? 0,
+      hasSignatureId: !!signatureTag && /\sId=/.test(signatureTag),
+      signatureReferenceUri:
+        xml.match(/<ds:Reference\b[^>]*\sURI=["']([^"']*)["']/)?.[1] ?? null,
+      cacSignatureUri: this.tagText(xml, 'cbc:URI'),
+    };
+  }
+
+  private tagText(xml: string, tagName: string) {
+    const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return (
+      xml.match(new RegExp(`<${escaped}\\b[^>]*>(.*?)</${escaped}>`, 's'))?.[1]
+        ?.trim() ?? null
+    );
   }
 
   private buildSendBillEnvelope(
@@ -780,6 +884,10 @@ export class SunatDirectGateway {
     return Array.from(new Set([...directNodes, ...localNameNodes]))
       .map((node) => node.textContent?.trim())
       .filter((value): value is string => !!value);
+  }
+
+  private snippet(value: string, maxLength = 600) {
+    return value.replace(/\s+/g, ' ').trim().slice(0, maxLength);
   }
 
   private escape(value: string) {

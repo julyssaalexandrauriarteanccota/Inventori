@@ -98,8 +98,13 @@ describe("facturacion schemas", () => {
     const ruc = clienteValidacionSunatSchema.parse({
       tipoDocumentoSunat: "6",
       numeroDocumento: "20123456789",
-      estado: "VALIDO",
+      proveedor: "SUNAT_PADRON_LOCAL",
+      estado: "ACTIVO",
       condicionDomicilio: "HABIDO",
+      ubigeo: "150131",
+      departamento: "LIMA",
+      provincia: "LIMA",
+      distrito: "SAN ISIDRO",
     });
     const dni = clienteValidacionSunatSchema.parse({
       tipoDocumentoSunat: "1",
@@ -112,7 +117,9 @@ describe("facturacion schemas", () => {
       estado: "PENDIENTE",
     });
 
-    expect(ruc.tipoDocumentoSunat).toBe("6");
+    expect(ruc.estado).toBe("ACTIVO");
+    expect(ruc.proveedor).toBe("SUNAT_PADRON_LOCAL");
+    expect(ruc.ubigeo).toBe("150131");
     expect(dni.tipoDocumentoSunat).toBe("1");
     expect(sinDocumento.tipoDocumentoSunat).toBe("0");
   });
@@ -216,13 +223,20 @@ describe("facturacion schemas", () => {
       tipoDocumentoSunat: "6",
       numeroDocumento: "20123456789",
       nombreNormalizado: "CLIENTE DEMO SAC",
+      proveedor: "DECOLECTA",
       direccionFiscal: "Av. Cliente 456",
-      estado: "VALIDO",
+      ubigeo: "150101",
+      departamento: "LIMA",
+      provincia: "LIMA",
+      distrito: "LIMA",
+      estado: "ACTIVO",
       condicionDomicilio: "HABIDO",
       ultimaValidacionAt: "2026-05-01T00:00:00.000Z",
     });
 
-    expect(parsed.estado).toBe("VALIDO");
+    expect(parsed.estado).toBe("ACTIVO");
+    expect(parsed.proveedor).toBe("DECOLECTA");
+    expect(parsed.distrito).toBe("LIMA");
   });
 
   it("valida payload de emision", () => {

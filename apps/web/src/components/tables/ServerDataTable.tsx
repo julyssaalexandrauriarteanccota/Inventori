@@ -370,12 +370,12 @@ export function ServerDataTable<TData, TValue>({
               {table.getHeaderGroups().map((headerGroup) => (
                 <tr
                   key={headerGroup.id}
-                  className="border-b border-border/60 bg-muted/45 backdrop-blur-sm"
+                  className="border-b border-border/40 bg-muted/30 backdrop-blur-sm"
                 >
                   {headerGroup.headers.map((header) => (
                     <th
                       key={header.id}
-                      className="relative whitespace-nowrap px-4 py-3.5 text-left text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/80"
+                      className="relative whitespace-nowrap px-4 py-3 text-left text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/80 border-r border-border/10 last:border-r-0"
                       style={
                         enableColumnResizing
                           ? { width: header.getSize() }
@@ -399,7 +399,7 @@ export function ServerDataTable<TData, TValue>({
                               header.getContext(),
                             )}
                             {header.column.getCanSort() ? (
-                              <ArrowUpDown className="size-3.5 opacity-50" />
+                                <ArrowUpDown className="size-3.5 opacity-60 text-muted-foreground" />
                             ) : null}
                           </div>
                           {enableColumnResizing &&
@@ -457,19 +457,21 @@ export function ServerDataTable<TData, TValue>({
                     key={row.id}
                     data-selected={row.getIsSelected()}
                     className={cn(
-                      "border-b border-border/40 transition-colors last:border-0",
-                      idx % 2 === 0 ? "bg-card" : "bg-muted/12",
-                      "hover:bg-muted/24 data-[selected=true]:bg-primary/[0.07]",
+                      "border-b border-border/30 dark:border-border/20 transition-colors duration-200 last:border-0",
+                      idx % 2 === 0 ? "bg-card" : "bg-muted/5 dark:bg-muted/10",
+                      "hover:bg-muted/12 dark:hover:bg-muted/20 data-[selected=true]:bg-primary/[0.04] dark:data-[selected=true]:bg-primary/[0.08]",
                     )}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
-                        className="px-4 py-3.5 align-middle text-foreground/90"
+                        className="px-4 py-2.5 align-middle text-foreground/90 border-r border-border/5 last:border-r-0"
                         style={
                           enableColumnResizing
                             ? { width: cell.column.getSize() }
-                            : undefined
+                            : cell.column.columnDef.size
+                              ? { width: cell.column.columnDef.size }
+                              : undefined
                         }
                       >
                         {flexRender(
@@ -540,7 +542,7 @@ export function ServerDataTable<TData, TValue>({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="h-8 gap-1.5 rounded-md border-border/80 bg-muted/55 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      className="h-8 gap-1.5 rounded-md border-border/80 bg-muted/55 text-xs text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                     >
                       <Columns3 className="size-3.5" />
                       Columnas
@@ -574,7 +576,7 @@ export function ServerDataTable<TData, TValue>({
                   size="sm"
                   onClick={() => handlePageChange(1)}
                   disabled={page <= 1}
-                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80"
+                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
                   title="Primera pagina"
                 >
                   <ChevronsLeft className="size-4" />
@@ -584,7 +586,7 @@ export function ServerDataTable<TData, TValue>({
                   size="sm"
                   onClick={() => handlePageChange(page - 1)}
                   disabled={page <= 1}
-                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80"
+                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
                 >
                   <ChevronLeft className="size-3.5" />
                   Anterior
@@ -604,7 +606,7 @@ export function ServerDataTable<TData, TValue>({
                       size="sm"
                       onClick={() => handlePageChange(item)}
                       className={cn(
-                        "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none",
+                        "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
                         item === page
                           ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
                           : "bg-muted/55 hover:bg-muted/80",
@@ -619,7 +621,7 @@ export function ServerDataTable<TData, TValue>({
                   size="sm"
                   onClick={() => handlePageChange(page + 1)}
                   disabled={page >= pageCount}
-                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80"
+                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
                 >
                   Siguiente
                   <ChevronRight className="size-3.5" />
@@ -629,7 +631,7 @@ export function ServerDataTable<TData, TValue>({
                   size="sm"
                   onClick={() => handlePageChange(pageCount)}
                   disabled={page >= pageCount}
-                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80"
+                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
                   title="Ultima pagina"
                 >
                   <ChevronsRight className="size-4" />

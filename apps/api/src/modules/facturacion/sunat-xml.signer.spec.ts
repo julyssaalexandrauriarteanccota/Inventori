@@ -72,6 +72,9 @@ describe('SunatXmlSigner', () => {
     expect(result.signedXml).toContain(
       '<ds:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"',
     );
+    expect(result.signedXml).toContain('<ds:Reference URI="">');
+    expect(result.signedXml).not.toMatch(/<Invoice[^>]*\sId=/);
+    expect(result.signedXml).not.toContain('<ds:Signature Id=');
     expect(result.signedXml).toContain('<ds:X509Certificate>');
     expect(result.signedXml).not.toContain('BEGIN CERTIFICATE');
     expect(

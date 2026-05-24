@@ -96,10 +96,10 @@ const styles = StyleSheet.create({
   docSubtitle: { fontSize: 8, color: "#94a3b8", marginTop: 2 },
 
   // ───── Hero
-  heroRow: { flexDirection: "row", marginBottom: 12 },
+  heroRow: { flexDirection: "row", alignItems: "stretch", marginBottom: 10 },
   heroImageBox: {
-    width: 140,
-    height: 140,
+    width: 118,
+    height: 118,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#e2e8f0",
@@ -110,8 +110,8 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   heroImage: {
-    width: 140,
-    height: 140,
+    width: 118,
+    height: 118,
     objectFit: "contain",
   },
   heroImagePlaceholder: {
@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 8,
   },
-  heroBody: { flex: 1 },
+  heroBody: { flex: 1, marginRight: 10 },
   heroTopLine: {
     flexDirection: "row",
     alignItems: "center",
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   },
   pillNeutralText: { fontSize: 8, color: "#475569", fontWeight: 700 },
   productName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 700,
     color: "#0f172a",
     lineHeight: 1.2,
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   heroMetaRow: { flexDirection: "row", flexWrap: "wrap" },
-  heroMetaCell: { width: "50%", marginBottom: 4, paddingRight: 6 },
+  heroMetaCell: { width: "25%", marginBottom: 4, paddingRight: 6 },
   heroMetaLabel: {
     fontSize: 7,
     color: "#94a3b8",
@@ -172,6 +172,111 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   heroMetaValue: { fontSize: 9, color: "#0f172a" },
+  heroCodesPanel: {
+    width: 150,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#dbeafe",
+    backgroundColor: "#ffffff",
+    padding: 8,
+  },
+  heroCodeLabel: {
+    fontSize: 6.5,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  heroBarcodeImg: {
+    width: "100%",
+    height: 36,
+    objectFit: "contain",
+  },
+  heroCodeCaption: {
+    fontSize: 7,
+    fontFamily: "Courier",
+    color: "#1e293b",
+    textAlign: "center",
+    marginTop: 2,
+    marginBottom: 6,
+  },
+  heroQrRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  heroQrImg: { width: 48, height: 48, marginRight: 6 },
+  heroQrCaption: {
+    flex: 1,
+    fontSize: 6.5,
+    fontFamily: "Courier",
+    color: "#334155",
+    lineHeight: 1.15,
+  },
+  heroCodeNoteText: {
+    flex: 1,
+    fontSize: 7,
+    color: "#475569",
+    lineHeight: 1.25,
+  },
+  heroQrBox: {
+    width: 82,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  heroQrImgSmall: {
+    width: 46,
+    height: 46,
+  },
+  heroQrCaptionSmall: {
+    fontSize: 6.5,
+    fontFamily: "Courier",
+    color: "#475569",
+    textAlign: "center",
+    marginTop: 3,
+  },
+  heroQrNoteText: {
+    fontSize: 6.5,
+    color: "#94a3b8",
+    textAlign: "center",
+    marginTop: 4,
+    paddingHorizontal: 4,
+  },
+  bottomBarcodeRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  bottomBarcodeBox: {
+    width: 170,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    alignItems: "center",
+  },
+  bottomBarcodeImg: {
+    width: "100%",
+    height: 28,
+    objectFit: "contain",
+  },
+  bottomBarcodeCaption: {
+    fontSize: 7,
+    fontFamily: "Courier",
+    color: "#475569",
+    textAlign: "center",
+    marginTop: 2,
+  },
 
   // ───── Section
   section: {
@@ -257,46 +362,52 @@ const styles = StyleSheet.create({
     color: "#0f172a",
     paddingHorizontal: 6,
   },
-  emptyHint: { fontSize: 9, color: "#94a3b8", fontStyle: "italic" },
-
   // ───── Descripción
   descText: {
     fontSize: 10,
     color: "#1f2937",
     lineHeight: 1.4,
   },
-
-  // ───── Códigos
-  codesRow: { flexDirection: "row" },
-  codeCard: {
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#ffffff",
-    padding: 10,
+  descContainer: {
+    flexDirection: "column",
   },
-  codeCardSpacer: { marginRight: 10 },
-  codeLabel: {
-    fontSize: 7,
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 6,
-  },
-  barcodeImg: { width: "100%", height: 64, objectFit: "contain" },
-  qrImg: { width: 90, height: 90, alignSelf: "center" },
-  codeCaption: {
-    fontSize: 9,
-    fontFamily: "Courier",
+  descHeader: {
+    fontSize: 11,
+    fontWeight: 700,
     color: "#1e293b",
-    textAlign: "center",
-    marginTop: 4,
+    marginTop: 8,
+    marginBottom: 4,
   },
-  codeNoteText: {
-    fontSize: 9,
-    color: "#475569",
-    lineHeight: 1.35,
+  descSubheader: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: "#334155",
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  descParagraph: {
+    fontSize: 9.5,
+    color: "#334155",
+    lineHeight: 1.45,
+    marginBottom: 4,
+  },
+  descBulletRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 3,
+    paddingLeft: 4,
+  },
+  descBulletIndicator: {
+    width: 12,
+    fontSize: 9.5,
+    color: "#4338ca",
+    fontWeight: 700,
+  },
+  descBulletText: {
+    flex: 1,
+    fontSize: 9.5,
+    color: "#334155",
+    lineHeight: 1.45,
   },
 
   // ───── Footer
@@ -345,6 +456,190 @@ function formatTiempoEstimado(min: number | null | undefined) {
   if (h > 0 && m > 0) return `${h}h ${m}min`;
   if (h > 0) return `${h}h`;
   return `${m}min`;
+}
+
+function descriptionHtmlToLines(value: string) {
+  if (!/<\/?[a-z][\s\S]*>/i.test(value)) return value.split(/\r?\n/);
+
+  if (typeof document === "undefined") {
+    return value
+      .replace(/<li[^>]*>/gi, "\n- ")
+      .replace(/<\/(p|div|h2|h3|h4|blockquote|li)>/gi, "\n")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<hr\s*\/?>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .split(/\r?\n/);
+  }
+
+  const template = document.createElement("template");
+  template.innerHTML = value;
+  const lines: string[] = [];
+  const pushText = (text: string, prefix = "") => {
+    const normalized = text.replace(/\s+/g, " ").trim();
+    if (normalized) lines.push(`${prefix}${normalized}`);
+  };
+
+  template.content.childNodes.forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      pushText(node.textContent ?? "");
+      return;
+    }
+
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const element = node as HTMLElement;
+    const tagName = element.tagName;
+
+    if (tagName === "UL" || tagName === "OL") {
+      Array.from(element.children).forEach((child, index) => {
+        pushText(
+          child.textContent ?? "",
+          tagName === "OL" ? `${index + 1}. ` : "- ",
+        );
+      });
+      return;
+    }
+
+    if (tagName === "HR") {
+      lines.push("");
+      return;
+    }
+
+    pushText(element.textContent ?? "");
+  });
+
+  return lines;
+}
+
+function renderFormattedDescription(text: string) {
+  if (!text) return null;
+
+  const lines = descriptionHtmlToLines(text);
+  const elements: React.ReactNode[] = [];
+
+  // Helper to remove emojis that Helvetica font cannot render (prevents visual corruption)
+  const cleanEmojis = (str: string) => {
+    return str
+      .replace(/[\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F9FF}]/gu, "")
+      .replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF]/g, "")
+      .trim();
+  };
+
+  // Helper to check if a line originally started with an emoji (to treat as heading)
+  const originallyHadEmoji = (str: string) => {
+    return /^[^\w\s]*([\u{1F300}-\u{1F9FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F9FF}]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD00-\uDFFF])/u.test(str);
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const rawLine = lines[i];
+    const trimmedRaw = rawLine.trim();
+    if (!trimmedRaw) {
+      // Empty line acts as paragraph spacer
+      elements.push(<View key={`space-${i}`} style={{ height: 6 }} />);
+      continue;
+    }
+
+    const hasEmojiStart = originallyHadEmoji(trimmedRaw);
+    const cleanedLine = cleanEmojis(trimmedRaw);
+    if (!cleanedLine) continue;
+
+    // Check for markdown headers
+    const headerMatch = cleanedLine.match(/^(#{1,6})\s+(.*)$/);
+    if (headerMatch) {
+      const headerText = headerMatch[2].trim();
+      elements.push(
+        <Text key={`header-${i}`} style={styles.descHeader}>
+          {headerText}
+        </Text>
+      );
+      continue;
+    }
+
+    // Treat as subheading if it ends with colon or originally started with an emoji icon and is short
+    const isSubheading = (cleanedLine.endsWith(":") && cleanedLine.length < 50) || (hasEmojiStart && cleanedLine.length < 50);
+    if (isSubheading) {
+      // Remove trailing colon for headings if we want a cleaner look
+      const headingText = cleanedLine.endsWith(":") ? cleanedLine.slice(0, -1).trim() : cleanedLine;
+      elements.push(
+        <Text key={`subheader-${i}`} style={styles.descSubheader}>
+          {headingText}
+        </Text>
+      );
+      continue;
+    }
+
+    // Check list matches
+    const bulletMatch = cleanedLine.match(/^([-\*•\+])\s*(.*)$/);
+    const numberMatch = cleanedLine.match(/^(\d+[\.\)])\s*(.*)$/);
+
+    if (bulletMatch) {
+      const content = bulletMatch[2].trim();
+      const inlineBoldMatch = content.match(/^([^:]+):\s*(.*)$/);
+
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 35 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <View key={`bullet-${i}`} style={styles.descBulletRow}>
+            <Text style={styles.descBulletIndicator}>•</Text>
+            <Text style={styles.descBulletText}>
+              <Text style={{ fontWeight: 700 }}>{boldPart}:</Text> {normalPart}
+            </Text>
+          </View>
+        );
+      } else {
+        elements.push(
+          <View key={`bullet-${i}`} style={styles.descBulletRow}>
+            <Text style={styles.descBulletIndicator}>•</Text>
+            <Text style={styles.descBulletText}>{content}</Text>
+          </View>
+        );
+      }
+    } else if (numberMatch) {
+      const numPrefix = numberMatch[1];
+      const content = numberMatch[2].trim();
+      const inlineBoldMatch = content.match(/^([^:]+):\s*(.*)$/);
+
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 35 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <View key={`num-${i}`} style={styles.descBulletRow}>
+            <Text style={styles.descBulletIndicator}>{numPrefix}</Text>
+            <Text style={styles.descBulletText}>
+              <Text style={{ fontWeight: 700 }}>{boldPart}:</Text> {normalPart}
+            </Text>
+          </View>
+        );
+      } else {
+        elements.push(
+          <View key={`num-${i}`} style={styles.descBulletRow}>
+            <Text style={styles.descBulletIndicator}>{numPrefix}</Text>
+            <Text style={styles.descBulletText}>{content}</Text>
+          </View>
+        );
+      }
+    } else {
+      // Normal paragraph line. Check for colon-bold pattern
+      const inlineBoldMatch = cleanedLine.match(/^([^:]+):\s*(.*)$/);
+      if (inlineBoldMatch && inlineBoldMatch[1].length < 35 && inlineBoldMatch[2].length > 0) {
+        const boldPart = inlineBoldMatch[1].trim();
+        const normalPart = inlineBoldMatch[2].trim();
+        elements.push(
+          <Text key={`para-bold-${i}`} style={styles.descParagraph}>
+            <Text style={{ fontWeight: 700 }}>{boldPart}:</Text> {normalPart}
+          </Text>
+        );
+      } else {
+        elements.push(
+          <Text key={`para-${i}`} style={styles.descParagraph}>
+            {cleanedLine}
+          </Text>
+        );
+      }
+    }
+  }
+
+  return <View style={styles.descContainer}>{elements}</View>;
 }
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -418,10 +713,12 @@ export function EtiquetaProductoPdfDocument({
   const isServicio = tipo === TipoProducto.SERVICIO;
   const isEquipoLike = tipo === TipoProducto.EQUIPO || producto.tieneNumeroSerie;
   const isStockable = !isServicio && producto.manejaInventario;
-
-  const stockBelow =
-    isStockable && producto.stockActual <= producto.stockMinimo;
-  const stockHealthy = isStockable && !stockBelow;
+  const modeloNombre = producto.modeloCatalogo?.nombre ?? producto.modelo ?? null;
+  const unidadLabel = producto.unidadMedida
+    ? `${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`
+    : "—";
+  const qrCaption = equipo?.codigoQr ?? qrValue ?? null;
+  const hasQrImage = Boolean(qrDataUrl && qrCaption);
 
   const atributos = producto.atributos
     ? Object.entries(producto.atributos).filter(
@@ -431,17 +728,6 @@ export function EtiquetaProductoPdfDocument({
 
   const empresaNombre = empresa?.nombre?.trim() || "Inventori ERP";
   const brandInitial = empresaNombre.charAt(0).toUpperCase();
-
-  const flagChips: { label: string; tone?: "success" | "warn" | "danger" }[] = [];
-  if (producto.manejaInventario && !isServicio)
-    flagChips.push({ label: "Maneja inventario", tone: "success" });
-  if (producto.tieneNumeroSerie)
-    flagChips.push({ label: "Serializado", tone: "warn" });
-  if (producto.esConsumible) flagChips.push({ label: "Consumible" });
-  if (producto.requiereRepuestos)
-    flagChips.push({ label: "Requiere repuestos" });
-  if (isServicio) flagChips.push({ label: "Servicio (no inventario)" });
-  if (!producto.activo) flagChips.push({ label: "Inactivo", tone: "danger" });
 
   const docTitle = equipo
     ? `Etiqueta de equipo · ${equipo.numeroSerie}`
@@ -496,18 +782,11 @@ export function EtiquetaProductoPdfDocument({
                   </Text>
                 </View>
               ) : null}
-              {producto.categoria?.nombre ? (
-                <View style={styles.pillNeutral}>
-                  <Text style={styles.pillNeutralText}>
-                    {producto.categoria.nombre}
-                  </Text>
-                </View>
-              ) : null}
             </View>
             <Text style={styles.productName}>{producto.nombre}</Text>
             <Text style={styles.skuLine}>
               SKU {producto.sku}
-              {producto.modelo ? `   ·   Modelo ${producto.modelo}` : ""}
+              {modeloNombre ? `   ·   Modelo ${modeloNombre}` : ""}
             </Text>
             <View style={styles.heroMetaRow}>
               <View style={styles.heroMetaCell}>
@@ -518,11 +797,7 @@ export function EtiquetaProductoPdfDocument({
               </View>
               <View style={styles.heroMetaCell}>
                 <Text style={styles.heroMetaLabel}>Unidad</Text>
-                <Text style={styles.heroMetaValue}>
-                  {producto.unidadMedida
-                    ? `${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`
-                    : "—"}
-                </Text>
+                <Text style={styles.heroMetaValue}>{unidadLabel}</Text>
               </View>
               <View style={styles.heroMetaCell}>
                 <Text style={styles.heroMetaLabel}>Precio venta</Text>
@@ -544,6 +819,23 @@ export function EtiquetaProductoPdfDocument({
               </View>
             </View>
           </View>
+
+          {hasQrImage ? (
+            <View style={styles.heroQrBox}>
+              <Text style={styles.heroCodeLabel}>QR</Text>
+              <Image src={qrDataUrl as string} style={styles.heroQrImgSmall} />
+              <Text style={styles.heroQrCaptionSmall}>
+                {qrCaption}
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.heroQrBox}>
+              <Text style={styles.heroCodeLabel}>QR</Text>
+              <Text style={styles.heroQrNoteText}>
+                {isEquipoLike ? "QR físico\nequipos" : "Sin QR"}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* ─── Equipo (si aplica) */}
@@ -664,11 +956,7 @@ export function EtiquetaProductoPdfDocument({
               <View style={styles.gridCellThird}>
                 <Field
                   label="Unidad medida"
-                  value={
-                    producto.unidadMedida
-                      ? `${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`
-                      : "—"
-                  }
+                  value={unidadLabel}
                 />
               </View>
               <View style={styles.gridCellThird}>
@@ -774,197 +1062,35 @@ export function EtiquetaProductoPdfDocument({
           </Section>
         ) : null}
 
-        {/* ─── Identificación */}
-        <Section title="Identificación">
+        {/* ─── Clasificación */}
+        <Section title="Clasificación">
           <View style={styles.gridRow}>
-            <View style={styles.gridCellThird}>
-              <Field label="SKU" value={producto.sku} mono />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Código de barras"
-                value={producto.codigoBarras ?? barcodeValue}
-                mono
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Código QR"
-                value={
-                  isEquipoLike
-                    ? "Por unidad física"
-                    : producto.codigoQr ?? qrValue ?? "—"
-                }
-                mono
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field label="Tipo" value={TIPO_LABELS[tipo]} />
-            </View>
             <View style={styles.gridCellThird}>
               <Field
                 label="Categoría"
-                value={producto.categoria?.nombre ?? "—"}
+                value={producto.categoria?.padre?.nombre ?? producto.categoria?.nombre ?? "—"}
               />
             </View>
             <View style={styles.gridCellThird}>
               <Field
-                label="Marca"
-                value={producto.marca?.nombre ?? "—"}
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Modelo"
-                value={
-                  producto.modeloCatalogo?.nombre ?? producto.modelo ?? "—"
-                }
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Condición"
-                value={
-                  producto.condicion
-                    ? CONDICION_LABELS[producto.condicion]
-                    : "—"
-                }
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Unidad de medida"
-                value={
-                  producto.unidadMedida
-                    ? `${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`
-                    : "—"
-                }
+                label="Subcategoría"
+                value={producto.categoria?.padre ? producto.categoria.nombre : "—"}
               />
             </View>
           </View>
         </Section>
-
-        {/* ─── Comercial */}
-        <Section title="Información comercial">
-          <View style={styles.gridRow}>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Precio de venta"
-                value={formatCurrency(producto.precioVenta)}
-              />
-            </View>
-            <View style={styles.gridCellThird}>
-              <Field
-                label="Estado del catálogo"
-                value={producto.activo ? "Activo" : "Inactivo"}
-              />
-            </View>
-            {isServicio ? (
-              <View style={styles.gridCellThird}>
-                <Field
-                  label="Duración estimada"
-                  value={formatTiempoEstimado(producto.tiempoEstimadoMin)}
-                />
-              </View>
-            ) : null}
-          </View>
-        </Section>
-
-        {/* ─── Inventario / servicio */}
-        {isServicio ? null : (
-          <Section title="Inventario">
-            <View style={styles.gridRow}>
-              <View style={styles.gridCellThird}>
-                <Field
-                  label="Stock actual"
-                  value={
-                    isStockable
-                      ? `${formatNumber(producto.stockActual)} ${producto.unidadMedida?.codigo ?? ""}`.trim()
-                      : "No aplica"
-                  }
-                />
-              </View>
-              <View style={styles.gridCellThird}>
-                <Field
-                  label="Stock mínimo"
-                  value={
-                    isStockable
-                      ? `${formatNumber(producto.stockMinimo)} ${producto.unidadMedida?.codigo ?? ""}`.trim()
-                      : "—"
-                  }
-                />
-              </View>
-              <View style={styles.gridCellThird}>
-                <Field
-                  label="Estado de stock"
-                  value={
-                    !isStockable
-                      ? "—"
-                      : stockBelow
-                        ? "Bajo o agotado"
-                        : "Saludable"
-                  }
-                />
-              </View>
-            </View>
-            <View style={[styles.chipRow, { marginTop: 6 }]}>
-              {flagChips.map((chip, idx) => {
-                const toneStyle =
-                  chip.tone === "success"
-                    ? styles.chipSuccess
-                    : chip.tone === "warn"
-                      ? styles.chipWarn
-                      : chip.tone === "danger"
-                        ? styles.chipDanger
-                        : null;
-                const toneText =
-                  chip.tone === "success"
-                    ? styles.chipSuccessText
-                    : chip.tone === "warn"
-                      ? styles.chipWarnText
-                      : chip.tone === "danger"
-                        ? styles.chipDangerText
-                        : null;
-                return (
-                  <View
-                    key={`${chip.label}-${idx}`}
-                    style={toneStyle ? [styles.chip, toneStyle] : styles.chip}
-                  >
-                    <Text style={toneText ? [styles.chipText, toneText] : styles.chipText}>
-                      {chip.label}
-                    </Text>
-                  </View>
-                );
-              })}
-              {stockHealthy ? (
-                <View style={[styles.chip, styles.chipSuccess]}>
-                  <Text style={[styles.chipText, styles.chipSuccessText]}>
-                    Stock saludable
-                  </Text>
-                </View>
-              ) : null}
-              {stockBelow ? (
-                <View style={[styles.chip, styles.chipDanger]}>
-                  <Text style={[styles.chipText, styles.chipDangerText]}>
-                    Stock bajo
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </Section>
-        )}
 
         {/* ─── Atributos */}
-        <Section title="Atributos / especificaciones">
-          {atributos.length === 0 ? (
-            <Text style={styles.emptyHint}>Sin atributos registrados.</Text>
-          ) : (
+        {atributos.length > 0 ? (
+          <Section title="Atributos / especificaciones">
             <View>
               {atributos.map(([key, value], idx) => (
                 <View
                   key={key}
                   style={
-                    idx % 2 === 1 ? [styles.attrRow, styles.attrRowAlt] : styles.attrRow
+                    idx % 2 === 1
+                      ? [styles.attrRow, styles.attrRowAlt]
+                      : styles.attrRow
                   }
                 >
                   <Text style={styles.attrKey}>{key}</Text>
@@ -972,46 +1098,24 @@ export function EtiquetaProductoPdfDocument({
                 </View>
               ))}
             </View>
-          )}
-        </Section>
+          </Section>
+        ) : null}
 
         {/* ─── Descripción */}
         {producto.descripcion?.trim() ? (
           <Section title="Descripción">
-            <Text style={styles.descText}>{producto.descripcion}</Text>
+            {renderFormattedDescription(producto.descripcion)}
           </Section>
         ) : null}
 
-        {/* ─── Códigos */}
-        <Section title="Códigos para escaneo">
-          <View style={styles.codesRow}>
-            <View style={[styles.codeCard, styles.codeCardSpacer]}>
-              <Text style={styles.codeLabel}>Code 128</Text>
-              <Image src={barcodeDataUrl} style={styles.barcodeImg} />
-              <Text style={styles.codeCaption}>{barcodeValue}</Text>
-            </View>
-            <View style={styles.codeCard}>
-              <Text style={styles.codeLabel}>QR</Text>
-              {equipo && equipo.codigoQr && qrDataUrl ? (
-                <>
-                  <Image src={qrDataUrl} style={styles.qrImg} />
-                  <Text style={styles.codeCaption}>{equipo.codigoQr}</Text>
-                </>
-              ) : qrDataUrl && qrValue ? (
-                <>
-                  <Image src={qrDataUrl} style={styles.qrImg} />
-                  <Text style={styles.codeCaption}>{qrValue}</Text>
-                </>
-              ) : (
-                <Text style={styles.codeNoteText}>
-                  {isEquipoLike
-                    ? "El QR operativo se imprime por unidad física desde el módulo de equipos."
-                    : "Sin QR configurado para este producto."}
-                </Text>
-              )}
-            </View>
+        {/* ─── Código de barras al final en una esquina */}
+        <View style={styles.bottomBarcodeRow} wrap={false}>
+          <View style={styles.bottomBarcodeBox}>
+            <Text style={styles.heroCodeLabel}>Código de barras</Text>
+            <Image src={barcodeDataUrl} style={styles.bottomBarcodeImg} />
+            <Text style={styles.bottomBarcodeCaption}>{barcodeValue}</Text>
           </View>
-        </Section>
+        </View>
 
         {/* ─── Footer */}
         <View style={styles.footer} fixed>

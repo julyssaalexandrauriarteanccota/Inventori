@@ -6,7 +6,11 @@ import {
   REGLAS_CONFIGURABLES_LABELS,
   ReglasValidacionConfig,
   ResultadoValidacion,
+  EstadoVenta,
   TipoDocumento,
+  isSunatUnidadMedidaAlias,
+  isSunatUnidadMedidaCode,
+  normalizeSunatUnidadMedidaCode,
   resolverReglasConfigurables,
 } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -18,7 +22,9 @@ interface ValidarInput {
 
 interface VentaContexto {
   id: string;
+  estado: unknown;
   subtotal: unknown;
+  total: unknown;
   cliente: {
     id: string;
     nombre: string | null;
@@ -28,6 +34,9 @@ interface VentaContexto {
     dni: string | null;
     direccion: string | null;
     email: string | null;
+    telefono: string | null;
+    celular: string | null;
+    contactos?: Array<{ id: string }>;
   } | null;
   detalles: Array<{
     cantidad: number;
@@ -36,6 +45,7 @@ interface VentaContexto {
     producto?: {
       id: string;
       nombre: string;
+      tipo?: string | null;
       manejaInventario: boolean;
       unidadMedida?: { codigo?: string | null } | null;
       almacenStocks?: Array<{ cantidad: number }>;
@@ -65,13 +75,22 @@ export class ValidacionFiscalService {
     const venta = (await this.prisma.venta.findUnique({
       where: { id: input.ventaId },
       include: {
-        cliente: true,
+        cliente: {
+          include: {
+            contactos: {
+              orderBy: { fecha: 'desc' },
+              select: { id: true },
+              take: 1,
+            },
+          },
+        },
         detalles: {
           include: {
             producto: {
               select: {
                 id: true,
                 nombre: true,
+                tipo: true,
                 manejaInventario: true,
                 unidadMedida: { select: { codigo: true } },
                 almacenStocks: { select: { cantidad: true } },
@@ -93,7 +112,7 @@ export class ValidacionFiscalService {
       return { bloqueantes, advertencias };
     }
 
-    const total = Number(venta.subtotal ?? 0);
+    const total = Number(venta.total ?? venta.subtotal ?? 0);
 
     // ── Reglas obligatorias (Doc 10 §6 tabla 1) ────────────────────────
     this.evaluarReglasObligatorias(venta, input.tipo, total, bloqueantes);
@@ -209,8 +228,8 @@ export class ValidacionFiscalService {
       }),
       this.prisma.fiscalSecret.findMany({
         where: {
-          scope: 'sunat',
-          name: { in: ['sol_username', 'sol_password'] },
+          scope: 'sunat-direct:sol-credentials',
+          name: { in: ['sol-username', 'sol-user', 'sol-password'] },
           deletedAt: null,
         },
         select: { name: true },
@@ -223,7 +242,7 @@ export class ValidacionFiscalService {
         mensaje: 'La empresa no tiene ambiente SUNAT definido',
         enlaceCorreccion: {
           label: 'Configurar tributario',
-          url: '/erp/configuracion/tributario',
+          url: '/configuracion/tributario',
         },
       });
     }
@@ -240,22 +259,28 @@ export class ValidacionFiscalService {
           : 'La empresa no tiene certificado digital activo',
         enlaceCorreccion: {
           label: 'Configurar certificado',
-          url: '/erp/configuracion/tributario/certificado',
+          url: '/configuracion/tributario/certificado',
         },
       });
     }
 
     const credentialNames = new Set(credenciales.map((item) => item.name));
-    if (
-      !credentialNames.has('sol_username') ||
-      !credentialNames.has('sol_password')
-    ) {
+    const hasDbCredentials =
+      (credentialNames.has('sol-username') ||
+        credentialNames.has('sol-user')) &&
+      credentialNames.has('sol-password');
+
+    const hasEnvCredentials =
+      (!!process.env.SUNAT_SOL_USERNAME || !!process.env.SUNAT_SOL_USER) &&
+      !!process.env.SUNAT_SOL_PASSWORD;
+
+    if (!hasDbCredentials && !hasEnvCredentials) {
       bloqueantes.push({
         reglaId: 'empresa_credenciales_sol_configuradas',
         mensaje: 'La empresa no tiene credenciales SOL configuradas',
         enlaceCorreccion: {
           label: 'Configurar credenciales SOL',
-          url: '/erp/configuracion/tributario/credenciales-sol',
+          url: '/configuracion/tributario/credenciales-sol',
         },
       });
     }
@@ -297,29 +322,74 @@ export class ValidacionFiscalService {
     if (!venta.cliente) return;
     const cliente = venta.cliente;
 
-    // Cliente con email
-    if (!cliente.email || cliente.email.trim().length === 0) {
+    // Cliente contactable: email, teléfono/celular o un contacto registrado.
+    const tieneContacto =
+      hasText(cliente.email) ||
+      hasText(cliente.telefono) ||
+      hasText(cliente.celular) ||
+      (cliente.contactos?.length ?? 0) > 0;
+    if (!tieneContacto) {
       push(
         ReglaConfigurableId.CLIENTE_CON_EMAIL,
-        'El cliente no tiene email registrado; el comprobante no se podrá enviar automáticamente',
+        'El cliente no tiene email, teléfono ni contacto registrado para enviar o coordinar el comprobante',
         this.enlaceCliente(cliente.id),
       );
     }
 
+    const stockYaFueDescontado = [
+      EstadoVenta.ORDEN_CONFIRMADA,
+      EstadoVenta.ENTREGADA,
+    ].includes(venta.estado as EstadoVenta);
+
+    if (!stockYaFueDescontado) {
+      for (const detalle of venta.detalles) {
+        const producto = detalle.producto;
+        if (!producto?.manejaInventario) continue;
+
+        const stockDisponible = (producto.almacenStocks ?? []).reduce(
+          (sum, item) => sum + Number(item.cantidad ?? 0),
+          0,
+        );
+        if (stockDisponible < Number(detalle.cantidad)) {
+          push(
+            ReglaConfigurableId.STOCK_DISPONIBLE_AL_EMITIR,
+            `Producto "${producto.nombre}" sin stock suficiente para emitir (stock: ${stockDisponible}, requerido: ${detalle.cantidad})`,
+            { label: 'Ver producto', url: `/productos/${producto.id}` },
+          );
+        }
+      }
+    }
+
     for (const detalle of venta.detalles) {
       const producto = detalle.producto;
-      if (!producto?.manejaInventario) continue;
+      const unidadCodigo = producto?.unidadMedida?.codigo?.trim();
+      if (unidadCodigo && isSunatUnidadMedidaCode(unidadCodigo)) continue;
 
-      const stockDisponible = (producto.almacenStocks ?? []).reduce(
-        (sum, item) => sum + Number(item.cantidad ?? 0),
-        0,
+      const fallback = producto?.tipo === 'SERVICIO' ? 'ZZ' : 'NIU';
+      const unidadNormalizada = normalizeSunatUnidadMedidaCode(
+        unidadCodigo,
+        fallback,
       );
-      if (stockDisponible < Number(detalle.cantidad)) {
-        push(
-          ReglaConfigurableId.STOCK_DISPONIBLE_AL_EMITIR,
-          `Producto "${producto.nombre}" sin stock suficiente para emitir (stock: ${stockDisponible}, requerido: ${detalle.cantidad})`,
-          { label: 'Ver producto', url: `/erp/productos/${producto.id}` },
-        );
+      const mensaje = unidadCodigo
+        ? `Producto "${producto?.nombre ?? detalle.productoId}" usa unidad "${unidadCodigo}", que SUNAT no acepta en unitCode. Usa ${unidadNormalizada} (${fallback === 'ZZ' ? 'servicio' : 'bien físico'}).`
+        : `Producto "${producto?.nombre ?? detalle.productoId}" no tiene unidad SUNAT. Usa ${unidadNormalizada} (${fallback === 'ZZ' ? 'servicio' : 'bien físico'}).`;
+      const item: ItemValidacion = {
+        reglaId: 'producto_unidad_sunat_valida',
+        mensaje,
+        ...(producto?.id
+          ? {
+              enlaceCorreccion: {
+                label: 'Ver producto',
+                url: `/productos/${producto.id}`,
+              },
+            }
+          : {}),
+      };
+
+      if (unidadCodigo && isSunatUnidadMedidaAlias(unidadCodigo)) {
+        advertencias.push(item);
+      } else {
+        bloqueantes.push(item);
       }
     }
 
@@ -386,7 +456,7 @@ export class ValidacionFiscalService {
   }
 
   private enlaceCliente(clienteId: string): ItemValidacion['enlaceCorreccion'] {
-    return { label: 'Editar cliente', url: `/erp/clientes/${clienteId}` };
+    return { label: 'Editar cliente', url: `/clientes/${clienteId}` };
   }
 
   private diasDesde(fecha: Date): number {
@@ -402,6 +472,10 @@ export class ValidacionFiscalService {
       .replace(/\s+/g, ' ')
       .trim();
   }
+}
+
+function hasText(value: string | null | undefined): boolean {
+  return !!value?.trim();
 }
 
 function isSunatRuc(value: string): boolean {

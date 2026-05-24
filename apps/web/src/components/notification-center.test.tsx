@@ -1,7 +1,11 @@
-import { render, screen } from '@testing-library/react'
+import { render as tlRender, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { SocketEvents } from '@erp/shared'
+import { TooltipProvider } from '@/components/ui/tooltip'
+
+const render = (ui: React.ReactElement) => tlRender(<TooltipProvider>{ui}</TooltipProvider>)
+
 
 // Mock useSocket with controllable return value
 const mockMarkAllRead = vi.fn()

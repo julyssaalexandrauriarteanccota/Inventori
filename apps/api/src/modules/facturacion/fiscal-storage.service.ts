@@ -261,9 +261,12 @@ export class FiscalStorageService {
     await fs.writeFile(filePath, content);
   }
 
-  async readObjectText(storageKey: string): Promise<string | null> {
+  async readObjectText(
+    storageKey: string,
+    encoding: BufferEncoding = 'utf8',
+  ): Promise<string | null> {
     const buf = await this.readObjectBuffer(storageKey);
-    return buf?.toString('utf8') ?? null;
+    return buf?.toString(encoding) ?? null;
   }
 
   async readObjectBuffer(storageKey: string): Promise<Buffer | null> {

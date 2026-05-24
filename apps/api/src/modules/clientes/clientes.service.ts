@@ -145,6 +145,40 @@ export class ClientesService {
     return this.prisma.cliente.create({ data });
   }
 
+  private async linkDocumentoValidaciones(cliente: {
+    id: string;
+    dni?: string | null;
+    ruc?: string | null;
+  }) {
+    const updates: Promise<unknown>[] = [];
+
+    if (cliente.dni) {
+      updates.push(
+        this.prisma.clienteValidacionSunat.updateMany({
+          where: {
+            tipoDocumentoSunat: '1',
+            numeroDocumento: cliente.dni,
+          },
+          data: { clienteId: cliente.id },
+        }),
+      );
+    }
+
+    if (cliente.ruc) {
+      updates.push(
+        this.prisma.clienteValidacionSunat.updateMany({
+          where: {
+            tipoDocumentoSunat: '6',
+            numeroDocumento: cliente.ruc,
+          },
+          data: { clienteId: cliente.id },
+        }),
+      );
+    }
+
+    await Promise.all(updates);
+  }
+
   private validateClienteData(input: {
     tipo: string;
     nombre?: string | null;
@@ -238,6 +272,7 @@ export class ClientesService {
     }
 
     const cliente = await this.prisma.cliente.create({ data: normalizedDto });
+    await this.linkDocumentoValidaciones(cliente);
 
     this.logger.log(`Cliente creado: ${cliente.id}`);
     return cliente;
@@ -287,6 +322,13 @@ export class ClientesService {
               id: true,
               tipoDocumentoSunat: true,
               numeroDocumento: true,
+              proveedor: true,
+              nombreNormalizado: true,
+              direccionFiscal: true,
+              ubigeo: true,
+              departamento: true,
+              provincia: true,
+              distrito: true,
               estado: true,
               condicionDomicilio: true,
               ultimaValidacionAt: true,
@@ -315,6 +357,13 @@ export class ClientesService {
             id: true,
             tipoDocumentoSunat: true,
             numeroDocumento: true,
+            proveedor: true,
+            nombreNormalizado: true,
+            direccionFiscal: true,
+            ubigeo: true,
+            departamento: true,
+            provincia: true,
+            distrito: true,
             estado: true,
             condicionDomicilio: true,
             ultimaValidacionAt: true,
@@ -378,6 +427,7 @@ export class ClientesService {
       where: { id },
       data: normalizedDto,
     });
+    await this.linkDocumentoValidaciones(cliente);
 
     this.logger.log(`Cliente actualizado: ${id}`);
     return cliente;
@@ -403,11 +453,36 @@ export class ClientesService {
   async findEquipos(clienteId: string) {
     await this.findOne(clienteId);
 
-    return this.prisma.equipoCliente.findMany({
+    const equipoClientes = await this.prisma.equipoCliente.findMany({
       where: { clienteId },
-      include: { equipo: true },
+      include: {
+        equipo: {
+          include: {
+            producto: {
+              include: {
+                marca: true,
+              },
+            },
+          },
+        },
+      },
       orderBy: { fechaInicio: 'desc' },
     });
+
+    return equipoClientes.map((ec) => ({
+      id: ec.id,
+      fechaInicio: ec.fechaInicio,
+      fechaFin: ec.fechaFin,
+      notas: ec.notas,
+      equipoId: ec.equipoId,
+      numeroSerie: ec.equipo?.numeroSerie ?? '—',
+      estado: ec.equipo?.estado ?? '—',
+      estadoComercial: ec.equipo?.estadoComercial ?? '—',
+      condicion: ec.equipo?.condicion ?? '—',
+      modelo: ec.equipo?.producto?.modelo || ec.equipo?.producto?.nombre || '—',
+      marca: ec.equipo?.producto?.marca?.nombre || 'Genérica',
+      productoNombre: ec.equipo?.producto?.nombre ?? '—',
+    }));
   }
 
   async findTickets(clienteId: string) {

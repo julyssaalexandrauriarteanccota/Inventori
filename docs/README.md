@@ -7,6 +7,7 @@ Documentación auxiliar del repositorio.
 | Ruta | Función actual | Necesidad actual |
 | --- | --- | --- |
 | `contracts/` | Contratos por sprint para payloads, filtros y campos consumidos por backend/frontend | Necesario |
+| [`../design/`](../design/README.md) | Guías de diseño visual: tipografías, colores, espaciado, layouts, UX, iconografía (carpeta separada en la raíz del repo) | Necesario para diseño/UI |
 | `arquitectura-escalable-erp.md` | Plan final para separar ERP base, operación por rubro, catálogo específico y fiscalidad | Necesario para planificación |
 | `handoff-arquitectura-escalable.md` | Resumen operativo actualizado para retomar el trabajo de arquitectura escalable en otro chat/agente | Necesario para continuidad |
 | `configuracion-empresa-branding.md` | Plan para usar `ConfigEmpresa` como fuente de branding, datos públicos y textos configurables | Necesario para Bloque 1 |

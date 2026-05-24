@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, ExternalLink } from "lucide-react";
+import { ArrowUpDown, ExternalLink, Printer } from "lucide-react";
 import {
   EstadoComprobante,
   TipoDocumento,
@@ -13,9 +13,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  ThermalReceiptDialog,
+  type ThermalReceiptData,
+} from "@/components/pos/thermal-receipt";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
-import { useComprobantes } from "@/hooks/use-facturacion";
+import {
+  useComprobante,
+  useComprobantes,
+  useConfigFiscal,
+} from "@/hooks/use-facturacion";
+import { usePublicBranding } from "@/hooks/use-public-branding";
 import { useDebounce } from "@/hooks/use-debounce";
+
+import {
+  buildEmpresaPrintData,
+  comprobanteToPrintData,
+} from "./comprobante-print-utils";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
@@ -60,12 +74,42 @@ export function ComprobantesTable({
   const [limit, setLimit] = useState(20);
   const debounced = useDebounce(search, 300);
 
+  // Print preview state
+  const [printId, setPrintId] = useState<string | null>(null);
+  const [printOpen, setPrintOpen] = useState(false);
+
   const query = useComprobantes({
     page,
     limit,
     search: debounced || undefined,
     tipo,
   });
+
+  // Fetch full detail for the comprobante selected for printing
+  const printDetailQuery = useComprobante(printId ?? undefined);
+  const configFiscalQ = useConfigFiscal();
+  const publicBrandingQ = usePublicBranding();
+
+  const printData = useMemo<ThermalReceiptData | null>(() => {
+    const detail = printDetailQuery.data?.data;
+    if (!detail) return null;
+
+    const configFiscal = configFiscalQ.data?.data ?? null;
+    const empresaPublica = publicBrandingQ.data?.data ?? null;
+    const empresa = buildEmpresaPrintData(
+      configFiscal,
+      empresaPublica,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (detail as any).snapshotEmisorJson,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return comprobanteToPrintData(detail as any, empresa, configFiscal?.pieImpresion ?? undefined);
+  }, [printDetailQuery.data, configFiscalQ.data, publicBrandingQ.data]);
+
+  const handlePrintClick = (id: string) => {
+    setPrintId(id);
+    setPrintOpen(true);
+  };
 
   const columns = useMemo<ColumnDef<ComprobanteListItem>[]>(
     () => [
@@ -144,7 +188,15 @@ export function ComprobantesTable({
         id: "actions",
         header: () => <div className="text-right">Acciones</div>,
         cell: ({ row }) => (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1"
+              onClick={() => handlePrintClick(row.original.id)}
+            >
+              <Printer className="size-3.5" />
+            </Button>
             <Button asChild variant="ghost" size="sm" className="h-8 gap-1">
               <Link href={`${detailBaseHref}/${row.original.id}`}>
                 <ExternalLink className="size-3.5" /> Ver
@@ -192,6 +244,16 @@ export function ComprobantesTable({
         columnVisibilityStorageKey={
           storageKey ?? `erp:comprobantes:${tipo ?? "all"}`
         }
+      />
+
+      <ThermalReceiptDialog
+        open={printOpen}
+        onOpenChange={(open) => {
+          setPrintOpen(open);
+          if (!open) setPrintId(null);
+        }}
+        data={printData}
+        format="AMBOS"
       />
     </div>
   );

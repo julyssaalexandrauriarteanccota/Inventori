@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import PDFDocument = require('pdfkit');
+import * as fs from 'fs';
+import * as path from 'path';
 import * as QRCode from 'qrcode';
+import sharp from 'sharp';
 import { numeroALetras } from './numero-a-letras';
 
 /**
@@ -20,8 +23,15 @@ export interface ComprobantePdfInput {
   fechaEmision: Date;
   emisorRuc: string;
   emisorRazonSocial: string;
+  emisorNombreComercial?: string | null;
   emisorDireccion?: string | null;
   emisorUbigeo?: string | null;
+  emisorCodigoEstablecimiento?: string | null;
+  emisorDepartamentoFiscal?: string | null;
+  emisorProvinciaFiscal?: string | null;
+  emisorDistritoFiscal?: string | null;
+  emisorRegimenTributario?: string | null;
+  emisorLogoPath?: string | null;
   clienteDocTipo: string;
   clienteDocNum: string;
   clienteNombre: string;
@@ -32,6 +42,8 @@ export interface ComprobantePdfInput {
   estado: string;
   cdrCodigo?: string | null;
   cdrMensaje?: string | null;
+  formaPago?: string | null;
+  pieImpresion?: string | null;
   /**
    * Doc 09 §6 — `digestValue` del XML firmado. Va al QR y al pie del PDF.
    * Si es null/undefined, el PDF se imprime con un placeholder; el QR se
@@ -83,6 +95,8 @@ export class ComprobantePdfService {
   async render(input: ComprobantePdfInput): Promise<Buffer> {
     const qrPayload = this.buildQrPayload(input);
     let qrDataUrl: string | null = null;
+    const logoPath = resolveLocalImagePath(input.emisorLogoPath);
+    let logoBuffer: Buffer | null = null;
     try {
       qrDataUrl = await QRCode.toDataURL(qrPayload, {
         errorCorrectionLevel: 'M',
@@ -94,6 +108,18 @@ export class ComprobantePdfService {
         `No se pudo generar QR para ${input.numero}: ${(error as Error).message}`,
       );
     }
+    if (logoPath) {
+      try {
+        logoBuffer = await sharp(logoPath)
+          .resize(180, 180, { fit: 'inside', withoutEnlargement: true })
+          .png()
+          .toBuffer();
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo preparar logo en PDF ${input.numero}: ${(error as Error).message}`,
+        );
+      }
+    }
 
     return new Promise<Buffer>((resolve, reject) => {
       try {
@@ -103,11 +129,55 @@ export class ComprobantePdfService {
         doc.on('end', () => resolve(Buffer.concat(chunks)));
         doc.on('error', reject);
 
-        // Encabezado emisor
-        doc.fontSize(16).text(input.emisorRazonSocial, { align: 'left' });
-        doc.fontSize(10).text(`RUC: ${input.emisorRuc}`);
-        if (input.emisorDireccion) doc.text(input.emisorDireccion);
+        // Encabezado emisor: datos fiscales reales congelados al emitir.
+        const headerTop = doc.y;
+        let headerX = doc.page.margins.left;
+        if (logoBuffer) {
+          try {
+            doc.image(logoBuffer, doc.page.margins.left, headerTop, {
+              fit: [72, 72],
+            });
+            headerX += 88;
+          } catch (error) {
+            this.logger.warn(
+              `No se pudo incrustar logo en PDF ${input.numero}: ${(error as Error).message}`,
+            );
+          }
+        }
+        if (
+          input.emisorNombreComercial &&
+          input.emisorNombreComercial !== input.emisorRazonSocial
+        ) {
+          doc
+            .fontSize(10)
+            .text(input.emisorNombreComercial, headerX, headerTop, {
+              width: 260,
+            });
+        }
+        doc.fontSize(16).text(input.emisorRazonSocial, headerX, doc.y, {
+          width: 260,
+        });
+        doc.fontSize(10).text(`RUC: ${input.emisorRuc}`, headerX, doc.y, {
+          width: 260,
+        });
+        const direccionCompleta = [
+          input.emisorDireccion,
+          input.emisorDistritoFiscal,
+          input.emisorProvinciaFiscal,
+          input.emisorDepartamentoFiscal,
+        ]
+          .filter(Boolean)
+          .join(' - ');
+        if (direccionCompleta) doc.text(direccionCompleta);
         if (input.emisorUbigeo) doc.text(`Ubigeo: ${input.emisorUbigeo}`);
+        if (input.emisorCodigoEstablecimiento) {
+          doc.text(
+            `Establecimiento SUNAT: ${input.emisorCodigoEstablecimiento}`,
+          );
+        }
+        if (input.emisorRegimenTributario) {
+          doc.text(`Régimen tributario: ${input.emisorRegimenTributario}`);
+        }
 
         doc.moveDown();
         doc.fontSize(14).text(this.tipoLabel(input.tipo), { align: 'right' });
@@ -116,6 +186,9 @@ export class ComprobantePdfService {
           .fontSize(10)
           .text(input.fechaEmision.toLocaleString('es-PE'), { align: 'right' });
         doc.text(`Estado: ${input.estado}`, { align: 'right' });
+        if (input.formaPago) {
+          doc.text(`Forma de pago: ${input.formaPago}`, { align: 'right' });
+        }
         if (input.cdrCodigo) {
           doc.text(`CDR ${input.cdrCodigo}: ${input.cdrMensaje ?? ''}`, {
             align: 'right',
@@ -201,6 +274,11 @@ export class ComprobantePdfService {
                 130,
             },
           );
+        if (input.pieImpresion) {
+          doc.moveDown(0.5).fontSize(8).text(input.pieImpresion, {
+            align: 'center',
+          });
+        }
 
         doc.end();
       } catch (error) {
@@ -230,4 +308,25 @@ function formatFechaSunat(d: Date): string {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function resolveLocalImagePath(value?: string | null): string | null {
+  if (!value) return null;
+  if (/^(https?:|data:|blob:)/i.test(value)) return null;
+
+  const normalized = value.trim().replace(/\\/g, '/');
+  const basename = path.basename(normalized);
+  const relative = normalized.replace(/^\/+/, '');
+  const candidates = [
+    path.resolve('uploads/public', basename),
+    path.resolve('uploads', basename),
+    path.resolve('..', '..', 'uploads/public', basename),
+    path.resolve('..', '..', 'uploads', basename),
+    path.resolve(relative),
+    path.resolve('apps/web/public', relative),
+    path.resolve('..', '..', 'apps/web/public', relative),
+    path.resolve('..', 'web/public', relative),
+  ];
+
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }

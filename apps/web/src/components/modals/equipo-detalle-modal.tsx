@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
-  Activity,
   Barcode,
   Calendar,
   CircleAlert,
@@ -34,11 +33,7 @@ import {
   EstadoGarantia,
 } from "@erp/shared";
 
-import {
-  useEquipo,
-  useEquipoHistorial,
-  useEquipoLecturas,
-} from "@/hooks/use-equipos";
+import { useEquipo, useEquipoHistorial } from "@/hooks/use-equipos";
 import { getApiAssetUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -52,7 +47,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { LecturaSnmpDialog } from "@/components/forms/lectura-snmp-dialog";
 
 const ESTADO_LABELS: Record<EstadoEquipo, string> = {
   [EstadoEquipo.ACTIVO]: "Activo",
@@ -125,24 +119,11 @@ interface EquipoGarantiaResumen {
   codigoQR: string;
 }
 
-interface LecturaSNMPItem {
-  id?: string;
-  timestamp?: string;
-  nivelTonerNegro?: number | null;
-  nivelTonerCian?: number | null;
-  nivelTonerMagenta?: number | null;
-  nivelTonerAmarillo?: number | null;
-  paginasTotales?: number | null;
-  erroresActivos?: string[] | null;
-  estadoFusor?: string | null;
-}
-
 type HistorialEventoTipo =
   | "CREACION"
   | "ASIGNACION_INICIO"
   | "ASIGNACION_FIN"
-  | "GARANTIA"
-  | "LECTURA_SNMP";
+  | "GARANTIA";
 
 interface HistorialEvento {
   id: string;
@@ -417,9 +398,6 @@ export function EquipoDetalleModal({
   const { data: equipoRes, isLoading, isError } = useEquipo(serie || undefined);
   const { data: historialRes, isLoading: historialLoading } =
     useEquipoHistorial(serie || undefined);
-  const { data: lecturasRes, isLoading: lecturasLoading } = useEquipoLecturas(
-    serie || undefined,
-  );
 
   const equipo = equipoRes?.data as EquipoDetalleRecord | undefined;
 
@@ -580,12 +558,6 @@ export function EquipoDetalleModal({
                   className="h-8 flex-1 rounded-md text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
                 >
                   Información
-                </TabsTrigger>
-                <TabsTrigger
-                  value="lecturas"
-                  className="h-8 flex-1 rounded-md text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
-                >
-                  Lecturas SNMP
                 </TabsTrigger>
                 <TabsTrigger
                   value="historial"
@@ -959,143 +931,6 @@ export function EquipoDetalleModal({
               </TabsContent>
 
               <TabsContent
-                value="lecturas"
-                className="mt-0 data-[state=active]:animate-fade-up"
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground">
-                    Lecturas SNMP capturadas (manuales y automáticas)
-                  </p>
-                  {serie ? (
-                    <LecturaSnmpDialog
-                      serie={serie}
-                      hasIp={Boolean(equipo?.ipAddress)}
-                    />
-                  ) : null}
-                </div>
-                {lecturasLoading ? (
-                  <div className="flex flex-col gap-3">
-                    {Array.from({ length: 3 }).map((_, i) => (
-                      <div
-                        key={i}
-                        className="rounded-xl border border-border/50 bg-card p-4"
-                      >
-                        <Skeleton className="mb-2 h-4 w-40" />
-                        <Skeleton className="h-4 w-28" />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  (() => {
-                    const lecturas = (lecturasRes?.data ??
-                      []) as LecturaSNMPItem[];
-                    if (lecturas.length === 0) {
-                      return (
-                        <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-                          <div className="flex size-14 items-center justify-center rounded-full bg-muted/60">
-                            <Gauge className="size-6 opacity-40" />
-                          </div>
-                          <p className="text-sm font-medium">
-                            Sin lecturas SNMP
-                          </p>
-                          <p className="text-xs text-muted-foreground/70">
-                            Las lecturas se registran automáticamente o
-                            manualmente.
-                          </p>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="flex flex-col gap-3">
-                        {lecturas.map((l, i) => (
-                          <div
-                            key={l.id ?? i}
-                            className="rounded-xl border border-border/50 bg-card p-4 sm:p-5"
-                          >
-                            <div className="mb-3 flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium text-foreground">
-                                {l.timestamp
-                                  ? formatDateTime(l.timestamp)
-                                  : `Lectura ${i + 1}`}
-                              </span>
-                            </div>
-                            <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                              {l.paginasTotales != null && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Páginas totales
-                                  </span>
-                                  <span className="font-mono">
-                                    {String(l.paginasTotales)}
-                                  </span>
-                                </div>
-                              )}
-                              {l.nivelTonerNegro != null && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Tóner negro
-                                  </span>
-                                  <span className="font-mono">
-                                    {String(l.nivelTonerNegro)}%
-                                  </span>
-                                </div>
-                              )}
-                              {l.nivelTonerCian != null && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Tóner cian
-                                  </span>
-                                  <span className="font-mono">
-                                    {String(l.nivelTonerCian)}%
-                                  </span>
-                                </div>
-                              )}
-                              {l.nivelTonerMagenta != null && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Tóner magenta
-                                  </span>
-                                  <span className="font-mono">
-                                    {String(l.nivelTonerMagenta)}%
-                                  </span>
-                                </div>
-                              )}
-                              {l.nivelTonerAmarillo != null && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Tóner amarillo
-                                  </span>
-                                  <span className="font-mono">
-                                    {String(l.nivelTonerAmarillo)}%
-                                  </span>
-                                </div>
-                              )}
-                              {l.estadoFusor && (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Fusor
-                                  </span>
-                                  <span>{l.estadoFusor}</span>
-                                </div>
-                              )}
-                              {!!l.erroresActivos?.length && (
-                                <div className="flex flex-col gap-0.5 sm:col-span-2">
-                                  <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                                    Errores activos
-                                  </span>
-                                  <span>{l.erroresActivos.join(", ")}</span>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()
-                )}
-              </TabsContent>
-
-              <TabsContent
                 value="historial"
                 className="mt-0 data-[state=active]:animate-fade-up"
               >
@@ -1162,12 +997,6 @@ export function EquipoDetalleModal({
                         ring: "ring-purple-200 dark:ring-purple-900/40",
                         bg: "bg-purple-100 dark:bg-purple-900/30",
                         text: "text-purple-700 dark:text-purple-400",
-                      },
-                      LECTURA_SNMP: {
-                        Icon: Activity,
-                        ring: "ring-cyan-200 dark:ring-cyan-900/40",
-                        bg: "bg-cyan-100 dark:bg-cyan-900/30",
-                        text: "text-cyan-700 dark:text-cyan-400",
                       },
                     };
 

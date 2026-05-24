@@ -68,7 +68,9 @@ export class CreateClienteDto {
   ruc?: string;
 
   @ApiPropertyOptional()
-  @IsOptional()
+  @ValidateIf(
+    (_, value) => value !== undefined && value !== null && value !== '',
+  )
   @IsEmail()
   email?: string;
 

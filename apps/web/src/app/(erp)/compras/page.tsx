@@ -31,12 +31,8 @@ import {
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
-import {
-  readStoredComprasAutoRefreshPreference,
-  writeStoredComprasAutoRefreshPreference,
-} from "@/lib/compras-auto-refresh";
 import { useAuth } from "@/hooks/use-auth";
-import { useStoredAutoRefresh } from "@/hooks/use-stored-auto-refresh";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useOrdenesCompra,
   useOrdenCompra,
@@ -49,7 +45,7 @@ import {
 } from "@/hooks/use-compras";
 import { useAlmacenes } from "@/hooks/use-inventario";
 import { useDebounce } from "@/hooks/use-debounce";
-import { AutoRefreshControl } from "@/components/layout/auto-refresh-control";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -107,12 +103,6 @@ import { OrdenCompraForm } from "@/components/forms/orden-compra-form";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-];
 
 /* ── Label maps ─────────────────────────────────────── */
 
@@ -228,48 +218,12 @@ export default function ComprasPage() {
     estado: EstadoOrdenCompra.RECIBIDA_TOTAL,
   });
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", { duration: 2000 });
-  }, []);
-
-  const handleManualRefresh = useCallback(() => {
-    void refetch();
-    showRefreshToast();
-  }, [refetch, showRefreshToast]);
-
-  const handleAutoRefresh = useCallback(() => {
-    void refetch();
-  }, [refetch]);
-
-  const {
-    enabled: autoRefresh,
-    interval: refreshInterval,
-    setEnabled: setAutoRefresh,
-    setInterval: setRefreshInterval,
-  } = useStoredAutoRefresh({
-    readPreference: readStoredComprasAutoRefreshPreference,
-    writePreference: writeStoredComprasAutoRefreshPreference,
-    onRefresh: handleAutoRefresh,
+  const autoRefresh = usePageAutoRefresh({
+    scope: "compras",
+    toastLabel: "Compras",
+    manualToastMessage: "Lista actualizada",
   });
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const label =
-        REFRESH_INTERVALS.find((option) => option.value === refreshInterval)
-          ?.label ?? "intervalo actual";
-      const message = enabled
-        ? `Auto-refresh activado cada ${label}`
-        : "Auto-refresh desactivado";
-
-      if (enabled) {
-        toast.success(message, { duration: 2000 });
-        return;
-      }
-
-      toast.info(message, { duration: 2000 });
-    },
-    [refreshInterval],
-  );
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const createMutation = useCreateOrdenCompra();
   const createDirectaMutation = useCreateCompraDirecta();
@@ -308,9 +262,7 @@ export default function ComprasPage() {
     (payload: OrdenCompraFormPayload | CompraDirectaFormPayload) => {
       createDirectaMutation.mutate(payload as CompraDirectaFormPayload, {
         onSuccess: () => {
-          toast.success(
-            "Compra registrada y stock actualizado correctamente",
-          );
+          toast.success("Compra registrada y stock actualizado correctamente");
           setOpenCreateDirecta(false);
         },
         onError: (err: Error) => {
@@ -701,18 +653,7 @@ export default function ComprasPage() {
         hideTitleVisually
         actions={
           <>
-            <AutoRefreshControl
-              enabled={autoRefresh}
-              interval={refreshInterval}
-              intervals={REFRESH_INTERVALS}
-              switchId="auto-refresh-compras"
-              onEnabledChange={(enabled) => {
-                setAutoRefresh(enabled);
-                showAutoRefreshToast(enabled);
-              }}
-              onIntervalChange={setRefreshInterval}
-              onManualRefresh={handleManualRefresh}
-            />
+            <PageAutoRefreshControl autoRefresh={autoRefresh} />
             <PageActionsMenu
               items={[
                 {
@@ -1251,10 +1192,12 @@ export default function ComprasPage() {
                             <> · Recibido: {d.cantidadRecibida}</>
                           )}
                           {(() => {
-                            const pend =
-                              d.cantidad - (d.cantidadRecibida ?? 0);
+                            const pend = d.cantidad - (d.cantidadRecibida ?? 0);
                             return pend > 0 ? (
-                              <> · Pendiente: <strong>{pend}</strong></>
+                              <>
+                                {" "}
+                                · Pendiente: <strong>{pend}</strong>
+                              </>
                             ) : null;
                           })()}
                         </p>

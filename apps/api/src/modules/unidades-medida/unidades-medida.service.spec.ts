@@ -34,30 +34,30 @@ describe('UnidadesMedidaService', () => {
     mockPrismaService.unidadMedida.findFirst.mockResolvedValue(null);
     mockPrismaService.unidadMedida.create.mockResolvedValue({
       id: 'unidad-1',
-      codigo: 'UND',
+      codigo: 'NIU',
       nombre: 'Unidad',
     });
 
-    const result = await service.create({ codigo: 'UND', nombre: 'Unidad' });
+    const result = await service.create({ codigo: 'NIU', nombre: 'Unidad' });
 
-    expect(result.codigo).toBe('UND');
+    expect(result.codigo).toBe('NIU');
   });
 
   it('rechaza códigos duplicados', async () => {
     mockPrismaService.unidadMedida.findFirst.mockResolvedValue({
       id: 'unidad-1',
-      codigo: 'UND',
+      codigo: 'NIU',
       nombre: 'Unidad',
     });
 
     await expect(
-      service.create({ codigo: 'UND', nombre: 'Unidad nueva' }),
+      service.create({ codigo: 'NIU', nombre: 'Unidad nueva' }),
     ).rejects.toThrow(ConflictException);
   });
 
   it('lista unidades activas', async () => {
     mockPrismaService.unidadMedida.findMany.mockResolvedValue([
-      { id: 'unidad-1', codigo: 'UND', nombre: 'Unidad' },
+      { id: 'unidad-1', codigo: 'NIU', nombre: 'Unidad' },
     ]);
 
     const result = await service.findAll();
@@ -74,7 +74,7 @@ describe('UnidadesMedidaService', () => {
   it('elimina por soft delete cuando no tiene productos asociados', async () => {
     mockPrismaService.unidadMedida.findFirst.mockResolvedValue({
       id: 'unidad-1',
-      codigo: 'UND',
+      codigo: 'NIU',
       nombre: 'Unidad',
       productos: [],
     });

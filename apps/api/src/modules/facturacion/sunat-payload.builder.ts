@@ -1,11 +1,19 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { TipoAfectacionIgv, TipoDocumento } from '@erp/shared';
+import {
+  normalizeSunatUnidadMedidaCode,
+  TipoAfectacionIgv,
+  TipoDocumento,
+  TipoFiscalProducto,
+} from '@erp/shared';
+
+const SUNAT_TIME_ZONE = 'America/Lima';
 
 interface ComprobanteDetalleFiscalLike {
   item: number;
   codigoInterno?: string | null;
   descripcion: string;
   unidadSunat: string;
+  tipoFiscalProducto?: string | null;
   tipoAfectacionIgv: string;
   cantidad: unknown;
   valorUnitario: unknown;
@@ -48,7 +56,7 @@ export class SunatPayloadBuilder {
       .map((detalle) => this.buildInvoiceLine(detalle))
       .join('');
 
-    const xml = `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
   <ext:UBLExtensions>
     <ext:UBLExtension>
@@ -60,8 +68,8 @@ export class SunatPayloadBuilder {
   <cbc:ID>${this.escape(`${serie}-${correlativoPadded}`)}</cbc:ID>
   <cbc:IssueDate>${fechaEmision}</cbc:IssueDate>
   <cbc:IssueTime>${horaEmision}</cbc:IssueTime>
-  <cbc:InvoiceTypeCode listID="0101">${documentCode}</cbc:InvoiceTypeCode>
-  <cbc:DocumentCurrencyCode>PEN</cbc:DocumentCurrencyCode>
+  <cbc:InvoiceTypeCode listID="0101" listAgencyName="PE:SUNAT" listName="Tipo de Documento" listURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01" name="Tipo de Operacion" listSchemeURI="urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo51">${documentCode}</cbc:InvoiceTypeCode>
+  <cbc:DocumentCurrencyCode listID="ISO 4217 Alpha" listAgencyName="United Nations Economic Commission for Europe" listName="Currency">PEN</cbc:DocumentCurrencyCode>
   <cac:Signature>
     <cbc:ID>${this.escape(`${ruc}-${serie}-${correlativo}`)}</cbc:ID>
     <cac:SignatoryParty>
@@ -158,7 +166,7 @@ export class SunatPayloadBuilder {
     const xmlFileName = `${ruc}-${identificador}.xml`;
     const fileName = xmlFileName.replace(/\.xml$/, '');
 
-    const xml = `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <VoidedDocuments xmlns="urn:sunat:names:specification:ubl:peru:schema:xsd:VoidedDocuments-1" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2" xmlns:sac="urn:sunat:names:specification:ubl:peru:schema:xsd:SunatAggregateComponents-1">
   <ext:UBLExtensions>
     <ext:UBLExtension>
@@ -266,6 +274,9 @@ export class SunatPayloadBuilder {
         <cac:RegistrationAddress>
           <cbc:ID>${this.escape(this.text(comprobante.emisorUbigeoFiscal, '000000'))}</cbc:ID>
           <cbc:AddressTypeCode>${this.escape(this.text(comprobante.emisorCodigoEstablecimiento, '0000'))}</cbc:AddressTypeCode>
+          ${comprobante.emisorProvinciaFiscal ? `<cbc:CityName><![CDATA[${this.cdata(this.text(comprobante.emisorProvinciaFiscal))}]]></cbc:CityName>` : ''}
+          ${comprobante.emisorDepartamentoFiscal ? `<cbc:CountrySubentity><![CDATA[${this.cdata(this.text(comprobante.emisorDepartamentoFiscal))}]]></cbc:CountrySubentity>` : ''}
+          ${comprobante.emisorDistritoFiscal ? `<cbc:District><![CDATA[${this.cdata(this.text(comprobante.emisorDistritoFiscal))}]]></cbc:District>` : ''}
           <cac:AddressLine>
             <cbc:Line><![CDATA[${this.cdata(this.text(comprobante.emisorDireccionFiscal))}]]></cbc:Line>
           </cac:AddressLine>
@@ -361,7 +372,7 @@ export class SunatPayloadBuilder {
     );
     const namespace = `urn:oasis:names:specification:ubl:schema:xsd:${config.rootName}-2`;
 
-    const xml = `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <${config.rootName} xmlns="${namespace}" xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2" xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2" xmlns:ds="http://www.w3.org/2000/09/xmldsig#" xmlns:ext="urn:oasis:names:specification:ubl:schema:xsd:CommonExtensionComponents-2">
   <ext:UBLExtensions>
     <ext:UBLExtension>
@@ -378,7 +389,7 @@ export class SunatPayloadBuilder {
   <cac:DiscrepancyResponse>
     <cbc:ReferenceID>${this.escape(originNumber)}</cbc:ReferenceID>
     <cbc:ResponseCode>${this.escape(config.reasonCode)}</cbc:ResponseCode>
-    <cbc:Description><![CDATA[${this.cdata(reason)}]]></cbc:Description>
+    <cbc:Description><![CDATA[${this.cdata(this.plainText(reason))}]]></cbc:Description>
   </cac:DiscrepancyResponse>
   <cac:BillingReference>
     <cac:InvoiceDocumentReference>
@@ -502,9 +513,10 @@ export class SunatPayloadBuilder {
     reason: string,
   ) {
     const afectacion = this.mapAfectacionIgv(detalle.tipoAfectacionIgv);
+    const unitCode = this.unitCode(detalle);
     return `<cac:${config.lineTag}>
     <cbc:ID>${lineNumber}</cbc:ID>
-    <cbc:${config.quantityTag} unitCode="${this.escape(detalle.unidadSunat || 'NIU')}">${this.quantity(detalle.cantidad)}</cbc:${config.quantityTag}>
+    <cbc:${config.quantityTag} unitCode="${this.escape(unitCode)}">${this.quantity(detalle.cantidad)}</cbc:${config.quantityTag}>
     <cbc:LineExtensionAmount currencyID="PEN">${this.money(detalle.baseImponible)}</cbc:LineExtensionAmount>
     <cac:PricingReference>
       <cac:AlternativeConditionPrice>
@@ -529,7 +541,7 @@ export class SunatPayloadBuilder {
       </cac:TaxSubtotal>
     </cac:TaxTotal>
     <cac:Item>
-      <cbc:Description><![CDATA[${this.cdata(reason)}]]></cbc:Description>
+      <cbc:Description><![CDATA[${this.cdata(this.plainText(reason))}]]></cbc:Description>
       <cac:SellersItemIdentification><cbc:ID>${this.escape(detalle.codigoInterno ?? 'AJUSTE')}</cbc:ID></cac:SellersItemIdentification>
     </cac:Item>
     <cac:Price>
@@ -540,9 +552,10 @@ export class SunatPayloadBuilder {
 
   private buildInvoiceLine(detalle: ComprobanteDetalleFiscalLike) {
     const afectacion = this.mapAfectacionIgv(detalle.tipoAfectacionIgv);
+    const unitCode = this.unitCode(detalle);
     return `<cac:InvoiceLine>
     <cbc:ID>${detalle.item}</cbc:ID>
-    <cbc:InvoicedQuantity unitCode="${this.escape(detalle.unidadSunat || 'NIU')}">${this.quantity(detalle.cantidad)}</cbc:InvoicedQuantity>
+    <cbc:InvoicedQuantity unitCode="${this.escape(unitCode)}">${this.quantity(detalle.cantidad)}</cbc:InvoicedQuantity>
     <cbc:LineExtensionAmount currencyID="PEN">${this.money(detalle.baseImponible)}</cbc:LineExtensionAmount>
     <cac:PricingReference>
       <cac:AlternativeConditionPrice>
@@ -567,7 +580,7 @@ export class SunatPayloadBuilder {
       </cac:TaxSubtotal>
     </cac:TaxTotal>
     <cac:Item>
-      <cbc:Description><![CDATA[${this.cdata(detalle.descripcion)}]]></cbc:Description>
+      <cbc:Description><![CDATA[${this.cdata(this.plainText(detalle.descripcion))}]]></cbc:Description>
       <cac:SellersItemIdentification><cbc:ID>${this.escape(detalle.codigoInterno ?? '')}</cbc:ID></cac:SellersItemIdentification>
     </cac:Item>
     <cac:Price>
@@ -656,13 +669,39 @@ export class SunatPayloadBuilder {
   }
 
   private formatDate(value: unknown) {
-    const date = value ? new Date(value as string | Date) : new Date();
-    return date.toISOString().slice(0, 10);
+    const parts = this.formatDateParts(value);
+    return `${parts.year}-${parts.month}-${parts.day}`;
   }
 
   private formatTime(value: unknown) {
+    const parts = this.formatDateParts(value);
+    return `${parts.hour}:${parts.minute}:${parts.second}`;
+  }
+
+  private formatDateParts(value: unknown) {
     const date = value ? new Date(value as string | Date) : new Date();
-    return date.toISOString().slice(11, 19);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: SUNAT_TIME_ZONE,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const byType = Object.fromEntries(
+      parts.map((part) => [part.type, part.value]),
+    );
+
+    return {
+      year: byType.year,
+      month: byType.month,
+      day: byType.day,
+      hour: byType.hour,
+      minute: byType.minute,
+      second: byType.second,
+    };
   }
 
   private money(value: unknown) {
@@ -671,6 +710,13 @@ export class SunatPayloadBuilder {
 
   private quantity(value: unknown) {
     return Number(value ?? 0).toFixed(4);
+  }
+
+  private unitCode(detalle: ComprobanteDetalleFiscalLike) {
+    return normalizeSunatUnidadMedidaCode(
+      detalle.unidadSunat,
+      detalle.tipoFiscalProducto === TipoFiscalProducto.SERVICIO ? 'ZZ' : 'NIU',
+    );
   }
 
   private escape(value: unknown) {
@@ -684,6 +730,21 @@ export class SunatPayloadBuilder {
 
   private cdata(value: unknown) {
     return this.text(value).replace(/]]>/g, ']]]]><![CDATA[>');
+  }
+
+  private plainText(value: unknown) {
+    return this.text(value)
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<\/(p|div|li|h[1-6])>/gi, ' ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;|&apos;/gi, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private text(value: unknown, fallback = ''): string {

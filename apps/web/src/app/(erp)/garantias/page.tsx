@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   Ban,
@@ -71,17 +71,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/use-auth";
 import { useDebounce } from "@/hooks/use-debounce";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useCreateGarantia,
   useDeleteGarantia,
@@ -89,24 +88,14 @@ import {
   useGarantias,
   useUpdateGarantia,
 } from "@/hooks/use-garantias";
-import {
-  readStoredGarantiasAutoRefreshPreference,
-  writeStoredGarantiasAutoRefreshPreference,
-} from "@/lib/garantias-auto-refresh";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/layout/stat-card";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 const GARANTIAS_REFRESH_TOAST_ID = "garantias-refresh";
-const GARANTIAS_AUTO_REFRESH_TOAST_ID = "garantias-auto-refresh";
-
-const REFRESH_INTERVALS = [
-  { label: "30 seg", value: 30_000 },
-  { label: "1 min", value: 60_000 },
-  { label: "5 min", value: 300_000 },
-];
 
 const ESTADO_LABELS: Record<EstadoGarantia, string> = {
   [EstadoGarantia.ACTIVA]: "Activa",
@@ -439,10 +428,6 @@ export default function GarantiasPage() {
   const canDelete = hasRole(RolUsuario.ADMIN);
   const canManageCasos = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canCreateManual = hasRole(RolUsuario.ADMIN);
-  const initialAutoRefreshPreference = useMemo(
-    () => readStoredGarantiasAutoRefreshPreference(),
-    [],
-  );
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
@@ -454,13 +439,6 @@ export default function GarantiasPage() {
   const [draftEstadoFilter, setDraftEstadoFilter] =
     useState<EstadoFilter>("all");
   const [viewMode] = useState<"list" | "grid">("list");
-  const [autoRefresh, setAutoRefresh] = useState(
-    initialAutoRefreshPreference.enabled,
-  );
-  const [refreshInterval, setRefreshInterval] = useState(
-    initialAutoRefreshPreference.interval,
-  );
-  const refreshTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
@@ -538,32 +516,13 @@ export default function GarantiasPage() {
     [rows, selectedCards],
   );
 
-  useEffect(() => {
-    writeStoredGarantiasAutoRefreshPreference({
-      enabled: autoRefresh,
-      interval: refreshInterval,
-    });
-  }, [autoRefresh, refreshInterval]);
-
-  useEffect(() => {
-    if (refreshTimerRef.current) {
-      clearInterval(refreshTimerRef.current);
-      refreshTimerRef.current = null;
-    }
-
-    if (autoRefresh) {
-      refreshTimerRef.current = setInterval(() => {
-        void refetch();
-      }, refreshInterval);
-    }
-
-    return () => {
-      if (refreshTimerRef.current) {
-        clearInterval(refreshTimerRef.current);
-        refreshTimerRef.current = null;
-      }
-    };
-  }, [autoRefresh, refreshInterval, refetch]);
+  const autoRefresh = usePageAutoRefresh({
+    scope: "garantias",
+    toastLabel: "Garantías",
+    manualToastMessage: "Lista actualizada",
+    toastId: GARANTIAS_REFRESH_TOAST_ID,
+  });
+  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const handleCreate = useCallback(
     (payload: GarantiaFormPayload) => {
@@ -809,35 +768,6 @@ export default function GarantiasPage() {
     printWindow.print();
   }, []);
 
-  const showRefreshToast = useCallback(() => {
-    toast.info("Lista actualizada", {
-      id: GARANTIAS_REFRESH_TOAST_ID,
-      duration: 1600,
-    });
-  }, []);
-
-  const showAutoRefreshToast = useCallback(
-    (enabled: boolean) => {
-      const message = enabled
-        ? `Auto-refresh activado cada ${REFRESH_INTERVALS.find((interval) => interval.value === refreshInterval)?.label ?? "intervalo actual"}`
-        : "Auto-refresh desactivado";
-
-      if (enabled) {
-        toast.success(message, {
-          id: GARANTIAS_AUTO_REFRESH_TOAST_ID,
-          duration: 1800,
-        });
-        return;
-      }
-
-      toast.info(message, {
-        id: GARANTIAS_AUTO_REFRESH_TOAST_ID,
-        duration: 1800,
-      });
-    },
-    [refreshInterval],
-  );
-
   const toggleCardSelection = useCallback((garantiaId: string) => {
     setSelectedCards((previous) => {
       const next = new Set(previous);
@@ -1033,85 +963,7 @@ export default function GarantiasPage() {
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-3 py-1.5 transition-colors duration-300",
-              autoRefresh
-                ? "border-primary/25 bg-primary/5"
-                : "border-border bg-muted/30",
-            )}
-          >
-            <div className="relative flex items-center justify-center">
-              {autoRefresh && (
-                <span className="absolute inline-flex size-5 animate-ping rounded-full bg-primary opacity-10" />
-              )}
-              <RefreshCcw
-                className={cn(
-                  "size-3.5 text-muted-foreground transition-all",
-                  autoRefresh && "animate-spin text-primary",
-                )}
-                style={autoRefresh ? { animationDuration: "3s" } : {}}
-              />
-            </div>
-            {autoRefresh ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                  >
-                    {REFRESH_INTERVALS.find(
-                      (interval) => interval.value === refreshInterval,
-                    )?.label ?? "Auto"}
-                    <ChevronDown className="size-3" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-36">
-                  {REFRESH_INTERVALS.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onClick={() => setRefreshInterval(option.value)}
-                      className={cn(
-                        "text-xs",
-                        refreshInterval === option.value &&
-                          "font-medium text-primary",
-                      )}
-                    >
-                      {option.label}
-                      {refreshInterval === option.value ? " ✓" : ""}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="invisible size-5 p-0"
-                onClick={() => {
-                  void refetch();
-                  showRefreshToast();
-                }}
-              >
-                <span className="sr-only">Actualizar</span>
-              </Button>
-            )}
-            <Switch
-              id="garantias-auto-refresh"
-              size="sm"
-              checked={autoRefresh}
-              onCheckedChange={(value) => {
-                setAutoRefresh(value);
-                showAutoRefreshToast(value);
-              }}
-            />
-            <Label
-              htmlFor="garantias-auto-refresh"
-              className="hidden cursor-pointer text-xs text-muted-foreground sm:block"
-            >
-              Auto
-            </Label>
-          </div>
+          <PageAutoRefreshControl autoRefresh={autoRefresh} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1121,12 +973,7 @@ export default function GarantiasPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem
-                onClick={() => {
-                  void refetch();
-                  showRefreshToast();
-                }}
-              >
+              <DropdownMenuItem onClick={handleManualRefresh}>
                 <RefreshCcw className="size-4" /> Actualizar lista
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => exportGarantias(rows)}>

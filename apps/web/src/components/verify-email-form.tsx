@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, RefreshCw } from "lucide-react";
@@ -51,29 +51,7 @@ export function VerifyEmailForm({
   const [resendCooldown, setResendCooldown] = useState(0);
   const [success, setSuccess] = useState<{ message: string } | null>(null);
 
-  // Si llegan sin email en query → vuelve a login
-  useEffect(() => {
-    if (!email) router.replace("/auth/login");
-  }, [email, router]);
-
-  // Cooldown del botón "Reenviar"
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = window.setInterval(
-      () => setResendCooldown((s) => Math.max(0, s - 1)),
-      1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [resendCooldown]);
-
-  // Auto-submit cuando se completan los 6 dígitos
-  useEffect(() => {
-    if (codigo.length === 6 && !submitting && !success) {
-      void onSubmit(codigo);
-    }
-  }, [codigo, submitting, success]);
-
-  async function onSubmit(code: string) {
+  const onSubmit = useCallback(async (code: string) => {
     if (!email || code.length !== 6) return;
     setSubmitting(true);
     setError(null);
@@ -96,7 +74,29 @@ export function VerifyEmailForm({
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [email]);
+
+  // Si llegan sin email en query → vuelve a login
+  useEffect(() => {
+    if (!email) router.replace("/auth/login");
+  }, [email, router]);
+
+  // Cooldown del botón "Reenviar"
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setInterval(
+      () => setResendCooldown((s) => Math.max(0, s - 1)),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [resendCooldown]);
+
+  // Auto-submit cuando se completan los 6 dígitos
+  useEffect(() => {
+    if (codigo.length === 6 && !submitting && !success) {
+      void onSubmit(codigo);
+    }
+  }, [codigo, submitting, success, onSubmit]);
 
   async function handleResend() {
     if (resendCooldown > 0 || resending || !email) return;
@@ -138,7 +138,7 @@ export function VerifyEmailForm({
               </p>
             </div>
             <Link href="/auth/login">
-              <Button variant="outline" className="mt-2 rounded-xl">
+              <Button variant="outline" className="mt-2 rounded-xl transition-all duration-150 ease-out active:scale-95">
                 Volver al inicio de sesión
               </Button>
             </Link>
@@ -151,11 +151,11 @@ export function VerifyEmailForm({
   return (
     <div className={cn("flex w-full flex-col", className)} {...props}>
       <Card className="overflow-hidden rounded-2xl border-border/70 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
-        <CardContent className="grid p-0 md:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="flex items-center justify-center p-6 md:p-9">
-            <div className="w-full max-w-[380px]">
+        <CardContent className="grid p-0 md:grid-cols-2">
+          <div className="flex items-center justify-center p-8 md:p-12">
+            <div className="w-full max-w-[360px]">
               <CardHeader className="px-0 pb-0">
-                <CardTitle className="text-3xl font-semibold tracking-tight">
+                <CardTitle className="font-display text-3xl font-bold tracking-tight text-foreground/90">
                   Confirma tu correo
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
@@ -165,10 +165,19 @@ export function VerifyEmailForm({
                 </CardDescription>
               </CardHeader>
 
-              <div className="mt-8 space-y-5">
+              <div className="h-px bg-border/60 my-6" />
+
+              <div className="mt-0 space-y-5">
                 {error ? (
-                  <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    <AlertCircle className="mt-0.5 size-4 shrink-0" />
+                  <div
+                    className="flex items-start gap-2 rounded-xl border px-3 py-2 text-sm"
+                    style={{
+                      color: 'oklch(0.60 0.22 25)',
+                      borderColor: 'oklch(0.60 0.22 25 / 0.3)',
+                      backgroundColor: 'oklch(0.60 0.22 25 / 0.05)',
+                    }}
+                  >
+                    <AlertCircle className="mt-0.5 size-4 shrink-0" style={{ color: 'oklch(0.60 0.22 25)' }} />
                     <span>{error}</span>
                   </div>
                 ) : null}
@@ -202,7 +211,7 @@ export function VerifyEmailForm({
                   type="button"
                   onClick={() => void onSubmit(codigo)}
                   disabled={codigo.length !== 6 || submitting}
-                  className="h-11 w-full rounded-xl text-sm font-semibold"
+                  className="h-12 w-full py-3 px-8 rounded-xl text-sm font-semibold transition-all duration-150 ease-out active:scale-95 hover:bg-primary/95"
                 >
                   {submitting ? (
                     <>
@@ -213,13 +222,15 @@ export function VerifyEmailForm({
                   )}
                 </Button>
 
-                <div className="flex items-center justify-between gap-2 pt-1 text-xs text-muted-foreground">
+                <div className="h-px bg-border/60 my-6" />
+
+                <div className="flex items-center justify-between gap-2 pt-0 text-xs text-muted-foreground">
                   <button
                     type="button"
                     onClick={() => void handleResend()}
                     disabled={resending || resendCooldown > 0}
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md px-2 py-1 transition",
+                      "inline-flex items-center gap-1.5 rounded-md px-2 py-1 transition-all duration-150 ease-out active:scale-95",
                       resendCooldown > 0
                         ? "cursor-not-allowed opacity-60"
                         : "hover:bg-muted hover:text-foreground",
@@ -236,7 +247,7 @@ export function VerifyEmailForm({
                   </button>
                   <Link
                     href="/auth/login"
-                    className="hover:text-foreground hover:underline"
+                    className="transition-all duration-150 ease-out active:scale-95 hover:text-foreground hover:underline"
                   >
                     Volver al inicio
                   </Link>

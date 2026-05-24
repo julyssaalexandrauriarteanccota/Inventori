@@ -30,6 +30,7 @@ export const confirmarVentaSchema = z.object({
   referenciaPago: z.string().optional(),
   evidenciaPagoFilename: z.string().optional(),
   almacenId: z.string().uuid(),
+  ventaInterna: z.boolean().optional(),
 })
 
 export const queryVentaFiltersSchema = z.object({

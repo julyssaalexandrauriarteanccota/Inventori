@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import {
-  History,
   Loader2,
   ScrollText,
   Receipt,
@@ -15,9 +14,10 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OpenCajaDialog } from "@/components/caja/open-caja-dialog";
 import { useMiAperturaActiva } from "@/hooks/use-caja";
+import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 
 import { HistorialVentasWorkspace } from "../pos/historial/page";
 
@@ -28,11 +28,17 @@ export default function VentasHubPage() {
   const cajaAbierta = !!apertura;
   const [openModal, setOpenModal] = useState(false);
 
+  const autoRefresh = usePageAutoRefresh({
+    scope: "ventas",
+    toastLabel: "Ventas",
+    manualToastMessage: "Lista actualizada",
+  });
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
       <PageHeader
         title="Ventas"
-        description="Gestiona ventas, comprobantes y emisión fiscal"
+        description={<PageAutoRefreshControl autoRefresh={autoRefresh} />}
         hideTitleVisually
         actions={
           <>
@@ -71,24 +77,14 @@ export default function VentasHubPage() {
       />
 
       {!cajaAbierta && !isLoading && (
-        <div className="rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="rounded-xl border border-[oklch(0.86_0.05_75)] bg-[oklch(0.96_0.02_75)] px-3 py-2 text-xs text-[oklch(0.38_0.08_75)] dark:border-[oklch(0.25_0.05_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)] font-medium">
           No tienes un turno de caja abierto. Abre una caja para habilitar las
           ventas. Si no existe ninguna, créala desde{" "}
           <strong>Configuración → Cajas</strong>.
         </div>
       )}
 
-      <Tabs defaultValue="historial" className="flex flex-col gap-3">
-        <TabsList>
-          <TabsTrigger value="historial" className="gap-2">
-            <History className="size-4" /> Historial
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="historial" className="mt-0">
-          <HistorialVentasWorkspace showCreateButton={false} />
-        </TabsContent>
-      </Tabs>
+      <HistorialVentasWorkspace showCreateButton={false} autoRefresh={autoRefresh} />
 
       <OpenCajaDialog open={openModal} onOpenChange={setOpenModal} />
     </div>

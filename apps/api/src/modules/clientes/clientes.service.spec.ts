@@ -17,6 +17,9 @@ const mockPrismaService = {
     update: jest.fn(),
     findUnique: jest.fn(),
   },
+  clienteValidacionSunat: {
+    updateMany: jest.fn(),
+  },
   contactoCliente: {
     create: jest.fn(),
     findMany: jest.fn(),

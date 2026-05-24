@@ -323,7 +323,7 @@ export function VentaForm({
                 errors.detalles?.[0]?.precioUnitario ? true : undefined
               }
             >
-              <FieldLabel>Precio unitario *</FieldLabel>
+              <FieldLabel>Precio unitario inc. IGV *</FieldLabel>
               <Input
                 {...register("detalles.0.precioUnitario", {
                   valueAsNumber: true,
@@ -342,7 +342,7 @@ export function VentaForm({
             <Field
               data-invalid={errors.detalles?.[0]?.descuento ? true : undefined}
             >
-              <FieldLabel>Descuento</FieldLabel>
+              <FieldLabel>Descuento inc. IGV</FieldLabel>
               <Input
                 {...register("detalles.0.descuento", { valueAsNumber: true })}
                 type="number"

@@ -113,6 +113,7 @@ import { UnidadesMedidaSettingsContent } from "@/components/settings/unidades-me
 import { ModelosSettingsContent } from "@/components/settings/modelos-settings-content";
 import { CajasSettingsContent } from "@/components/settings/cajas-settings-content";
 import { FiscalSettingsContent } from "@/components/settings/fiscal-settings-content";
+import { PadronSunatSettingsContent } from "@/components/settings/padron-sunat-settings-content";
 import {
   SettingsDataTable,
   type ColumnDef,
@@ -4571,6 +4572,7 @@ export function SectionContent({
   if (sectionId === "empresa") return <EmpresaContent />;
   if (sectionId === "preferencias") return <PreferenciasSettingsContent />;
   if (sectionId === "fiscal") return <FiscalSettingsContent />;
+  if (sectionId === "padron-sunat") return <PadronSunatSettingsContent />;
   if (sectionId === "series")
     return <FiscalSettingsContent initialTab="series" />;
   if (sectionId === "usuarios")
@@ -4610,7 +4612,7 @@ const quickDialogSections = [
   {
     id: "preferencias",
     name: "Preferencias",
-    description: "Tema, tono y color",
+    description: "Tema y atmósfera",
     icon: SlidersHorizontal,
     available: true,
   },
@@ -4799,7 +4801,7 @@ export function SettingsDialog({
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {activeSection === "preferencias"
-                  ? "Cambia el tema, tono y color de acento sin salir de tu flujo."
+                  ? "Cambia el tema y la atmósfera de trabajo sin salir de tu flujo."
                   : activeSection === "perfil"
                     ? "Completa tus datos personales visibles en el detalle de usuario."
                     : "Este espacio queda reservado para las próximas herramientas rápidas."}

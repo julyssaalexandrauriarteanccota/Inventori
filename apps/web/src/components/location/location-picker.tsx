@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Loader2, MapPin, Search, X } from "lucide-react";
+import { Check, Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
 import type { LocationPayload, LocationSearchResult } from "@erp/shared";
 
 import {
@@ -56,6 +56,9 @@ export function LocationPicker({
   const currentDireccion = value.direccion ?? "";
   const [searchText, setSearchText] = useState(currentDireccion);
   const [isEditingSearch, setIsEditingSearch] = useState(false);
+  const [reverseSuggestion, setReverseSuggestion] =
+    useState<LocationSearchResult | null>(null);
+  const [mapCenter, setMapCenter] = useState<{ latitud: number; longitud: number } | null>(null);
   const activeSearchText = isEditingSearch ? searchText : currentDireccion;
 
   const marker = useMemo(() => {
@@ -82,6 +85,8 @@ export function LocationPicker({
     });
     setSearchText(result.direccion);
     setIsEditingSearch(false);
+    setReverseSuggestion(null);
+    setMapCenter(null);
     buscarMutation.reset();
   }
 
@@ -90,10 +95,12 @@ export function LocationPicker({
     longitud: number;
   }) {
     onChange(coordinates);
+    setReverseSuggestion(null);
+    setMapCenter(null);
 
     reverseMutation.mutate(coordinates, {
       onSuccess: (response) => {
-        applyResult(response.data);
+        setReverseSuggestion(response.data);
       },
     });
   }
@@ -111,11 +118,21 @@ export function LocationPicker({
       return;
     }
 
-    buscarMutation.mutate({ q: query, limit: 5 });
+    buscarMutation.mutate({ q: query, limit: 5 }, {
+      onSuccess: (response) => {
+        const results = response.data ?? [];
+        if (results.length > 0) {
+          setMapCenter({
+            latitud: results[0].latitud,
+            longitud: results[0].longitud,
+          });
+        }
+      },
+    });
   }
 
   return (
-    <div className="space-y-4 rounded-2xl border border-border/70 bg-background/60 p-4">
+    <div className="flex flex-col gap-4 rounded-2xl border border-border/70 bg-background/60 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -157,7 +174,11 @@ export function LocationPicker({
               type="button"
               variant="ghost"
               className="w-full justify-start gap-2 sm:justify-center"
-              onClick={() => onChange({ latitud: null, longitud: null })}
+              onClick={() => {
+                setReverseSuggestion(null);
+                setMapCenter(null);
+                onChange({ latitud: null, longitud: null });
+              }}
               disabled={disabled}
             >
               <X className="size-4" />
@@ -205,15 +226,63 @@ export function LocationPicker({
         </p>
       ) : null}
 
+      {reverseSuggestion ? (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                <LocateFixed className="size-3.5 text-primary" />
+                Dirección detectada para el punto
+              </p>
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                {reverseSuggestion.direccion}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {[
+                  reverseSuggestion.distrito,
+                  reverseSuggestion.provincia,
+                  reverseSuggestion.departamento,
+                ]
+                  .filter(Boolean)
+                  .join(" / ") || "Sin ubigeo administrativo detectado"}
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-lg"
+                onClick={() => setReverseSuggestion(null)}
+                disabled={disabled}
+              >
+                Solo punto
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="rounded-lg"
+                onClick={() => applyResult(reverseSuggestion)}
+                disabled={disabled}
+              >
+                <Check className="size-3.5" />
+                Usar datos
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <LocationMap
         marker={marker}
+        center={mapCenter}
         interactive={!disabled}
         onSelect={handleCoordinatePick}
         className="h-80"
       />
       {reverseMutation.isPending ? (
         <p className="text-xs text-muted-foreground">
-          Resolviendo direccion desde el punto seleccionado...
+          Buscando una dirección sugerida para el punto seleccionado...
         </p>
       ) : reverseMutation.isError ? (
         <p className="text-xs text-destructive">
