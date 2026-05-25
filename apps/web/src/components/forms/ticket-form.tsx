@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +21,9 @@ import {
   RolUsuario,
   TipoServicio,
   TipoProducto,
+  type ClienteListItem,
+  type ClienteEquipoListItem,
+  type EquipoListItem,
   type TicketFormPayload,
   type TicketClassificationResult,
 } from "@erp/shared";
@@ -37,10 +41,12 @@ import {
 } from "@/components/ui/select";
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Popover,
   PopoverContent,
@@ -55,7 +61,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { useClientes } from "@/hooks/use-clientes";
-import { useEquipos } from "@/hooks/use-equipos";
+import { useClienteEquipos, useEquipos } from "@/hooks/use-equipos";
 import { useProductos } from "@/hooks/use-productos";
 import { useUsuarios } from "@/hooks/use-configuracion";
 import { ClasificarTicketButton } from "@/components/clasificar-ticket-button";
@@ -76,11 +82,32 @@ const TIPO_SERVICIO_LABELS: Record<TipoServicio, string> = {
   [TipoServicio.REMOTO]: "Remoto",
 };
 
+const TIPO_SERVICIO_DESCRIPTIONS: Record<TipoServicio, string> = {
+  [TipoServicio.TALLER]: "El equipo se atiende en taller.",
+  [TipoServicio.VISITA]: "El técnico atiende en la ubicación del cliente.",
+  [TipoServicio.REMOTO]: "Atención sin traslado físico.",
+};
+
+function toDatetimeLocalValue(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+function fromDatetimeLocalValue(value: string) {
+  return value ? new Date(value).toISOString() : undefined;
+}
+
 interface TicketFormProps {
   defaultValues?: Partial<TicketFormPayload>;
+  initialSelections?: TicketFormInitialSelections;
   onSubmit: (data: TicketFormPayload) => void;
   isLoading?: boolean;
   mode: "create" | "edit";
+  formId?: string;
+  hideBottomActions?: boolean;
   /**
    * Rol del usuario que está usando el formulario.
    * - TECNICO: oculta selector de técnico (auto-asignación en backend).
@@ -89,12 +116,41 @@ interface TicketFormProps {
   userRol?: RolUsuario;
 }
 
+type EquipoOrigen = "propio" | "externo";
+
+type TicketFormInitialSelections = {
+  cliente?: {
+    id: string;
+    nombre: string | null;
+    apellido?: string | null;
+    razonSocial?: string | null;
+    ruc?: string | null;
+    dni?: string | null;
+  } | null;
+  equipo?: {
+    id: string;
+    numeroSerie: string;
+    producto?: { nombre?: string | null } | null;
+  } | null;
+  clienteEquipo?: {
+    id: string;
+    numeroSerie: string;
+    nombre?: string | null;
+    marca?: string | null;
+    modelo?: string | null;
+    producto?: { nombre?: string | null } | null;
+  } | null;
+};
+
 export function TicketForm({
   defaultValues,
   onSubmit,
   isLoading = false,
   mode,
+  formId,
+  hideBottomActions = false,
   userRol,
+  initialSelections,
 }: TicketFormProps) {
   const {
     register,
@@ -115,9 +171,11 @@ export function TicketForm({
   const tipoServicio = useWatch({ control, name: "tipoServicio" });
   const clienteId = useWatch({ control, name: "clienteId" });
   const equipoId = useWatch({ control, name: "equipoId" });
+  const clienteEquipoId = useWatch({ control, name: "clienteEquipoId" });
   const tecnicoId = useWatch({ control, name: "tecnicoId" });
   const titulo = useWatch({ control, name: "titulo" });
   const descripcion = useWatch({ control, name: "descripcion" });
+  const fechaPromesa = useWatch({ control, name: "fechaPromesa" });
   const detallesIniciales = useWatch({ control, name: "detalles" });
 
   const [aiSuggestion, setAiSuggestion] =
@@ -125,17 +183,13 @@ export function TicketForm({
 
   const handleAiResult = (result: TicketClassificationResult) => {
     setAiSuggestion(result);
-    setValue("prioridad", result.prioridadSugerida as PrioridadTicket, {
-      shouldValidate: true,
-    });
+    setValue("prioridad", result.prioridadSugerida as PrioridadTicket);
     if (
       Object.values(TipoServicio).includes(
         result.tipoServicioSugerido as TipoServicio,
       )
     ) {
-      setValue("tipoServicio", result.tipoServicioSugerido as TipoServicio, {
-        shouldValidate: true,
-      });
+      setValue("tipoServicio", result.tipoServicioSugerido as TipoServicio);
     }
   };
 
@@ -146,16 +200,50 @@ export function TicketForm({
     limit: 20,
   });
   const clientes = clientesData?.data ?? [];
+  const clientesForSelect = React.useMemo(() => {
+    const initialCliente = initialSelections?.cliente;
+    if (!initialCliente || clientes.some((c) => c.id === initialCliente.id)) {
+      return clientes;
+    }
+    return [initialCliente as ClienteListItem, ...clientes];
+  }, [clientes, initialSelections?.cliente]);
 
-  const [equipoOpen, setEquipoOpen] = useState(false);
-  const [equipoSearch, setEquipoSearch] = useState("");
+  const [equipoPropioOpen, setEquipoPropioOpen] = useState(false);
+  const [equipoPropioSearch, setEquipoPropioSearch] = useState("");
+  const [clienteEquipoOpen, setClienteEquipoOpen] = useState(false);
+  const [clienteEquipoSearch, setClienteEquipoSearch] = useState("");
   const [equipoQuickCreateOpen, setEquipoQuickCreateOpen] = useState(false);
   const [clienteQuickCreateOpen, setClienteQuickCreateOpen] = useState(false);
-  const { data: equiposData } = useEquipos(
-    { search: equipoSearch, clienteId, limit: 20 },
+  const [equipoOrigen, setEquipoOrigen] = useState<EquipoOrigen>(
+    defaultValues?.equipoId ? "propio" : "externo",
+  );
+  const { data: equiposPropiosData } = useEquipos(
+    { search: equipoPropioSearch, clienteId, limit: 20 },
     { enabled: !!clienteId },
   );
-  const equipos = equiposData?.data ?? [];
+  const equiposPropios = equiposPropiosData?.data ?? [];
+  const equiposPropiosForSelect = React.useMemo(() => {
+    const initialEquipo = initialSelections?.equipo;
+    if (!initialEquipo || equiposPropios.some((e) => e.id === initialEquipo.id)) {
+      return equiposPropios;
+    }
+    return [initialEquipo as EquipoListItem, ...equiposPropios];
+  }, [equiposPropios, initialSelections?.equipo]);
+  const { data: clienteEquiposData } = useClienteEquipos(
+    { search: clienteEquipoSearch, clienteId, limit: 20 },
+    { enabled: !!clienteId },
+  );
+  const clienteEquipos = clienteEquiposData?.data ?? [];
+  const clienteEquiposForSelect = React.useMemo(() => {
+    const initialClienteEquipo = initialSelections?.clienteEquipo;
+    if (
+      !initialClienteEquipo ||
+      clienteEquipos.some((e) => e.id === initialClienteEquipo.id)
+    ) {
+      return clienteEquipos;
+    }
+    return [initialClienteEquipo as ClienteEquipoListItem, ...clienteEquipos];
+  }, [clienteEquipos, initialSelections?.clienteEquipo]);
 
   // Cuando cambia el cliente, limpiar equipo seleccionado.
   // Saltamos el primer render para no pisar defaultValues (modo edit).
@@ -165,8 +253,21 @@ export function TicketForm({
       skipFirstClienteChange.current = false;
       return;
     }
-    setValue("equipoId", undefined, { shouldValidate: true });
+    setValue("equipoId", undefined);
+    setValue("clienteEquipoId", undefined);
   }, [clienteId, setValue]);
+
+  const handleEquipoOrigenChange = (value: string) => {
+    if (value !== "propio" && value !== "externo") return;
+
+    const nextOrigen = value as EquipoOrigen;
+    setEquipoOrigen(nextOrigen);
+    if (nextOrigen === "propio") {
+      setValue("clienteEquipoId", undefined);
+    } else {
+      setValue("equipoId", undefined);
+    }
+  };
 
   // Lista de técnicos sólo para ADMIN/ENCARGADO
   const showTecnicoSelector = userRol && userRol !== RolUsuario.TECNICO;
@@ -175,8 +276,24 @@ export function TicketForm({
     (u) => u.rol === RolUsuario.TECNICO && u.activo !== false,
   );
 
-  const selectedCliente = clientes.find((c) => c.id === clienteId);
-  const selectedEquipo = equipos.find((e) => e.id === equipoId);
+  const selectedCliente = clientesForSelect.find((c) => c.id === clienteId);
+  const selectedEquipoPropio = equiposPropiosForSelect.find(
+    (e) => e.id === equipoId,
+  );
+  const selectedClienteEquipo = clienteEquiposForSelect.find(
+    (e) => e.id === clienteEquipoId,
+  );
+  const selectedClienteEquipoDescription =
+    selectedClienteEquipo?.producto?.nombre ??
+    selectedClienteEquipo?.nombre ??
+    [selectedClienteEquipo?.marca, selectedClienteEquipo?.modelo]
+      .filter(Boolean)
+      .join(" ");
+  const selectedClienteEquipoLabel = selectedClienteEquipo
+    ? selectedClienteEquipoDescription
+      ? `${selectedClienteEquipoDescription} — ${selectedClienteEquipo.numeroSerie}`
+      : selectedClienteEquipo.numeroSerie
+    : "";
 
   const [servicioOpen, setServicioOpen] = useState(false);
   const [servicioSearch, setServicioSearch] = useState("");
@@ -189,18 +306,21 @@ export function TicketForm({
     },
   );
   const servicios = serviciosData?.data ?? [];
-  const servicioInicialId = detallesIniciales?.[0]?.productoId;
-  const selectedServicio = servicios.find((s) => s.id === servicioInicialId);
+  const serviciosSeleccionados = detallesIniciales ?? [];
 
-  const setServicioInicial = (servicioId: string | undefined) => {
+  const addServicioInicial = (servicioId: string) => {
+    if (serviciosSeleccionados.some((detalle) => detalle.productoId === servicioId)) {
+      setServicioOpen(false);
+      return;
+    }
     if (!servicioId) {
-      setValue("detalles", undefined, { shouldValidate: true });
       return;
     }
     const servicio = servicios.find((s) => s.id === servicioId);
     setValue(
       "detalles",
       [
+        ...serviciosSeleccionados,
         {
           productoId: servicioId,
           cantidad: 1,
@@ -209,15 +329,21 @@ export function TicketForm({
           notas: "Servicio solicitado al crear el ticket",
         },
       ],
-      { shouldValidate: true },
     );
   };
 
+  const removeServicioInicial = (servicioId: string) => {
+    const next = serviciosSeleccionados.filter(
+      (detalle) => detalle.productoId !== servicioId,
+    );
+    setValue("detalles", next.length ? next : undefined);
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <FieldGroup className="gap-3 sm:gap-7">
+    <form id={formId} onSubmit={handleSubmit(onSubmit)} noValidate>
+      <FieldGroup className="gap-0 overflow-hidden rounded-xl border border-border/60 bg-card/70 shadow-sm">
         {/* === SECCIÓN 1: CLIENTE Y EQUIPO === */}
-        <div className="rounded-xl border border-border/50 border-l-[3px] border-l-blue-400 dark:border-l-blue-800 bg-card p-4 sm:p-5">
+        <div className="border-l-[3px] border-l-blue-400 p-4 dark:border-l-blue-800 sm:p-5">
           <div className="mb-4 flex items-center gap-2.5">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-blue-100 text-[11px] font-bold text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 ring-2 ring-blue-100 dark:ring-blue-900/30">
               1
@@ -278,14 +404,12 @@ export function TicketForm({
                     <CommandList>
                       <CommandEmpty>Sin resultados.</CommandEmpty>
                       <CommandGroup>
-                        {clientes.map((c) => (
+                        {clientesForSelect.map((c) => (
                           <CommandItem
                             key={c.id}
                             value={c.id}
                             onSelect={(v) => {
-                              setValue("clienteId", v, {
-                                shouldValidate: true,
-                              });
+                              setValue("clienteId", v);
                               setClienteOpen(false);
                             }}
                           >
@@ -316,39 +440,77 @@ export function TicketForm({
               <FieldError>{errors.clienteId?.message}</FieldError>
             </Field>
 
-            <Field data-invalid={errors.equipoId ? true : undefined}>
-              <div className="flex items-center justify-between gap-2">
-                <FieldLabel>Equipo</FieldLabel>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
+            <Field className="md:col-span-2">
+              <FieldLabel>Equipo del ticket</FieldLabel>
+              <ToggleGroup
+                type="single"
+                value={equipoOrigen}
+                onValueChange={handleEquipoOrigenChange}
+                variant="outline"
+                className="grid w-full grid-cols-1 sm:grid-cols-2"
+              >
+                <ToggleGroupItem
+                  value="propio"
+                  className="h-auto justify-start rounded-lg px-3 py-2 text-left"
                   disabled={!clienteId}
-                  onClick={() => setEquipoQuickCreateOpen(true)}
-                  title={clienteId ? "Registrar nuevo equipo y asignarlo al cliente" : "Selecciona un cliente primero"}
                 >
-                  <Plus className="size-3.5" /> Nuevo equipo
-                </Button>
-              </div>
-              <Popover open={equipoOpen} onOpenChange={setEquipoOpen}>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-sm font-medium">
+                      Vendido o alquilado
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Salio del inventario y puede tener garantia nuestra.
+                    </span>
+                  </span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="externo"
+                  className="h-auto justify-start rounded-lg px-3 py-2 text-left"
+                  disabled={!clienteId}
+                >
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-sm font-medium">
+                      Externo del cliente
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      No afecta stock ni almacen interno.
+                    </span>
+                  </span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <FieldDescription>
+                El ticket puede quedar sin equipo, pero si lo asocias debe ser
+                uno de estos dos origenes.
+              </FieldDescription>
+            </Field>
+
+            {equipoOrigen === "propio" ? (
+              <Field
+                className="md:col-span-2"
+                data-invalid={errors.equipoId ? true : undefined}
+              >
+              <FieldLabel>Equipo vendido o alquilado</FieldLabel>
+              <Popover
+                open={equipoPropioOpen}
+                onOpenChange={setEquipoPropioOpen}
+              >
                 <PopoverTrigger asChild>
                   <Button
                     variant="outline"
                     role="combobox"
-                    aria-expanded={equipoOpen}
+                    aria-expanded={equipoPropioOpen}
                     disabled={!clienteId}
                     className={cn(
                       "w-full justify-between font-normal",
                       !equipoId && "text-muted-foreground",
                     )}
                   >
-                    {selectedEquipo
-                      ? `${selectedEquipo.numeroSerie} — ${selectedEquipo.producto?.nombre ?? ""}`
+                    {selectedEquipoPropio
+                      ? `${selectedEquipoPropio.numeroSerie} — ${selectedEquipoPropio.producto?.nombre ?? "Equipo propio"}`
                       : equipoId
                         ? equipoId.slice(0, 8) + "..."
                         : clienteId
-                          ? "Buscar equipo del cliente..."
+                          ? "Buscar equipo entregado..."
                           : "Selecciona un cliente primero"}
                     <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                   </Button>
@@ -359,24 +521,26 @@ export function TicketForm({
                 >
                   <Command shouldFilter={false}>
                     <CommandInput
-                      placeholder="Buscar por serie o modelo..."
-                      value={equipoSearch}
-                      onValueChange={setEquipoSearch}
+                      placeholder="Buscar por serie o producto..."
+                      value={equipoPropioSearch}
+                      onValueChange={setEquipoPropioSearch}
                     />
                     <CommandList>
                       <CommandEmpty>
                         {clienteId
-                          ? "Este cliente no tiene equipos asignados."
+                          ? "Este cliente no tiene equipos vendidos o alquilados."
                           : "Selecciona un cliente primero."}
                       </CommandEmpty>
                       <CommandGroup>
-                        {equipos.map((e) => (
+                        {equiposPropiosForSelect.map((e) => (
                           <CommandItem
                             key={e.id}
                             value={e.id}
                             onSelect={(v) => {
-                              setValue("equipoId", v, { shouldValidate: true });
-                              setEquipoOpen(false);
+                              setEquipoOrigen("propio");
+                              setValue("equipoId", v);
+                              setValue("clienteEquipoId", undefined);
+                              setEquipoPropioOpen(false);
                             }}
                           >
                             <Check
@@ -390,7 +554,7 @@ export function TicketForm({
                                 {e.numeroSerie}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {e.producto?.nombre} {e.producto?.modelo ?? ""}
+                                {e.producto?.nombre ?? "Equipo propio"}
                               </span>
                             </div>
                           </CommandItem>
@@ -401,7 +565,116 @@ export function TicketForm({
                 </PopoverContent>
               </Popover>
               <FieldError>{errors.equipoId?.message}</FieldError>
-            </Field>
+              </Field>
+            ) : null}
+
+            {equipoOrigen === "externo" ? (
+              <Field
+                className="md:col-span-2"
+                data-invalid={errors.clienteEquipoId ? true : undefined}
+              >
+              <div className="flex items-center justify-between gap-2">
+                <FieldLabel>Equipo externo del cliente</FieldLabel>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
+                  disabled={!clienteId}
+                  onClick={() => setEquipoQuickCreateOpen(true)}
+                  title={
+                    clienteId
+                      ? "Registrar equipo externo para soporte"
+                      : "Selecciona un cliente primero"
+                  }
+                >
+                  <Plus className="size-3.5" /> Registrar externo
+                </Button>
+              </div>
+              <Popover
+                open={clienteEquipoOpen}
+                onOpenChange={setClienteEquipoOpen}
+              >
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clienteEquipoOpen}
+                    disabled={!clienteId}
+                    className={cn(
+                      "w-full justify-between font-normal",
+                      !clienteEquipoId && "text-muted-foreground",
+                    )}
+                  >
+                    {selectedClienteEquipo
+                      ? selectedClienteEquipoLabel
+                      : clienteEquipoId
+                        ? clienteEquipoId.slice(0, 8) + "..."
+                        : clienteId
+                          ? "Buscar equipo del cliente..."
+                          : "Selecciona un cliente primero"}
+                    <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0"
+                  align="start"
+                >
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Buscar por serie o modelo..."
+                      value={clienteEquipoSearch}
+                      onValueChange={setClienteEquipoSearch}
+                    />
+                    <CommandList>
+                      <CommandEmpty>
+                        {clienteId
+                          ? "Este cliente no tiene equipos asignados."
+                          : "Selecciona un cliente primero."}
+                      </CommandEmpty>
+                      <CommandGroup>
+                        {clienteEquiposForSelect.map((e) => (
+                          <CommandItem
+                            key={e.id}
+                            value={e.id}
+                            onSelect={(v) => {
+                              setEquipoOrigen("externo");
+                              setValue("clienteEquipoId", v);
+                              setValue("equipoId", undefined);
+                              setClienteEquipoOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 size-4",
+                                clienteEquipoId === e.id
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">
+                                {e.producto?.nombre ||
+                                  e.nombre ||
+                                  [e.marca, e.modelo]
+                                    .filter(Boolean)
+                                    .join(" ") ||
+                                  "Equipo externo"}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                Serie/código: {e.numeroSerie}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <FieldError>{errors.clienteEquipoId?.message}</FieldError>
+              </Field>
+            ) : null}
           </div>
           {showTecnicoSelector && (
             <div className="mt-4 sm:mt-6 grid gap-4 sm:gap-6 md:grid-cols-2">
@@ -416,7 +689,6 @@ export function TicketForm({
                     setValue(
                       "tecnicoId",
                       v === "__none__" ? undefined : v,
-                      { shouldValidate: true },
                     )
                   }
                 >
@@ -439,7 +711,7 @@ export function TicketForm({
         </div>
 
         {/* === SECCIÓN 2: DETALLE DEL TICKET === */}
-        <div className="rounded-xl border border-border/50 border-l-[3px] border-l-green-400 dark:border-l-green-800 bg-card p-4 sm:p-5">
+        <div className="border-t border-border/60 border-l-[3px] border-l-green-400 p-4 dark:border-l-green-800 sm:p-5">
           <div className="mb-4 flex items-center gap-2.5">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-green-100 text-[11px] font-bold text-green-600 dark:bg-green-900/40 dark:text-green-400 ring-2 ring-green-100 dark:ring-green-900/30">
               2
@@ -473,6 +745,28 @@ export function TicketForm({
               <FieldError>{errors.descripcion?.message}</FieldError>
             </Field>
 
+            <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+              <Field data-invalid={errors.fechaPromesa ? true : undefined}>
+                <FieldLabel>Fecha promesa</FieldLabel>
+                <Input
+                  type="datetime-local"
+                  value={toDatetimeLocalValue(fechaPromesa)}
+                  onChange={(event) =>
+                    setValue(
+                      "fechaPromesa",
+                      fromDatetimeLocalValue(event.target.value),
+                      { shouldValidate: true },
+                    )
+                  }
+                  aria-invalid={!!errors.fechaPromesa}
+                />
+                <FieldDescription>
+                  Opcional; úsala si ya hay compromiso de atención o entrega.
+                </FieldDescription>
+                <FieldError>{errors.fechaPromesa?.message}</FieldError>
+              </Field>
+            </div>
+
             {mode === "create" && (
               <Field>
                 <FieldLabel className="flex items-center gap-2">
@@ -488,15 +782,14 @@ export function TicketForm({
                         aria-expanded={servicioOpen}
                         className={cn(
                           "min-w-0 flex-1 justify-between font-normal",
-                          !servicioInicialId && "text-muted-foreground",
+                          !serviciosSeleccionados.length &&
+                            "text-muted-foreground",
                         )}
                       >
                         <span className="truncate">
-                          {selectedServicio
-                            ? `${selectedServicio.sku} · ${selectedServicio.nombre}`
-                            : servicioInicialId
-                              ? servicioInicialId.slice(0, 8) + "..."
-                              : "Opcional: elegir servicio del catálogo"}
+                          {serviciosSeleccionados.length
+                            ? `${serviciosSeleccionados.length} servicio(s) seleccionado(s)`
+                            : "Opcional: agregar servicios del catálogo"}
                         </span>
                         <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-50" />
                       </Button>
@@ -523,14 +816,16 @@ export function TicketForm({
                                 key={s.id}
                                 value={s.id}
                                 onSelect={(v) => {
-                                  setServicioInicial(v);
+                                  addServicioInicial(v);
                                   setServicioOpen(false);
                                 }}
                               >
                                 <Check
                                   className={cn(
                                     "mr-2 size-4",
-                                    servicioInicialId === s.id
+                                    serviciosSeleccionados.some(
+                                      (detalle) => detalle.productoId === s.id,
+                                    )
                                       ? "opacity-100"
                                       : "opacity-0",
                                   )}
@@ -550,18 +845,43 @@ export function TicketForm({
                       </Command>
                     </PopoverContent>
                   </Popover>
-                  {servicioInicialId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      onClick={() => setServicioInicial(undefined)}
-                      title="Quitar servicio solicitado"
-                    >
-                      <X className="size-4" />
-                    </Button>
-                  )}
                 </div>
+                {serviciosSeleccionados.length ? (
+                  <div className="grid gap-2">
+                    {serviciosSeleccionados.map((detalle) => {
+                      const servicio = servicios.find(
+                        (item) => item.id === detalle.productoId,
+                      );
+                      return (
+                        <div
+                          key={detalle.productoId}
+                          className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium">
+                              {servicio?.nombre ??
+                                detalle.productoId.slice(0, 8) + "..."}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Cant. {detalle.cantidad} · S/{" "}
+                              {Number(detalle.precioUnitario ?? 0).toFixed(2)}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 shrink-0"
+                            onClick={() => removeServicioInicial(detalle.productoId)}
+                            title="Quitar servicio"
+                          >
+                            <X className="size-4" />
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <FieldError>{errors.detalles?.message}</FieldError>
               </Field>
             )}
@@ -569,7 +889,7 @@ export function TicketForm({
         </div>
 
         {/* === SECCIÓN 3: CLASIFICACIÓN === */}
-        <div className="rounded-xl border border-border/50 border-l-[3px] border-l-orange-400 dark:border-l-orange-800 bg-card p-4 sm:p-5">
+        <div className="border-t border-border/60 border-l-[3px] border-l-orange-400 p-4 dark:border-l-orange-800 sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 ring-2 ring-orange-100 dark:ring-orange-900/30">
@@ -601,9 +921,7 @@ export function TicketForm({
               <Select
                 value={prioridad}
                 onValueChange={(v) =>
-                  setValue("prioridad", v as PrioridadTicket, {
-                    shouldValidate: true,
-                  })
+                  setValue("prioridad", v as PrioridadTicket)
                 }
               >
                 <SelectTrigger aria-invalid={!!errors.prioridad}>
@@ -625,9 +943,7 @@ export function TicketForm({
               <Select
                 value={tipoServicio}
                 onValueChange={(v) =>
-                  setValue("tipoServicio", v as TipoServicio, {
-                    shouldValidate: true,
-                  })
+                  setValue("tipoServicio", v as TipoServicio)
                 }
               >
                 <SelectTrigger aria-invalid={!!errors.tipoServicio}>
@@ -641,26 +957,36 @@ export function TicketForm({
                   ))}
                 </SelectContent>
               </Select>
+              {tipoServicio ? (
+                <FieldDescription>
+                  {TIPO_SERVICIO_DESCRIPTIONS[tipoServicio]}
+                </FieldDescription>
+              ) : null}
               <FieldError>{errors.tipoServicio?.message}</FieldError>
             </Field>
           </div>
         </div>
 
-        {/* Submit */}
-        <div className="flex justify-end pt-2">
-          <Button type="submit" disabled={isLoading} className="min-w-36 gap-2">
-            {isLoading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                {mode === "create" ? "Creando..." : "Guardando..."}
-              </>
-            ) : mode === "create" ? (
-              "Crear ticket"
-            ) : (
-              "Guardar cambios"
-            )}
-          </Button>
-        </div>
+        {!hideBottomActions && (
+          <div className="flex justify-end border-t border-border/60 bg-muted/20 p-4">
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="min-w-36 gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  {mode === "create" ? "Creando..." : "Guardando..."}
+                </>
+              ) : mode === "create" ? (
+                "Crear ticket"
+              ) : (
+                "Guardar cambios"
+              )}
+            </Button>
+          </div>
+        )}
       </FieldGroup>
 
       {/* Quick create equipo modal */}
@@ -670,8 +996,10 @@ export function TicketForm({
           onClose={() => setEquipoQuickCreateOpen(false)}
           clienteId={clienteId}
           onCreated={(equipo) => {
-            setValue("equipoId", equipo.id, { shouldValidate: true });
-            setEquipoSearch(equipo.numeroSerie);
+            setEquipoOrigen("externo");
+            setValue("clienteEquipoId", equipo.id);
+            setValue("equipoId", undefined);
+            setClienteEquipoSearch(equipo.nombre ?? equipo.numeroSerie);
           }}
         />
       )}
@@ -681,7 +1009,7 @@ export function TicketForm({
         open={clienteQuickCreateOpen}
         onClose={() => setClienteQuickCreateOpen(false)}
         onCreated={(cliente) => {
-          setValue("clienteId", cliente.id, { shouldValidate: true });
+          setValue("clienteId", cliente.id);
           const display =
             cliente.razonSocial ??
             [cliente.nombre, cliente.apellido].filter(Boolean).join(" ").trim();
