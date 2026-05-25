@@ -13,7 +13,8 @@ const erpBadgeToneClassNames = {
   neutral:
     "border-border/60 bg-muted/30 text-foreground/75 dark:border-border/50 dark:bg-white/[0.02] dark:text-foreground/70",
   info: atmosphereToneClassName,
-  violet: atmosphereToneClassName,
+  violet:
+    "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-300",
   success:
     "border-[color-mix(in_oklch,var(--semantic-success)_24%,transparent)] bg-[var(--semantic-success-soft)] text-[var(--semantic-success)] dark:border-[color-mix(in_oklch,var(--semantic-success)_24%,var(--app-border))] dark:bg-[var(--semantic-success-soft)] dark:text-[color-mix(in_oklch,var(--semantic-success)_82%,oklch(0.98_0_0))]",
   warning:

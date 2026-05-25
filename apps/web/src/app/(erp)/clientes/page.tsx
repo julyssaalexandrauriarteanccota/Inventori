@@ -38,6 +38,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useCliente,
   useClientes,
@@ -86,6 +87,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ClienteDetalleModal } from "@/components/modals/cliente-detalle-modal";
@@ -567,7 +575,13 @@ function FloatingSelectionBar({
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function ClientesPage() {
+  const isMobile = useIsMobile();
   const { hasRole } = useAuth();
+  const canCreate = hasRole(
+    RolUsuario.ADMIN,
+    RolUsuario.ENCARGADO,
+    RolUsuario.TECNICO,
+  );
   const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canDelete = hasRole(RolUsuario.ADMIN);
 
@@ -586,7 +600,7 @@ export default function ClientesPage() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedCards, setSelectedCards] = useState<Set<string>>(new Set());
   const [openCreate, setOpenCreate] = useState(
-    () => canEdit && hasNuevoParam(),
+    () => canCreate && hasNuevoParam(),
   );
   const [editClientId, setEditClientId] = useState<string | null>(null);
   const [viewDetailId, setViewDetailId] = useState<string | null>(null);
@@ -1085,32 +1099,38 @@ export default function ClientesPage() {
   const activeFilterCount = estadoFilter !== "all" ? 1 : 0;
 
   return (
-    <div className="flex flex-col gap-6 w-full min-w-0 flex-1 min-h-0">
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows for premium high-contrast dark mode aesthetic */}
+      <div className="pointer-events-none absolute -z-10 bg-primary/5 blur-[120px] top-0 left-1/4 size-[400px] rounded-full dark:opacity-75" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-500/5 blur-[130px] bottom-1/4 right-1/4 size-[380px] rounded-full dark:opacity-50" />
       <PageHeader
         title="Clientes"
         description="Gestiona la información de tus clientes"
         hideTitleVisually
+        actionsClassName="w-full sm:w-auto"
         actions={
           <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            {canEdit ? (
+            <div className="flex items-center gap-2">
+              <PageAutoRefreshControl autoRefresh={autoRefresh} />
+              <PageActionsMenu
+                items={[
+                  {
+                    label: "Actualizar lista",
+                    icon: RefreshCcw,
+                    onSelect: handleManualRefresh,
+                  },
+                  {
+                    label: "Exportar CSV",
+                    icon: Download,
+                    onSelect: handleExportCSV,
+                  },
+                ]}
+              />
+            </div>
+            {canCreate ? (
               <Button
                 onClick={() => setOpenCreate(true)}
-                className="erp-page-primary-cta rounded-xl gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                className="erp-page-primary-cta rounded-xl gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150 ml-auto sm:ml-0"
               >
                 <Plus className="size-4" />
                 <span className="hidden sm:inline">Nuevo cliente</span>
@@ -1122,7 +1142,7 @@ export default function ClientesPage() {
       />
 
       {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total clientes"
           value={statsTotal && statsGeneric ? totalClientes : undefined}
@@ -1164,27 +1184,27 @@ export default function ClientesPage() {
             inputClassName="border-border/60 bg-background/40 hover:bg-muted/60"
           />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             {/* Tipo tabs */}
-            <Tabs value={tipoFilter} onValueChange={handleTipoChange}>
-              <TabsList className="h-9 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
+            <Tabs value={tipoFilter} onValueChange={handleTipoChange} className="w-full sm:w-auto">
+              <TabsList className="flex w-full sm:w-auto h-9 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
                 <TabsTrigger
                   value="all"
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Users className="size-3.5" />
                   <span className="hidden sm:inline">Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.EMPRESA}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Building2 className="size-3.5" />
                   <span className="hidden sm:inline">Empresa</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.NATURAL}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <User className="size-3.5" />
                   <span className="hidden sm:inline">Natural</span>
@@ -1192,131 +1212,134 @@ export default function ClientesPage() {
               </TabsList>
             </Tabs>
 
-            {/* Floating filters */}
-            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-              <PopoverTrigger asChild>
-                <ToolbarFiltersButton
-                  open={filterPopoverOpen}
-                  activeCount={activeFilterCount}
-                />
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-              >
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="text-sm font-semibold">Filtros</p>
-                  <p className="text-xs text-muted-foreground">
-                    Refina la lista visible
-                  </p>
-                </div>
-
-                <div className="space-y-4 px-4 py-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Estado
+            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+              {/* Floating filters */}
+              <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+                <PopoverTrigger asChild>
+                  <ToolbarFiltersButton
+                    open={filterPopoverOpen}
+                    activeCount={activeFilterCount}
+                    className="flex-1 sm:flex-initial"
+                  />
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  sideOffset={10}
+                  className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+                >
+                  <div className="border-b border-border/60 px-4 py-3">
+                    <p className="text-sm font-semibold">Filtros</p>
+                    <p className="text-xs text-muted-foreground">
+                      Refina la lista visible
                     </p>
-                    <div className="grid gap-2">
-                      {[
-                        { value: "all", label: "Todos" },
-                        { value: "activos", label: "Activos" },
-                        { value: "inactivos", label: "Inactivos" },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
-                            draftEstadoFilter === option.value
-                              ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
-                              : "border-border/60 bg-background hover:bg-muted/40",
-                          )}
-                          onClick={() => setDraftEstadoFilter(option.value)}
-                        >
-                          <span
+                  </div>
+
+                  <div className="space-y-4 px-4 py-4">
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Estado
+                      </p>
+                      <div className="grid gap-2">
+                        {[
+                          { value: "all", label: "Todos" },
+                          { value: "activos", label: "Activos" },
+                          { value: "inactivos", label: "Inactivos" },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
                             className={cn(
-                              "flex size-4 items-center justify-center rounded-full border transition-colors",
+                              "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
                               draftEstadoFilter === option.value
-                                ? "border-[var(--accent)]"
-                                : "border-muted-foreground/40",
+                                ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
+                                : "border-border/60 bg-background hover:bg-muted/40",
                             )}
+                            onClick={() => setDraftEstadoFilter(option.value)}
                           >
                             <span
                               className={cn(
-                                "size-2 rounded-full transition-colors",
+                                "flex size-4 items-center justify-center rounded-full border transition-colors",
                                 draftEstadoFilter === option.value
-                                  ? "bg-[var(--accent)]"
-                                  : "bg-transparent",
+                                  ? "border-[var(--accent)]"
+                                  : "border-muted-foreground/40",
                               )}
-                            />
-                          </span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
+                            >
+                              <span
+                                className={cn(
+                                  "size-2 rounded-full transition-colors",
+                                  draftEstadoFilter === option.value
+                                    ? "bg-[var(--accent)]"
+                                    : "bg-transparent",
+                                )}
+                              />
+                            </span>
+                            <span>{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+                        onClick={clearFilterPopover}
+                      >
+                        Limpiar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                        onClick={applyFilterPopover}
+                      >
+                        Aplicar filtros
+                      </Button>
                     </div>
                   </div>
+                </PopoverContent>
+              </Popover>
 
-                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
-                      onClick={clearFilterPopover}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
-                      onClick={applyFilterPopover}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+              {canDelete && (
+                <Button
+                  variant={selectionMode ? "secondary" : "outline"}
+                  size="sm"
+                  className="h-9 gap-1.5 rounded-lg text-xs flex-1 sm:flex-initial transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                  onClick={handleSelectionModeToggle}
+                >
+                  <CheckCircle2 className="size-3.5" />
+                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                </Button>
+              )}
 
-            {canDelete && (
-              <Button
-                variant={selectionMode ? "secondary" : "outline"}
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={handleViewModeChange}
+                variant="outline"
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
-                onClick={handleSelectionModeToggle}
+                className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5 shrink-0"
               >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar selección" : "Seleccionar"}
-              </Button>
-            )}
-
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={handleViewModeChange}
-              variant="outline"
-              size="sm"
-              className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5"
-            >
-              <ToggleGroupItem
-                value="list"
-                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
-                aria-label="Vista tabla"
-                title="Vista tabla"
-              >
-                <List className="size-3.5" />
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="grid"
-                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
-                aria-label="Vista tarjetas"
-                title="Vista tarjetas"
-              >
-                <LayoutGrid className="size-3.5" />
-              </ToggleGroupItem>
-            </ToggleGroup>
+                <ToggleGroupItem
+                  value="list"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+                  aria-label="Vista tabla"
+                  title="Vista tabla"
+                >
+                  <List className="size-3.5" />
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="grid"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+                  aria-label="Vista tarjetas"
+                  title="Vista tarjetas"
+                >
+                  <LayoutGrid className="size-3.5" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </div>
       </div>
@@ -1339,6 +1362,7 @@ export default function ClientesPage() {
           enableRowSelection={canDelete && selectionMode}
           enableColumnVisibility
           columnVisibilityStorageKey="erp:clientes:table-columns"
+          fillAvailableHeight={!isMobile}
           bulkActionsBar={
             canDelete
               ? (selectedRows, clearSelection) => (
@@ -1453,102 +1477,125 @@ export default function ClientesPage() {
                   />
                 ))}
               </div>
-              {visibleTotal > limit && (
-                <div className="flex items-center justify-between mt-5">
-                  <p className="text-xs text-muted-foreground">
-                    {(page - 1) * limit + 1}–
-                    {Math.min(page * limit, visibleTotal)} de {visibleTotal}{" "}
-                    clientes
-                  </p>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
-                      disabled={page <= 1}
-                      onClick={() => setPage(1)}
-                      title="Primera"
-                      aria-label="Primera página"
-                    >
-                      <ChevronsLeft className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
-                      disabled={page <= 1}
-                      onClick={() => setPage(page - 1)}
-                      title="Anterior"
-                      aria-label="Página anterior"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    {(() => {
-                      const totalPages = Math.ceil(visibleTotal / limit);
-                      const pages: (number | "...")[] = [];
-                      if (totalPages <= 7) {
-                        for (let i = 1; i <= totalPages; i++) pages.push(i);
-                      } else {
-                        pages.push(1);
-                        if (page > 3) pages.push("...");
-                        for (
-                          let i = Math.max(2, page - 1);
-                          i <= Math.min(totalPages - 1, page + 1);
-                          i++
-                        )
-                          pages.push(i);
-                        if (page < totalPages - 2) pages.push("...");
-                        pages.push(totalPages);
-                      }
-                      return pages.map((p, i) =>
-                        p === "..." ? (
-                          <span
-                            key={`e${i}`}
-                            className="px-1.5 text-muted-foreground text-sm select-none"
-                          >
-                            …
-                          </span>
-                        ) : (
-                          <Button
-                            key={p}
-                            variant={p === page ? "default" : "ghost"}
-                            size="icon"
-                            className={cn(
-                              "size-8 rounded-lg text-xs font-medium transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150",
-                              p === page
-                                ? "pointer-events-none"
-                                : "hover:scale-[1.05]",
-                            )}
-                            onClick={() => setPage(p as number)}
-                          >
-                            {p}
-                          </Button>
-                        ),
-                      );
-                    })()}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
-                      disabled={page * limit >= visibleTotal}
-                      onClick={() => setPage(page + 1)}
-                      title="Siguiente"
-                      aria-label="Página siguiente"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
-                      disabled={page * limit >= visibleTotal}
-                      onClick={() => setPage(Math.ceil(visibleTotal / limit))}
-                      title="Ultima"
-                      aria-label="Última página"
-                    >
-                      <ChevronsRight className="size-4" />
-                    </Button>
+              {/* Pagination and Limit Selector for Grid View */}
+              {visibleTotal > 0 && (
+                <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between mt-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        Filas por página
+                      </span>
+                      <Select
+                        value={String(limit)}
+                        onValueChange={(value) => handleLimitChange(Number(value))}
+                      >
+                        <SelectTrigger className="h-8 min-w-[5.5rem] rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={String(option)}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {(page - 1) * limit + 1}–
+                      {Math.min(page * limit, visibleTotal)} de {visibleTotal}{" "}
+                      clientes
+                    </p>
                   </div>
+
+                  {visibleTotal > limit && (
+                    <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => setPage(1)}
+                        title="Primera página"
+                      >
+                        <ChevronsLeft className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => setPage(page - 1)}
+                      >
+                        <ChevronLeft className="size-3.5" />
+                        Anterior
+                      </Button>
+                      {(() => {
+                        const totalPages = Math.ceil(visibleTotal / limit);
+                        const pages: (number | "...")[] = [];
+                        if (totalPages <= 7) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          if (page > 3) pages.push("...");
+                          for (
+                            let i = Math.max(2, page - 1);
+                            i <= Math.min(totalPages - 1, page + 1);
+                            i++
+                          )
+                            pages.push(i);
+                          if (page < totalPages - 2) pages.push("...");
+                          pages.push(totalPages);
+                        }
+                        return pages.map((p, i) =>
+                          p === "..." ? (
+                            <span
+                              key={`ellipsis-${i}`}
+                              className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground select-none"
+                            >
+                              ...
+                            </span>
+                          ) : (
+                            <Button
+                              key={p}
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
+                                p === page
+                                  ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
+                                  : "bg-muted/55 hover:bg-muted/80",
+                              )}
+                              onClick={() => setPage(p as number)}
+                            >
+                              {p}
+                            </Button>
+                          ),
+                        );
+                      })()}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= visibleTotal}
+                        onClick={() => setPage(page + 1)}
+                      >
+                        Siguiente
+                        <ChevronRight className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= visibleTotal}
+                        onClick={() => setPage(Math.ceil(visibleTotal / limit))}
+                        title="Última página"
+                      >
+                        <ChevronsRight className="size-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
               {selectedCards.size > 0 && (
