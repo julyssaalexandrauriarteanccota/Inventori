@@ -43,8 +43,21 @@ function getInitials(nombre: string): string {
   return nombre.slice(0, 2).toUpperCase();
 }
 
-function formatCurrency(amount: number) {
-  return `S/ ${amount.toFixed(2)}`;
+type MoneyValue = number | string | null | undefined;
+
+function toMoneyNumber(amount: MoneyValue) {
+  const value =
+    typeof amount === "number"
+      ? amount
+      : typeof amount === "string"
+        ? Number(amount)
+        : 0;
+
+  return Number.isFinite(value) ? value : 0;
+}
+
+function formatCurrency(amount: MoneyValue) {
+  return `S/ ${toMoneyNumber(amount).toFixed(2)}`;
 }
 
 export function VentaCard({
