@@ -19,7 +19,7 @@ import { useMiAperturaActiva } from "@/hooks/use-caja";
 import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
 
-import { HistorialVentasWorkspace } from "../pos/historial/page";
+import { HistorialVentasWorkspace } from "../pos/historial/historial-ventas-workspace";
 
 export default function VentasHubPage() {
   const router = useRouter();
@@ -35,7 +35,11 @@ export default function VentasHubPage() {
   });
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows for premium high-contrast dark mode aesthetic */}
+      <div className="pointer-events-none absolute -z-10 bg-primary/5 blur-[120px] top-0 left-1/4 size-[400px] rounded-full dark:opacity-75" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-500/5 blur-[130px] bottom-1/4 right-1/4 size-[380px] rounded-full dark:opacity-50" />
+
       <PageHeader
         title="Ventas"
         description={<PageAutoRefreshControl autoRefresh={autoRefresh} />}
