@@ -1,9 +1,9 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { pdf } from "@react-pdf/renderer";
 import {
-  Activity,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -25,7 +25,6 @@ import {
   Trash2,
   UserRound,
   Warehouse,
-  Wrench,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -40,19 +39,20 @@ import {
 import { cn } from "@/lib/utils";
 import { ProductoThumbnail } from "@/components/products/producto-thumbnail";
 import { useAuth } from "@/hooks/use-auth";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useEquipos,
   useDeleteEquipo,
   useCreateEquipo,
   useUpdateEquipo,
+  useEquipoFlujoActions,
 } from "@/hooks/use-equipos";
+import { useClientes } from "@/hooks/use-clientes";
+import { useAlmacenes } from "@/hooks/use-inventario";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePublicBranding } from "@/hooks/use-public-branding";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ErpBadge } from "@/components/erp-badges";
@@ -92,6 +92,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { EquipoForm } from "@/components/forms/equipo-form";
 import { EquipoDetalleModal } from "@/components/modals/equipo-detalle-modal";
+import { SearchableSelect } from "@/components/searchable-select";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { EtiquetaProductoPdfDocument } from "@/components/products/etiqueta-producto-pdf";
 import { api } from "@/lib/api";
 import {
@@ -148,6 +150,17 @@ const ESTADO_COMERCIAL_BADGE_TONES: Record<
   [EstadoComercialEquipo.USO_INTERNO]: "info",
   [EstadoComercialEquipo.BAJA]: "danger",
 };
+
+const ESTADO_COMERCIAL_FILTER_OPTIONS = [
+  { value: "all", label: "Todos" },
+  { value: EstadoComercialEquipo.DISPONIBLE, label: "Disponible" },
+  { value: EstadoComercialEquipo.RESERVADO, label: "Reservado" },
+  { value: EstadoComercialEquipo.USO_INTERNO, label: "Uso interno" },
+  { value: EstadoComercialEquipo.VENDIDO, label: "Vendido" },
+  { value: EstadoComercialEquipo.ALQUILADO, label: "Alquilado" },
+  { value: EstadoComercialEquipo.EN_REPARACION, label: "Reparación" },
+  { value: EstadoComercialEquipo.BAJA, label: "Baja" },
+] as const;
 
 function hasNuevoParam() {
   if (typeof window === "undefined") return false;
@@ -214,6 +227,8 @@ interface EquipoCardProps {
   onToggleSelect?: () => void;
   onView: () => void;
   onEdit: () => void;
+  onDarBaja: () => void;
+  onReactivar: () => void;
   onDelete: () => void;
   animationDelay?: number;
 }
@@ -226,6 +241,8 @@ function EquipoCard({
   onToggleSelect,
   onView,
   onEdit,
+  onDarBaja,
+  onReactivar,
   onDelete,
   animationDelay,
 }: EquipoCardProps) {
@@ -282,7 +299,7 @@ function EquipoCard({
             onDelete();
           }}
           className="absolute right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
-          title="Eliminar"
+          title="Eliminar definitivo"
         >
           <Trash2 className="size-3.5" />
         </button>
@@ -351,11 +368,11 @@ function EquipoCard({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 mt-auto pt-0.5">
+      <div className="flex flex-wrap gap-2 mt-auto pt-0.5">
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+          className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
           onClick={(ev) => {
             ev.stopPropagation();
             onView();
@@ -363,11 +380,40 @@ function EquipoCard({
         >
           <Eye className="size-3.5" /> Ver ficha
         </Button>
+        {canEdit && e.estadoComercial === EstadoComercialEquipo.BAJA ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onReactivar();
+            }}
+          >
+            <RefreshCcw className="size-3.5" /> Reactivar
+          </Button>
+        ) : null}
+        {canEdit &&
+        e.estadoComercial !== EstadoComercialEquipo.BAJA &&
+        e.estadoComercial !== EstadoComercialEquipo.VENDIDO &&
+        e.estadoComercial !== EstadoComercialEquipo.ALQUILADO ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={(ev) => {
+              ev.stopPropagation();
+              onDarBaja();
+            }}
+          >
+            <Trash2 className="size-3.5" /> Baja
+          </Button>
+        ) : null}
         {canEdit && (
           <Button
             variant="ghost"
             size="sm"
-            className="flex-1 h-8 gap-1.5 rounded-lg text-xs"
+            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs"
             onClick={(ev) => {
               ev.stopPropagation();
               onEdit();
@@ -384,6 +430,7 @@ function EquipoCard({
 // ── Page ────────────────────────────────────────────────────────────────────
 
 export default function EquiposPage() {
+  const router = useRouter();
   const { hasRole } = useAuth();
   const { branding } = usePublicBranding();
   const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
@@ -392,11 +439,13 @@ export default function EquiposPage() {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [search, setSearch] = useState("");
-  const [estadoFilter, setEstadoFilter] = useState<string>("all");
+  const [estadoComercialFilter, setEstadoComercialFilter] =
+    useState<string>("all");
   const debouncedSearch = useDebounce(search, 300);
 
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
-  const [draftEstadoFilter, setDraftEstadoFilter] = useState<string>("all");
+  const [draftEstadoComercialFilter, setDraftEstadoComercialFilter] =
+    useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "grid">(getInitialViewMode);
   const [deleteSerie, setDeleteSerie] = useState<string | null>(null);
   const [bulkDeleteSeries, setBulkDeleteSeries] = useState<string[]>([]);
@@ -408,6 +457,13 @@ export default function EquiposPage() {
   const [editEquipo, setEditEquipo] = useState<EquipoListItem | null>(null);
   const [viewDetailSerie, setViewDetailSerie] = useState<string | null>(null);
   const [printingEquipoId, setPrintingEquipoId] = useState<string | null>(null);
+  const [assignEquipo, setAssignEquipo] = useState<EquipoListItem | null>(null);
+  const [assignClienteId, setAssignClienteId] = useState("");
+  const [clienteSearch, setClienteSearch] = useState("");
+  const [reactivarEquipo, setReactivarEquipo] = useState<EquipoListItem | null>(
+    null,
+  );
+  const [reactivarAlmacenId, setReactivarAlmacenId] = useState("");
 
   const brandingIdentity = branding?.identity;
 
@@ -416,41 +472,64 @@ export default function EquiposPage() {
       page,
       limit,
       search: debouncedSearch || undefined,
-      estado:
-        estadoFilter !== "all" ? (estadoFilter as EstadoEquipo) : undefined,
+      estadoComercial:
+        estadoComercialFilter !== "all"
+          ? (estadoComercialFilter as EstadoComercialEquipo)
+          : undefined,
     }),
-    [page, limit, debouncedSearch, estadoFilter],
+    [page, limit, debouncedSearch, estadoComercialFilter],
   );
 
   const { data, isLoading, isError, refetch } = useEquipos(filters);
 
+  // Stat queries
   const { data: statsTotal } = useEquipos({ page: 1, limit: 1 });
   const { data: statsDisponible } = useEquipos({
-    page: 1,
-    limit: 1,
+    page: 1, limit: 1,
     estadoComercial: EstadoComercialEquipo.DISPONIBLE,
   });
-  const { data: statsAlquilado } = useEquipos({
-    page: 1,
-    limit: 1,
-    estadoComercial: EstadoComercialEquipo.ALQUILADO,
+  const { data: statsVendido } = useEquipos({
+    page: 1, limit: 1,
+    estadoComercial: EstadoComercialEquipo.VENDIDO,
   });
-  const { data: statsReparacion } = useEquipos({
-    page: 1,
-    limit: 1,
-    estado: EstadoEquipo.EN_REPARACION,
+  const { data: statsBaja } = useEquipos({
+    page: 1, limit: 1,
+    estadoComercial: EstadoComercialEquipo.BAJA,
   });
-
-  const autoRefresh = usePageAutoRefresh({
-    scope: "equipos",
-    toastLabel: "Equipos",
-    manualToastMessage: "Lista actualizada",
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
 
   const deleteMutation = useDeleteEquipo();
   const createMutation = useCreateEquipo();
   const updateMutation = useUpdateEquipo(editEquipo?.numeroSerie || "");
+  const flujoMutation = useEquipoFlujoActions();
+  const { data: almacenesData } = useAlmacenes();
+  const { data: clientesData } = useClientes({
+    search: clienteSearch || undefined,
+    limit: 20,
+    activo: true,
+  });
+  const clienteOptions = useMemo(
+    () =>
+      (clientesData?.data ?? []).map((cliente) => ({
+        value: cliente.id,
+        label:
+          cliente.razonSocial ||
+          [cliente.nombre, cliente.apellido].filter(Boolean).join(" ") ||
+          cliente.ruc ||
+          cliente.dni ||
+          "Cliente sin nombre",
+      })),
+    [clientesData],
+  );
+  const almacenOptions = useMemo(
+    () =>
+      (almacenesData?.data ?? [])
+        .filter((almacen) => almacen.activo)
+        .map((almacen) => ({
+          value: almacen.id,
+          label: `${almacen.nombre}${almacen.esPrincipal ? " · Principal" : ""}`,
+        })),
+    [almacenesData?.data],
+  );
 
   const handleCreate = useCallback(
     (formData: EquipoFormPayload) => {
@@ -481,6 +560,78 @@ export default function EquiposPage() {
     },
     [updateMutation],
   );
+
+  const handleFlujoEquipo = useCallback(
+    (
+      equipo: EquipoListItem,
+      action: "reservar" | "uso-interno" | "liberar" | "baja",
+      successMessage: string,
+    ) => {
+      flujoMutation.mutate(
+        { serie: equipo.numeroSerie, action },
+        {
+          onSuccess: () => toast.success(successMessage),
+          onError: (err: Error) =>
+            toast.error(err.message || "No se pudo actualizar el equipo"),
+        },
+      );
+    },
+    [flujoMutation],
+  );
+
+  const openReactivarEquipo = useCallback(
+    (equipo: EquipoListItem) => {
+      setReactivarEquipo(equipo);
+      const principal = almacenOptions.find((option) =>
+        option.label.includes("Principal"),
+      );
+      setReactivarAlmacenId(principal?.value ?? almacenOptions[0]?.value ?? "");
+    },
+    [almacenOptions],
+  );
+
+  const handleReactivarEquipo = useCallback(() => {
+    if (!reactivarEquipo || !reactivarAlmacenId) {
+      toast.error("Selecciona el almacén al que vuelve el equipo.");
+      return;
+    }
+
+    flujoMutation.mutate(
+      {
+        serie: reactivarEquipo.numeroSerie,
+        action: "reactivar",
+        almacenId: reactivarAlmacenId,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Equipo reactivado y disponible en stock");
+          setReactivarEquipo(null);
+          setReactivarAlmacenId("");
+        },
+        onError: (err: Error) =>
+          toast.error(err.message || "No se pudo reactivar el equipo"),
+      },
+    );
+  }, [flujoMutation, reactivarAlmacenId, reactivarEquipo]);
+
+  const openAsignarCliente = useCallback((equipo: EquipoListItem) => {
+    setAssignEquipo(equipo);
+    setAssignClienteId("");
+    setClienteSearch("");
+  }, []);
+
+  const handleAsignarCliente = useCallback(() => {
+    if (!assignEquipo || !assignClienteId) {
+      toast.error("Selecciona un cliente para crear el alquiler.");
+      return;
+    }
+
+    router.push(
+      `/alquileres?nuevo=1&equipoId=${encodeURIComponent(assignEquipo.id)}&clienteId=${encodeURIComponent(assignClienteId)}`,
+    );
+    setAssignEquipo(null);
+    setAssignClienteId("");
+  }, [assignEquipo, assignClienteId, router]);
 
   const handleDelete = useCallback(() => {
     if (!deleteSerie) return;
@@ -798,18 +949,121 @@ export default function EquiposPage() {
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuGroup>
                   {canEdit && (
-                    <DropdownMenuItem
-                      onClick={() => setEditEquipo(row.original)}
-                    >
-                      <Pencil className="size-4" /> Editar
-                    </DropdownMenuItem>
+                    <>
+                      {row.original.estadoComercial ===
+                        EstadoComercialEquipo.BAJA && (
+                        <DropdownMenuItem
+                          onClick={() => openReactivarEquipo(row.original)}
+                        >
+                          <RefreshCcw className="size-4" /> Reactivar
+                        </DropdownMenuItem>
+                      )}
+                      {row.original.estadoComercial ===
+                        EstadoComercialEquipo.DISPONIBLE && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleFlujoEquipo(
+                              row.original,
+                              "reservar",
+                              "Equipo reservado",
+                            )
+                          }
+                        >
+                          <CheckCircle2 className="size-4" /> Reservar
+                        </DropdownMenuItem>
+                      )}
+                      {(row.original.estadoComercial ===
+                        EstadoComercialEquipo.RESERVADO ||
+                        row.original.estadoComercial ===
+                          EstadoComercialEquipo.USO_INTERNO) && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleFlujoEquipo(
+                              row.original,
+                              "liberar",
+                              "Equipo disponible nuevamente",
+                            )
+                          }
+                        >
+                          <X className="size-4" /> Liberar
+                        </DropdownMenuItem>
+                      )}
+                      {(row.original.estadoComercial ===
+                        EstadoComercialEquipo.DISPONIBLE ||
+                        row.original.estadoComercial ===
+                          EstadoComercialEquipo.RESERVADO) && (
+                        <DropdownMenuItem
+                          onClick={() =>
+                            handleFlujoEquipo(
+                              row.original,
+                              "uso-interno",
+                              "Equipo marcado para uso interno",
+                            )
+                          }
+                        >
+                          <Warehouse className="size-4" /> Uso interno
+                        </DropdownMenuItem>
+                      )}
+                      {(row.original.estadoComercial ===
+                        EstadoComercialEquipo.DISPONIBLE ||
+                        row.original.estadoComercial ===
+                          EstadoComercialEquipo.RESERVADO) && (
+                        <DropdownMenuItem
+                          onClick={() => openAsignarCliente(row.original)}
+                        >
+                          <UserRound className="size-4" /> Alquilar/asignar
+                        </DropdownMenuItem>
+                      )}
+                      {(row.original.estadoComercial ===
+                        EstadoComercialEquipo.DISPONIBLE ||
+                        row.original.estadoComercial ===
+                          EstadoComercialEquipo.RESERVADO) && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            const params = new URLSearchParams({
+                              equipoSerie: row.original.numeroSerie,
+                            });
+                            if (row.original.producto?.id) {
+                              params.set("productoId", row.original.producto.id);
+                            }
+                            window.location.href = `/ventas/cotizaciones?${params.toString()}`;
+                          }}
+                        >
+                          <Printer className="size-4" /> Cotizar/vender
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => setEditEquipo(row.original)}
+                      >
+                        <Pencil className="size-4" /> Editar datos
+                      </DropdownMenuItem>
+                      {row.original.estadoComercial !==
+                        EstadoComercialEquipo.BAJA &&
+                        row.original.estadoComercial !==
+                          EstadoComercialEquipo.VENDIDO &&
+                        row.original.estadoComercial !==
+                          EstadoComercialEquipo.ALQUILADO && (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            onClick={() =>
+                              handleFlujoEquipo(
+                                row.original,
+                                "baja",
+                                "Equipo dado de baja",
+                              )
+                            }
+                          >
+                            <Trash2 className="size-4" /> Dar de baja
+                          </DropdownMenuItem>
+                        )}
+                    </>
                   )}
                   {canDelete && (
                     <DropdownMenuItem
                       variant="destructive"
                       onClick={() => setDeleteSerie(row.original.numeroSerie)}
                     >
-                      <Trash2 className="size-4" /> Eliminar
+                      <Trash2 className="size-4" /> Eliminar definitivo
                     </DropdownMenuItem>
                   )}
                 </DropdownMenuGroup>
@@ -819,15 +1073,23 @@ export default function EquiposPage() {
         ),
       },
     ],
-    [canEdit, canDelete, handlePrintEtiquetaEquipo, printingEquipoId],
+    [
+      canEdit,
+      canDelete,
+      handleFlujoEquipo,
+      handlePrintEtiquetaEquipo,
+      openReactivarEquipo,
+      openAsignarCliente,
+      printingEquipoId,
+    ],
   );
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
     setPage(1);
   }, []);
-  const handleEstadoChange = useCallback((value: string) => {
-    setEstadoFilter(value);
+  const handleEstadoComercialChange = useCallback((value: string) => {
+    setEstadoComercialFilter(value);
     setPage(1);
   }, []);
   const handleLimitChange = useCallback((value: number) => {
@@ -843,23 +1105,23 @@ export default function EquiposPage() {
   const openFilterPopover = useCallback(
     (open: boolean) => {
       setFilterPopoverOpen(open);
-      if (open) setDraftEstadoFilter(estadoFilter);
+      if (open) setDraftEstadoComercialFilter(estadoComercialFilter);
     },
-    [estadoFilter],
+    [estadoComercialFilter],
   );
 
   const applyFilterPopover = useCallback(() => {
-    handleEstadoChange(draftEstadoFilter);
+    handleEstadoComercialChange(draftEstadoComercialFilter);
     setFilterPopoverOpen(false);
-  }, [draftEstadoFilter, handleEstadoChange]);
+  }, [draftEstadoComercialFilter, handleEstadoComercialChange]);
 
   const clearFilterPopover = useCallback(() => {
-    setDraftEstadoFilter("all");
-    handleEstadoChange("all");
+    setDraftEstadoComercialFilter("all");
+    handleEstadoComercialChange("all");
     setFilterPopoverOpen(false);
-  }, [handleEstadoChange]);
+  }, [handleEstadoComercialChange]);
 
-  const activeFilterCount = estadoFilter !== "all" ? 1 : 0;
+  const activeFilterCount = estadoComercialFilter !== "all" ? 1 : 0;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -868,237 +1130,227 @@ export default function EquiposPage() {
   }, [viewMode]);
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
-      <PageHeader
-        title="Equipos"
-        description={`Gestiona unidades físicas serializadas para ${branding.identity.industry.toLowerCase()}`}
-        hideTitleVisually
-        actions={
-          <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            {canEdit ? (
-              <Button
-                onClick={() => setOpenCreate(true)}
-                className="erp-page-primary-cta rounded-xl"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nuevo equipo</span>
-                <span className="sm:hidden">Nuevo</span>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+    <div className="relative flex flex-col gap-6 w-full min-w-0 flex-1 min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-emerald-400/6 dark:bg-emerald-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-400/5 dark:bg-violet-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        {canEdit ? (
+          <Button
+            onClick={() => setOpenCreate(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo equipo</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Equipos</h1>
 
       {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total equipos"
           value={statsTotal?.meta?.total}
           icon={Monitor}
-          index={0}
+          theme="sky"
+          subtitle="En sistema"
         />
         <StatCard
           label="Disponibles"
           value={statsDisponible?.meta?.total}
-          icon={Activity}
-          color="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-          index={1}
+          icon={CheckCircle2}
+          theme="emerald"
+          subtitle="Listos para venta"
         />
         <StatCard
-          label="Alquilados"
-          value={statsAlquilado?.meta?.total}
-          icon={UserRound}
-          color="bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400"
-          index={2}
+          label="Vendidos"
+          value={statsVendido?.meta?.total}
+          icon={Cpu}
+          theme="indigo"
+          subtitle="Transferidos"
         />
         <StatCard
-          label="En reparación"
-          value={statsReparacion?.meta?.total}
-          icon={Wrench}
-          color="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-          index={3}
+          label="Dados de baja"
+          value={statsBaja?.meta?.total}
+          icon={Trash2}
+          theme="slate"
+          subtitle="Fuera de servicio"
         />
       </div>
 
       {/* ── Toolbar ── */}
       <div className="flex flex-col gap-2.5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* Row 1: Actions on the right */}
+        <div className="flex items-center justify-end gap-2">
+          {/* Filtros popover */}
+          <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+            <PopoverTrigger asChild>
+              <ToolbarFiltersButton
+                open={filterPopoverOpen}
+                activeCount={activeFilterCount}
+              />
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              sideOffset={10}
+              className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+            >
+              <div className="border-b border-border/60 px-4 py-3">
+                <p className="text-sm font-semibold">Filtros</p>
+                <p className="text-xs text-muted-foreground">
+                  Refina la lista visible
+                </p>
+              </div>
+              <div className="space-y-4 px-4 py-4">
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                    Estado comercial
+                  </p>
+                  <div className="grid gap-2">
+                    {ESTADO_COMERCIAL_FILTER_OPTIONS.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                          draftEstadoComercialFilter === option.value
+                            ? "border-primary/40 bg-primary/5 text-foreground"
+                            : "border-border/60 bg-background hover:bg-muted/40",
+                        )}
+                        onClick={() =>
+                          setDraftEstadoComercialFilter(option.value)
+                        }
+                      >
+                        <span
+                          className={cn(
+                            "flex size-4 items-center justify-center rounded-full border transition-colors",
+                            draftEstadoComercialFilter === option.value
+                              ? "border-primary"
+                              : "border-muted-foreground/40",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "size-2 rounded-full transition-colors",
+                              draftEstadoComercialFilter === option.value
+                                ? "bg-primary"
+                                : "bg-transparent",
+                            )}
+                          />
+                        </span>
+                        <span>{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-lg text-xs text-muted-foreground"
+                    onClick={clearFilterPopover}
+                  >
+                    Limpiar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 rounded-lg text-xs"
+                    onClick={applyFilterPopover}
+                  >
+                    Aplicar filtros
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {canDelete && (
+            <Button
+              variant={selectionMode ? "secondary" : "outline"}
+              size="sm"
+              className="h-9 gap-1.5 rounded-lg text-xs"
+              onClick={handleSelectionModeToggle}
+            >
+              <CheckCircle2 className="size-3.5" />
+              {selectionMode ? "Cancelar selección" : "Seleccionar"}
+            </Button>
+          )}
+
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => {
+              if (value === "list" || value === "grid") {
+                setViewMode(value);
+              }
+            }}
+            variant="outline"
+            size="sm"
+            className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5"
+          >
+            <ToggleGroupItem
+              value="list"
+              className="h-8 rounded-md px-2.5"
+              aria-label="Vista tabla"
+              title="Vista tabla"
+            >
+              <List className="size-3.5" />
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="grid"
+              className="h-8 rounded-md px-2.5"
+              aria-label="Vista tarjetas"
+              title="Vista tarjetas"
+            >
+              <LayoutGrid className="size-3.5" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        {/* Row 2: Search input on the left, Tabs on the right */}
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           {/* Search */}
           <ToolbarSearchInput
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por serie, producto…"
-            inputClassName="border-border/60 bg-background/40 hover:bg-muted/60"
+            className="w-full sm:max-w-xs"
+            inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
-            {/* Estado quick tabs */}
-            <Tabs value={estadoFilter} onValueChange={handleEstadoChange}>
-              <TabsList className="h-9 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
+          {/* Commercial status quick tabs */}
+          <div className="flex overflow-x-auto pb-1 sm:pb-0">
+            <Tabs
+              value={estadoComercialFilter}
+              onValueChange={handleEstadoComercialChange}
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="h-9 w-full sm:w-auto gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5 flex">
                 <TabsTrigger
                   value="all"
-                  className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                  className="h-8 flex-1 sm:flex-none rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   Todos
                 </TabsTrigger>
-                {Object.values(EstadoEquipo).map((est) => (
+                {ESTADO_COMERCIAL_FILTER_OPTIONS.filter(
+                  (option) => option.value !== "all",
+                ).map((option) => (
                   <TabsTrigger
-                    key={est}
-                    value={est}
-                    className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none"
+                    key={option.value}
+                    value={option.value}
+                    className="h-8 flex-1 sm:flex-none shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                   >
-                    {ESTADO_LABELS[est]}
+                    {option.label}
                   </TabsTrigger>
                 ))}
               </TabsList>
             </Tabs>
-
-            {/* Filtros popover */}
-            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-              <PopoverTrigger asChild>
-                <ToolbarFiltersButton
-                  open={filterPopoverOpen}
-                  activeCount={activeFilterCount}
-                />
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-              >
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="text-sm font-semibold">Filtros</p>
-                  <p className="text-xs text-muted-foreground">
-                    Refina la lista visible
-                  </p>
-                </div>
-                <div className="space-y-4 px-4 py-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Estado
-                    </p>
-                    <div className="grid gap-2">
-                      {[
-                        { value: "all", label: "Todos" },
-                        { value: EstadoEquipo.ACTIVO, label: "Activo" },
-                        {
-                          value: EstadoEquipo.EN_REPARACION,
-                          label: "En reparación",
-                        },
-                        { value: EstadoEquipo.BAJA, label: "Baja" },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                            draftEstadoFilter === option.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
-                              : "border-border/60 bg-background hover:bg-muted/40",
-                          )}
-                          onClick={() => setDraftEstadoFilter(option.value)}
-                        >
-                          <span
-                            className={cn(
-                              "flex size-4 items-center justify-center rounded-full border transition-colors",
-                              draftEstadoFilter === option.value
-                                ? "border-primary"
-                                : "border-muted-foreground/40",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "size-2 rounded-full transition-colors",
-                                draftEstadoFilter === option.value
-                                  ? "bg-primary"
-                                  : "bg-transparent",
-                              )}
-                            />
-                          </span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground"
-                      onClick={clearFilterPopover}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs"
-                      onClick={applyFilterPopover}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {canDelete && (
-              <Button
-                variant={selectionMode ? "secondary" : "outline"}
-                size="sm"
-                className="h-9 gap-1.5 rounded-lg text-xs"
-                onClick={handleSelectionModeToggle}
-              >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar selección" : "Seleccionar"}
-              </Button>
-            )}
-
-            <ToggleGroup
-              type="single"
-              value={viewMode}
-              onValueChange={(value) => {
-                if (value === "list" || value === "grid") {
-                  setViewMode(value);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5"
-            >
-              <ToggleGroupItem
-                value="list"
-                className="h-8 rounded-md px-2.5"
-                aria-label="Vista tabla"
-                title="Vista tabla"
-              >
-                <List className="size-3.5" />
-              </ToggleGroupItem>
-              <ToggleGroupItem
-                value="grid"
-                className="h-8 rounded-md px-2.5"
-                aria-label="Vista tarjetas"
-                title="Vista tarjetas"
-              >
-                <LayoutGrid className="size-3.5" />
-              </ToggleGroupItem>
-            </ToggleGroup>
           </div>
         </div>
       </div>
@@ -1179,7 +1431,7 @@ export default function EquiposPage() {
                         );
                       }}
                     >
-                      <Trash2 className="size-3.5" /> Eliminar
+                      <Trash2 className="size-3.5" /> Eliminar definitivo
                     </Button>
                   </div>
                 )
@@ -1250,7 +1502,7 @@ export default function EquiposPage() {
                     }
                   >
                     <Trash2 className="size-3.5" />
-                    Eliminar
+                    Eliminar definitivo
                   </Button>
                 ) : null}
               </div>
@@ -1315,6 +1567,10 @@ export default function EquiposPage() {
                     }
                     onView={() => setViewDetailSerie(e.numeroSerie)}
                     onEdit={() => setEditEquipo(e)}
+                    onDarBaja={() =>
+                      handleFlujoEquipo(e, "baja", "Equipo dado de baja")
+                    }
+                    onReactivar={() => openReactivarEquipo(e)}
                     onDelete={() => setDeleteSerie(e.numeroSerie)}
                   />
                 ))}
@@ -1438,12 +1694,12 @@ export default function EquiposPage() {
             </div>
             <div className="flex flex-col gap-1.5 text-left">
               <AlertDialogTitle className="text-xl">
-                ¿Eliminar equipo?
+                ¿Eliminar equipo definitivamente?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Se dará de baja el equipo con serie{" "}
+                Se ocultará el equipo con serie{" "}
                 <span className="font-mono font-semibold">{deleteSerie}</span>.
-                Esta acción no se puede deshacer.
+                Para solo retirarlo del stock usa “Dar de baja”.
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
@@ -1456,7 +1712,9 @@ export default function EquiposPage() {
               disabled={deleteMutation.isPending}
               className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+              {deleteMutation.isPending
+                ? "Eliminando..."
+                : "Sí, eliminar definitivo"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1474,11 +1732,11 @@ export default function EquiposPage() {
             </div>
             <div className="flex flex-col gap-1.5 text-left">
               <AlertDialogTitle className="text-xl">
-                ¿Eliminar {bulkDeleteSeries.length} equipos?
+                ¿Eliminar definitivamente {bulkDeleteSeries.length} equipos?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. Se eliminarán{" "}
-                {bulkDeleteSeries.length} equipos seleccionados.
+                Se ocultarán {bulkDeleteSeries.length} equipos seleccionados. Para
+                solo retirarlos del stock usa “Dar de baja” por equipo.
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
@@ -1496,7 +1754,7 @@ export default function EquiposPage() {
             >
               {deleteMutation.isPending
                 ? "Eliminando..."
-                : `Sí, eliminar ${bulkDeleteSeries.length}`}
+                : `Sí, eliminar definitivo ${bulkDeleteSeries.length}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1512,10 +1770,11 @@ export default function EquiposPage() {
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-semibold">
-                  Nuevo equipo
+                  Nuevo equipo propio
                 </DialogTitle>
                 <DialogDescription className="text-xs mt-0.5">
-                  Registra un nuevo equipo en el sistema.
+                  Registra una unidad física de la empresa para stock, venta o
+                  alquiler.
                 </DialogDescription>
               </div>
             </div>
@@ -1576,6 +1835,147 @@ export default function EquiposPage() {
               />
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Assign/rent dialog ── */}
+      <Dialog
+        open={!!assignEquipo}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAssignEquipo(null);
+            setAssignClienteId("");
+          }
+        }}
+      >
+        <DialogContent className="w-full sm:max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Alquilar/asignar equipo propio</DialogTitle>
+            <DialogDescription>
+              Se creará un contrato mensual para cobrar cuota inicial,
+              excedentes y soporte fuera de garantía desde Alquileres.
+            </DialogDescription>
+          </DialogHeader>
+
+          <FieldGroup>
+            <Field>
+              <FieldLabel>Equipo</FieldLabel>
+              <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3 text-sm">
+                <p className="font-mono font-medium">
+                  {assignEquipo?.numeroSerie ?? "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {assignEquipo?.producto?.nombre ?? "Equipo propio"}
+                </p>
+              </div>
+            </Field>
+            <Field>
+              <FieldLabel>Cliente</FieldLabel>
+              <SearchableSelect
+                value={assignClienteId}
+                onChange={setAssignClienteId}
+                options={clienteOptions}
+                placeholder="Seleccionar cliente"
+                searchPlaceholder="Buscar cliente..."
+                emptyLabel="No se encontraron clientes."
+                ariaLabel="Seleccionar cliente para alquilar equipo"
+                onSearchChange={setClienteSearch}
+              />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setAssignEquipo(null);
+                  setAssignClienteId("");
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleAsignarCliente}
+                disabled={!assignClienteId}
+              >
+                <UserRound className="size-4" />
+                Crear alquiler
+              </Button>
+            </div>
+          </FieldGroup>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reactivate dialog ── */}
+      <Dialog
+        open={!!reactivarEquipo}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReactivarEquipo(null);
+            setReactivarAlmacenId("");
+          }
+        }}
+      >
+        <DialogContent className="w-full sm:max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Reactivar equipo dado de baja</DialogTitle>
+            <DialogDescription>
+              El equipo volverá a estar activo, disponible y sumará 1 unidad al
+              stock del almacén seleccionado.
+            </DialogDescription>
+          </DialogHeader>
+
+          <FieldGroup>
+            <Field>
+              <FieldLabel>Equipo</FieldLabel>
+              <div className="rounded-xl border border-border bg-muted/30 px-3.5 py-3 text-sm">
+                <p className="font-mono font-medium">
+                  {reactivarEquipo?.numeroSerie ?? "—"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {reactivarEquipo?.producto?.nombre ?? "Equipo propio"}
+                </p>
+              </div>
+            </Field>
+            <Field>
+              <FieldLabel>Almacén de reingreso</FieldLabel>
+              <SearchableSelect
+                value={reactivarAlmacenId}
+                onChange={setReactivarAlmacenId}
+                options={almacenOptions}
+                placeholder="Seleccionar almacén"
+                searchPlaceholder="Buscar almacén..."
+                emptyLabel="No se encontraron almacenes activos."
+                ariaLabel="Seleccionar almacén para reactivar equipo"
+                disabled={flujoMutation.isPending}
+              />
+            </Field>
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setReactivarEquipo(null);
+                  setReactivarAlmacenId("");
+                }}
+                disabled={flujoMutation.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleReactivarEquipo}
+                disabled={!reactivarAlmacenId || flujoMutation.isPending}
+              >
+                {flujoMutation.isPending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCcw className="size-4" />
+                )}
+                Reactivar equipo
+              </Button>
+            </div>
+          </FieldGroup>
         </DialogContent>
       </Dialog>
 

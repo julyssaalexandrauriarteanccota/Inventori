@@ -11,7 +11,6 @@ import {
   Package,
   PackageCheck,
   Plus,
-  RefreshCcw,
   ScanLine,
   ShoppingBag,
   Trash2,
@@ -27,12 +26,10 @@ import {
   type OrdenCompraFormPayload,
   type CompraDirectaFormPayload,
   type RecepcionCompraFormPayload,
-  type OcrInvoiceResult,
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import {
   useOrdenesCompra,
   useOrdenCompra,
@@ -45,14 +42,12 @@ import {
 } from "@/hooks/use-compras";
 import { useAlmacenes } from "@/hooks/use-inventario";
 import { useDebounce } from "@/hooks/use-debounce";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
-import { OcrInvoiceUpload } from "@/components/ocr-invoice-upload";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,8 +178,6 @@ export default function ComprasPage() {
   const [notas, setNotas] = useState("");
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
 
-  const [openOcr, setOpenOcr] = useState(false);
-  const [ocrResult, setOcrResult] = useState<OcrInvoiceResult | null>(null);
 
   const filters = useMemo(
     () => ({
@@ -218,12 +211,7 @@ export default function ComprasPage() {
     estado: EstadoOrdenCompra.RECIBIDA_TOTAL,
   });
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "compras",
-    toastLabel: "Compras",
-    manualToastMessage: "Lista actualizada",
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const createMutation = useCreateOrdenCompra();
   const createDirectaMutation = useCreateCompraDirecta();
@@ -646,77 +634,51 @@ export default function ComprasPage() {
   /* ── Render ──────────────────────────────────────── */
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
-      <PageHeader
-        title="Órdenes de compra"
-        description="Gestión de órdenes y recepciones"
-        hideTitleVisually
-        actions={
+    <div className="relative flex flex-col gap-6 w-full min-w-0 flex-1 min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/6 dark:bg-indigo-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-emerald-400/5 dark:bg-emerald-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        {canCreate ? (
           <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            {canCreate ? (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setOcrResult(null);
-                    setOpenOcr(true);
-                  }}
-                  className="rounded-xl"
-                >
-                  <ScanLine className="size-4" />
-                  <span className="hidden sm:inline">Escanear factura</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setOpenCreateDirecta(true)}
-                  className="rounded-xl"
-                >
-                  <Zap className="size-4" />
-                  <span className="hidden sm:inline">Compra rápida</span>
-                </Button>
-                <Button
-                  onClick={() => setOpenCreate(true)}
-                  className="erp-page-primary-cta rounded-xl"
-                >
-                  <Plus className="size-4" />
-                  <span className="hidden sm:inline">Nueva orden</span>
-                  <span className="sm:hidden">Nueva</span>
-                </Button>
-              </div>
-            ) : null}
+            <Button
+              variant="outline"
+              onClick={() => setOpenCreateDirecta(true)}
+              className="rounded-xl gap-2 h-9 hidden sm:flex"
+            >
+              <Zap className="size-4" />
+              Compra rápida
+            </Button>
+            <Button
+              onClick={() => setOpenCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nueva orden</span>
+              <span className="sm:hidden">Nueva</span>
+            </Button>
           </>
-        }
-      />
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Compras</h1>
 
       {/* ── Stats row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total órdenes"
           value={statsTotal?.meta?.total}
           icon={ShoppingBag}
-          index={0}
+          theme="sky"
+          subtitle="Historial total"
         />
         <StatCard
           label="Borradores"
           value={statsBorrador?.meta?.total}
           icon={ClipboardList}
-          color="bg-slate-100 text-slate-700 dark:bg-slate-900/30 dark:text-slate-400"
-          index={1}
+          theme="slate"
+          subtitle="Pendientes"
           onClick={() =>
             handleEstadoChange(
               estadoFilter === EstadoOrdenCompra.BORRADOR
@@ -730,8 +692,8 @@ export default function ComprasPage() {
           label="Aprobadas"
           value={statsAprobada?.meta?.total}
           icon={CheckCircle2}
-          color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-          index={2}
+          theme="indigo"
+          subtitle="Listas para enviar"
           onClick={() =>
             handleEstadoChange(
               estadoFilter === EstadoOrdenCompra.APROBADA
@@ -745,8 +707,8 @@ export default function ComprasPage() {
           label="Recibidas"
           value={statsRecibida?.meta?.total}
           icon={PackageCheck}
-          color="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-          index={3}
+          theme="emerald"
+          subtitle="Completas"
           onClick={() =>
             handleEstadoChange(
               estadoFilter === EstadoOrdenCompra.RECIBIDA_TOTAL
@@ -765,6 +727,8 @@ export default function ComprasPage() {
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por número, proveedor…"
+            className="sm:w-80 lg:w-96"
+            inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
@@ -1264,125 +1228,7 @@ export default function ComprasPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── OCR dialog ── */}
-      <Dialog open={openOcr} onOpenChange={setOpenOcr}>
-        <DialogContent className="w-full sm:max-w-xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet-100 dark:bg-violet-900/40">
-                <ScanLine className="size-4 text-violet-600 dark:text-violet-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-base sm:text-lg font-semibold">
-                  Escanear factura con IA
-                </DialogTitle>
-                <DialogDescription className="text-xs mt-0.5">
-                  Sube una foto o PDF. La IA extraerá los datos automáticamente.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
-            {!ocrResult ? (
-              <OcrInvoiceUpload onResult={(result) => setOcrResult(result)} />
-            ) : (
-              <div className="flex flex-col gap-4">
-                <div className="rounded-xl border bg-muted/30 p-4 flex flex-col gap-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-foreground">
-                      Datos extraídos
-                    </span>
-                    <Badge variant="secondary" className="text-xs">
-                      Confianza: {ocrResult.confianza}%
-                    </Badge>
-                  </div>
-                  {ocrResult.proveedorNombre && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-muted-foreground">Proveedor</span>
-                      <span className="font-medium">
-                        {ocrResult.proveedorNombre}
-                      </span>
-                    </div>
-                  )}
-                  {ocrResult.proveedorRuc && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-muted-foreground">RUC</span>
-                      <span className="font-medium">
-                        {ocrResult.proveedorRuc}
-                      </span>
-                    </div>
-                  )}
-                  {ocrResult.numeroFactura && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-muted-foreground">N° Factura</span>
-                      <span className="font-medium">
-                        {ocrResult.numeroFactura}
-                      </span>
-                    </div>
-                  )}
-                  {ocrResult.fechaEmision && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-muted-foreground">Fecha</span>
-                      <span className="font-medium">
-                        {ocrResult.fechaEmision}
-                      </span>
-                    </div>
-                  )}
-                  {ocrResult.total != null && (
-                    <div className="grid grid-cols-2 gap-1">
-                      <span className="text-muted-foreground">Total</span>
-                      <span className="font-medium">
-                        {ocrResult.moneda} {ocrResult.total.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                  {ocrResult.items && ocrResult.items.length > 0 && (
-                    <div className="flex flex-col gap-1.5">
-                      <span className="text-muted-foreground">
-                        Ítems ({ocrResult.items.length})
-                      </span>
-                      <div className="rounded-lg border divide-y text-xs">
-                        {ocrResult.items.map((item, i) => (
-                          <div
-                            key={i}
-                            className="flex items-center justify-between px-3 py-2 gap-2"
-                          >
-                            <span className="flex-1 truncate">
-                              {item.descripcion}
-                            </span>
-                            <span className="text-muted-foreground whitespace-nowrap">
-                              {item.cantidad} ×{" "}
-                              {item.precioUnitario?.toFixed(2)}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-                  <Button
-                    variant="outline"
-                    className="rounded-xl"
-                    onClick={() => setOcrResult(null)}
-                  >
-                    Escanear otra
-                  </Button>
-                  <Button
-                    className="rounded-xl"
-                    onClick={() => {
-                      setOpenOcr(false);
-                      setOpenCreate(true);
-                    }}
-                  >
-                    Crear orden con estos datos
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+
     </div>
   );
 }

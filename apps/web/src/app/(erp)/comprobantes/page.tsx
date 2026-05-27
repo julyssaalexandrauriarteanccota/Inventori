@@ -57,14 +57,20 @@ export default function ComprobantesHubPage() {
   );
 
   return (
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows */}
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/7 dark:bg-indigo-500/7 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/5 dark:bg-sky-500/5 blur-[130px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <h1 className="sr-only">Comprobantes</h1>
+
     <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
-      <TabsList className="grid w-full grid-cols-2 rounded-2xl lg:grid-cols-6">
-        <TabsTrigger value="por-emitir">Por emitir</TabsTrigger>
-        <TabsTrigger value="facturas">Facturas</TabsTrigger>
-        <TabsTrigger value="boletas">Boletas</TabsTrigger>
-        <TabsTrigger value="notas-credito">Notas de crédito</TabsTrigger>
-        <TabsTrigger value="notas-debito">Notas de débito</TabsTrigger>
-        <TabsTrigger value="bajas">Comunicaciones de baja</TabsTrigger>
+      <TabsList className="grid w-full grid-cols-2 rounded-xl border border-border/70 bg-muted/70 p-0.5 lg:grid-cols-6">
+        <TabsTrigger value="por-emitir" className="rounded-lg text-xs data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Por emitir</TabsTrigger>
+        <TabsTrigger value="facturas" className="rounded-lg text-xs data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Facturas</TabsTrigger>
+        <TabsTrigger value="boletas" className="rounded-lg text-xs data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Boletas</TabsTrigger>
+        <TabsTrigger value="notas-credito" className="rounded-lg text-xs data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Notas crédito</TabsTrigger>
+        <TabsTrigger value="notas-debito" className="rounded-lg text-xs data-[state=active]:bg-rose-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-rose-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Notas débito</TabsTrigger>
+        <TabsTrigger value="bajas" className="rounded-lg text-xs data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]">Com. baja</TabsTrigger>
       </TabsList>
 
       <TabsContent value="por-emitir" className="mt-4">
@@ -86,5 +92,6 @@ export default function ComprobantesHubPage() {
         <ComunicacionesBajaTable />
       </TabsContent>
     </Tabs>
+    </div>
   );
 }

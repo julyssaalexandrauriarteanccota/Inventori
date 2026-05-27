@@ -10,7 +10,6 @@ import {
   Eye,
   Package,
   Plus,
-  RefreshCcw,
   Warehouse,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,7 +29,6 @@ import {
   getTiposMovimientoLabelMap,
 } from "@/lib/tipos-movimiento";
 import { useAuth } from "@/hooks/use-auth";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
 import { useTiposMovimientoConfig } from "@/hooks/use-configuracion";
 import {
   useStock,
@@ -41,9 +39,8 @@ import {
   useResolverAlerta,
 } from "@/hooks/use-inventario";
 import { useDebounce } from "@/hooks/use-debounce";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
@@ -73,7 +70,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const INVENTARIO_REFRESH_TOAST_ID = "inventario-refresh";
+
 
 /* ── Helpers ───────────────────────────────────────── */
 
@@ -287,14 +284,7 @@ export default function InventarioPage() {
   const canResolveAlertas = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canCreate = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
 
-  /* ── Auto-refresh ── */
-  const autoRefresh = usePageAutoRefresh({
-    scope: "inventario",
-    toastLabel: "Inventario",
-    manualToastMessage: "Lista actualizada",
-    toastId: INVENTARIO_REFRESH_TOAST_ID,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   /* ── Filtros popover handlers ── */
   const handleApplyFiltros = useCallback(() => {
@@ -572,83 +562,58 @@ export default function InventarioPage() {
   }, [stockRes]);
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
-      <PageHeader
-        title="Inventario"
-        description="Stock, ajustes y transferencias"
-        hideTitleVisually
-        actions={
-          <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              contentClassName="w-44"
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            {canCreate ? (
-              <Button
-                onClick={() => setDialogOpen(true)}
-                className="erp-page-primary-cta rounded-xl"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Registrar movimiento</span>
-                <span className="sm:hidden">Nuevo</span>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+    <div className="relative flex flex-col gap-6 w-full min-w-0 flex-1 min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-amber-400/6 dark:bg-amber-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-400/5 dark:bg-violet-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        {canCreate ? (
+          <Button
+            onClick={() => setDialogOpen(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Registrar movimiento</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Inventario</h1>
 
-      {/* KPI Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Registros stock"
           value={totalStockRows}
           isLoading={stockLoading}
           icon={Package}
-          color="bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400"
-          subtitle="producto x almacén"
-          index={0}
+          theme="sky"
+          subtitle="producto × almacén"
         />
         <StatCard
           label="Stock bajo"
           value={stockBajoTotal}
           isLoading={stockLoading}
           icon={AlertTriangle}
-          color="bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400"
+          theme="amber"
           subtitle="bajo mínimo"
-          index={1}
         />
         <StatCard
           label="Alertas"
           value={alertasPendientes}
           isLoading={alertasLoading}
           icon={alertasPendientes > 0 ? AlertTriangle : CheckCircle2}
-          color={
-            alertasPendientes > 0
-              ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400"
-              : "bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400"
-          }
+          theme={alertasPendientes > 0 ? "red" : "emerald"}
           subtitle="pendientes"
-          index={2}
         />
         <StatCard
           label="Almacenes"
           value={almacenesActivos}
           icon={Warehouse}
-          color="bg-purple-500/10 text-purple-600 dark:bg-purple-500/15 dark:text-purple-300"
+          theme="violet"
           subtitle="activos"
-          index={3}
         />
       </div>
 

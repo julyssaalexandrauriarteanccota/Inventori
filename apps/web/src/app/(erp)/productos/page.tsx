@@ -32,7 +32,7 @@ import { RolUsuario, TipoProducto, type ProductoListItem } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useProductos,
   useDeleteProducto,
@@ -40,10 +40,9 @@ import {
   useMarcas,
 } from "@/hooks/use-productos";
 import { useDebounce } from "@/hooks/use-debounce";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ErpBadge, ErpStatusBadge } from "@/components/erp-badges";
@@ -146,6 +145,7 @@ type EtiquetaPreviewState = {
 export default function ProductosPage() {
   const router = useRouter();
   const { hasRole } = useAuth();
+  const isMobile = useIsMobile();
 
   const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canDelete = hasRole(RolUsuario.ADMIN);
@@ -255,12 +255,7 @@ export default function ProductosPage() {
     tipo: TipoProducto.EQUIPO,
   });
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "productos",
-    toastLabel: "Productos",
-    manualToastMessage: "Lista actualizada",
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const deleteMutation = useDeleteProducto();
 
@@ -730,43 +725,60 @@ export default function ProductosPage() {
     (marcaFilter !== "all" ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-3.5 w-full min-w-0 flex-1 min-h-0">
-      <PageHeader
-        title="Productos"
-        hideTitleVisually
-        actions={
-          <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            {canEdit ? (
-              <Button
-                onClick={() => router.push("/productos/nuevo")}
-                className="erp-page-primary-cta rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nuevo producto</span>
-                <span className="sm:hidden">Nuevo</span>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-400/6 dark:bg-violet-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-amber-400/5 dark:bg-amber-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        {canEdit ? (
+          <Button
+            onClick={() => router.push("/productos/nuevo")}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo producto</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Productos</h1>
 
-      {/* ── Toolbar & Filters Panel (Shodai-style on top, compact) ── */}
-      <div className="rounded-xl border border-border/60 bg-card p-3 shadow-xs">
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard
+          label="Total productos"
+          value={statsTotal?.meta?.total}
+          icon={Package}
+          theme="sky"
+          subtitle="En catálogo"
+        />
+        <StatCard
+          label="Activos"
+          value={statsActivo?.meta?.total}
+          icon={CheckCircle2}
+          theme="emerald"
+          subtitle="Disponibles"
+        />
+        <StatCard
+          label="Equipos"
+          value={statsEquipos?.meta?.total}
+          icon={Tag}
+          theme="indigo"
+          subtitle="Tipo equipo"
+        />
+        <StatCard
+          label="Repuestos"
+          value={statsRepuestos?.meta?.total}
+          icon={Package}
+          theme="amber"
+          subtitle="Tipo repuesto"
+        />
+      </div>
+
+      {/* ── Toolbar ── */}
+      <div className="flex flex-col gap-2.5">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-1 flex-wrap items-center gap-3 min-w-0">
             <ToolbarSearchInput
@@ -774,18 +786,18 @@ export default function ProductosPage() {
               onChange={handleSearchChange}
               placeholder="Buscar por SKU, nombre, modelo…"
               className="shrink sm:w-auto lg:w-auto flex-1 max-w-sm"
-              inputClassName="border-border/80 bg-muted/35 hover:bg-muted/55 w-full h-9 text-xs"
+              inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
             />
 
-            <Tabs value={tipoFilter} onValueChange={handleTipoChange} className="shrink-0">
-              <TabsList className="scrollbar-none h-9 gap-0.5 overflow-x-auto rounded-lg border border-border/80 bg-muted/35 p-0.5">
-                <TabsTrigger value="all" className="h-8 shrink-0 rounded-md px-3 text-xs">
+            <Tabs value={tipoFilter} onValueChange={handleTipoChange} className="w-full sm:w-auto min-w-0 shrink-0 sm:ml-2">
+              <TabsList className="scrollbar-none h-9 gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 w-full justify-start">
+                <TabsTrigger value="all" className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground">
                   Todos
                 </TabsTrigger>
                 {Object.values(TipoProducto)
                   .filter((tipo) => tipo !== TipoProducto.SERVICIO)
                   .map((tipo) => (
-                    <TabsTrigger key={tipo} value={tipo} className="h-8 shrink-0 rounded-md px-3 text-xs">
+                    <TabsTrigger key={tipo} value={tipo} className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground">
                       {TIPO_LABELS[tipo]}
                     </TabsTrigger>
                   ))}
@@ -838,35 +850,22 @@ export default function ProductosPage() {
               <Button
                 variant={selectionMode ? "secondary" : "outline"}
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg border-border/80 bg-muted/30 text-xs hover:bg-muted/50"
+                className="h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-lg border-border/80 bg-muted/30 text-xs hover:bg-muted/50 transition-all"
                 onClick={handleSelectionModeToggle}
               >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar" : "Seleccionar"}
+                <CheckCircle2 className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">
+                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                </span>
               </Button>
             )}
 
             {/* Advanced Filters Button */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+            <ToolbarFiltersButton
+              open={filterPopoverOpen}
+              activeCount={activeFilterCount}
               onClick={() => openFilterPopover(true)}
-              className={cn(
-                "h-9 gap-1.5 rounded-lg border-border/80 text-xs transition-colors",
-                activeFilterCount > 0
-                  ? "bg-primary/5 text-primary border-primary/30 font-medium"
-                  : "bg-muted/30 hover:bg-muted/50 text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <SlidersHorizontal className="size-3.5" />
-              Filtros
-              {activeFilterCount > 0 && (
-                <span className="inline-flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {activeFilterCount}
-                </span>
-              )}
-            </Button>
+            />
           </div>
         </div>
       </div>
@@ -889,7 +888,7 @@ export default function ProductosPage() {
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           enableRowSelection={canDelete && selectionMode}
           enableColumnVisibility
-          fillAvailableHeight={true}
+          fillAvailableHeight={!isMobile}
           columnVisibilityStorageKey="erp:productos:table-columns"
           bulkActionsBar={
             canDelete
@@ -938,7 +937,7 @@ export default function ProductosPage() {
         <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 flex-1">
           {isLoading ? (
             <div className="flex-1 overflow-y-auto pr-1">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+              <div className="grid grid-cols-1 min-[450px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                 {Array.from({ length: 10 }).map((_, i) => (
                   <div
                     key={i}
@@ -965,7 +964,7 @@ export default function ProductosPage() {
           ) : (
             <>
               <div className="flex-1 overflow-y-auto pr-1 min-h-0">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
+                <div className="grid grid-cols-1 min-[450px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-3.5">
                   {data.data.map((p, index) => {
                     const CardComponent = ProductoCard;
                     return (
@@ -1041,10 +1040,10 @@ export default function ProductosPage() {
                         size="sm"
                         onClick={() => setPage(page - 1)}
                         disabled={page <= 1}
-                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 sm:px-2.5"
                       >
                         <ChevronLeft className="size-3.5" />
-                        Anterior
+                        <span className="hidden sm:inline">Anterior</span>
                       </Button>
                       {(() => {
                         const totalPages = Math.ceil(data.meta.total / limit);
@@ -1094,9 +1093,9 @@ export default function ProductosPage() {
                         size="sm"
                         onClick={() => setPage(page + 1)}
                         disabled={page >= Math.ceil(data.meta.total / limit)}
-                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 sm:px-2.5"
                       >
-                        Siguiente
+                        <span className="hidden sm:inline">Siguiente</span>
                         <ChevronRight className="size-3.5" />
                       </Button>
                       <Button

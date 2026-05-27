@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Clock,
   Download,
   Eye,
@@ -11,7 +15,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RefreshCcw,
+  SlidersHorizontal,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -25,7 +29,8 @@ import {
 } from "@/lib/servicios-formatters";
 import { useAuth } from "@/hooks/use-auth";
 import { useDebounce } from "@/hooks/use-debounce";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   type ServicioListItem,
   useCategoriasServicio,
@@ -33,10 +38,9 @@ import {
   useServicios,
 } from "@/hooks/use-servicios";
 import { ErpBadge, ErpStatusBadge } from "@/components/erp-badges";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ServicioDetailModal } from "@/components/modals/servicio-detail-modal";
@@ -75,6 +79,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
 import {
   Popover,
   PopoverContent,
@@ -120,8 +132,13 @@ function buildServiciosCsvRows(servicios: ServicioListItem[]): string {
 }
 
 export default function ServiciosPage() {
+  const isMobile = useIsMobile();
   const { hasRole } = useAuth();
-  const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
+  const canEdit = hasRole(
+    RolUsuario.ADMIN,
+    RolUsuario.ENCARGADO,
+    RolUsuario.TECNICO,
+  );
   const canDelete = hasRole(RolUsuario.ADMIN);
 
   const [page, setPage] = useState(1);
@@ -250,12 +267,7 @@ export default function ServiciosPage() {
     [],
   );
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "servicios",
-    toastLabel: "Servicios",
-    manualToastMessage: "Lista actualizada",
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleView = useCallback((id: string) => {
     setViewingId(id);
@@ -440,57 +452,49 @@ export default function ServiciosPage() {
   const items = data?.data ?? [];
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5">
-      <PageHeader
-        title="Servicios"
-        description="Catálogo de servicios técnicos: mantenimientos, instalaciones, diagnósticos, recargas y más."
-        actions={
-          <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-              ]}
-            />
-            {canEdit ? (
-              <Button
-                type="button"
-                onClick={handleNew}
-                className="rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
-              >
-                <Plus className="size-4" />
-                Nuevo servicio
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-violet-400/8 dark:bg-violet-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/6 dark:bg-sky-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-amber-400/5 dark:bg-amber-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        {canEdit ? (
+          <Button
+            type="button"
+            onClick={handleNew}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo servicio</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Servicios</h1>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-up">
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-3 gap-4">
         <StatCard
           icon={Wrench}
           label="Total servicios"
-          value={statsTotal?.meta?.total ?? 0}
-          color="bg-[var(--semantic-warning-soft)] text-[var(--semantic-warning)]"
-          index={0}
+          value={statsTotal?.meta?.total}
+          theme="violet"
+          subtitle="En catálogo"
         />
         <StatCard
           icon={CheckCircle2}
           label="Activos"
-          value={statsActivos?.meta?.total ?? 0}
-          color="bg-[var(--semantic-success-soft)] text-[var(--semantic-success)]"
-          index={1}
+          value={statsActivos?.meta?.total}
+          theme="emerald"
+          subtitle="Disponibles"
         />
         <StatCard
-          icon={List}
-          label="En esta pagina"
-          value={items.length}
-          color="bg-[var(--semantic-info-soft)] text-[var(--semantic-info)]"
-          index={2}
+          icon={Clock}
+          label="Con duración est."
+          value={items.filter(s => s.tiempoEstimadoMin != null).length}
+          theme="sky"
+          subtitle="Tienen tiempo"
         />
       </div>
 
@@ -502,106 +506,30 @@ export default function ServiciosPage() {
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por nombre o SKU..."
-            inputClassName="border-border/80 bg-muted/55 hover:bg-muted/80"
+            className="sm:w-80 lg:w-96"
+            inputClassName="border-border bg-background hover:border-violet-400/60 dark:hover:border-violet-500/60 focus-visible:border-violet-500 dark:focus-visible:border-violet-400 focus-visible:ring-violet-400/25 dark:focus-visible:ring-violet-500/25 shadow-sm"
           />
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
-            {/* Popover de Filtros */}
-            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-              <PopoverTrigger asChild>
-                <ToolbarFiltersButton
-                  open={filterPopoverOpen}
-                  activeCount={activeFilterCount}
-                />
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-70 rounded-2xl border border-border/80 bg-background p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-              >
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="text-sm font-semibold">Filtros</p>
-                  <p className="text-xs text-muted-foreground">
-                    Refina la lista de servicios
-                  </p>
-                </div>
-                <div className="space-y-4 px-4 py-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Estado
-                    </p>
-                    <div className="grid gap-2">
-                      {[
-                        { value: "all", label: "Todos" },
-                        { value: "activos", label: "Activos" },
-                        { value: "inactivos", label: "Inactivos" },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={cn(
-                            "flex items-center gap-3 rounded-xl border px-3 py-2 text-left text-sm transition-all duration-200",
-                            draftEstadoFilter === option.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
-                              : "border-border/70 bg-card hover:bg-muted/50",
-                          )}
-                          onClick={() => setDraftEstadoFilter(option.value)}
-                        >
-                          <span
-                            className={cn(
-                              "flex size-4 items-center justify-center rounded-full border transition-colors",
-                              draftEstadoFilter === option.value
-                                ? "border-primary"
-                                : "border-muted-foreground/40",
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "size-2 rounded-full transition-colors",
-                                draftEstadoFilter === option.value
-                                  ? "bg-primary"
-                                  : "bg-transparent",
-                              )}
-                            />
-                          </span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-end gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-xl text-xs hover:bg-muted"
-                      onClick={clearFilters}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-xl text-xs"
-                      onClick={applyFilterPopover}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+            {/* Advanced Filters Button */}
+            <ToolbarFiltersButton
+              open={filterPopoverOpen}
+              activeCount={activeFilterCount}
+              onClick={() => openFilterPopover(true)}
+            />
 
             {/* Seleccionar */}
             {canDelete && (
               <Button
                 variant={selectionMode ? "secondary" : "outline"}
                 size="sm"
-                className="h-9 gap-1.5 rounded-xl border-border/80 bg-muted/45 text-xs hover:bg-muted/80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                className="h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl border-border/80 bg-muted/45 text-xs hover:bg-muted/80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
                 onClick={handleSelectionModeToggle}
               >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar" : "Seleccionar"}
+                <CheckCircle2 className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">
+                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                </span>
               </Button>
             )}
 
@@ -635,13 +563,13 @@ export default function ServiciosPage() {
         </div>
 
         {/* ── Pestañas de Categoría (Fila 2) ── */}
-        <div className="flex w-full items-center justify-end">
+        <div className="flex w-full items-center justify-start sm:justify-end">
           <Tabs
             value={categoriaFilter}
             onValueChange={handleCategoriaChange}
-            className="max-w-full"
+            className="w-full sm:w-auto min-w-0 max-w-full shrink-0"
           >
-            <TabsList className="scrollbar-none h-9 max-w-full gap-0.5 overflow-x-auto rounded-xl border border-border/80 bg-muted/65 p-0.5">
+            <TabsList className="scrollbar-none h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/80 bg-muted/65 p-0.5 flex gap-0.5 sm:w-auto">
               <TabsTrigger
                 value="all"
                 className="h-8 shrink-0 rounded-lg px-3.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
@@ -678,7 +606,7 @@ export default function ServiciosPage() {
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           enableRowSelection={canDelete && selectionMode}
           enableColumnVisibility
-          fillAvailableHeight
+          fillAvailableHeight={!isMobile}
           columnVisibilityStorageKey="erp:servicios:table-columns"
           emptyMessage="Sin servicios"
           emptyDescription="No hay servicios que coincidan con los filtros actuales."
@@ -718,7 +646,7 @@ export default function ServiciosPage() {
       ) : (
         <section className="flex w-full min-w-0 flex-col gap-4">
           {isLoading ? (
-            <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 min-[450px]:grid-cols-2 md:grid-cols-2 2xl:grid-cols-3">
               {Array.from({ length: 8 }).map((_, i) => (
                 <Skeleton key={i} className="h-56 rounded-2xl" />
               ))}
@@ -728,7 +656,7 @@ export default function ServiciosPage() {
               <p className="text-sm text-destructive">
                 Ocurrió un error al cargar los servicios.
               </p>
-              <Button variant="outline" onClick={handleManualRefresh}>
+              <Button variant="outline" onClick={() => void refetch()}>
                 Reintentar
               </Button>
             </div>
@@ -751,7 +679,7 @@ export default function ServiciosPage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+              <div className="grid gap-4 grid-cols-1 min-[450px]:grid-cols-2 md:grid-cols-2 2xl:grid-cols-3">
                 {items.map((servicio, idx) => (
                   <ServicioCard
                     key={servicio.id}
@@ -778,6 +706,128 @@ export default function ServiciosPage() {
                   />
                 ))}
               </div>
+
+              {/* Pagination and Limit Selector for Grid View */}
+              {(data?.meta?.total ?? 0) > 0 && (
+                <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between mt-6">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        Filas por página
+                      </span>
+                      <Select
+                        value={String(limit)}
+                        onValueChange={(value) => handleLimitChange(Number(value))}
+                      >
+                        <SelectTrigger className="h-8 min-w-[5.5rem] rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={String(option)}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {(page - 1) * limit + 1}–
+                      {Math.min(page * limit, data?.meta?.total ?? 0)} de {data?.meta?.total ?? 0}{" "}
+                      servicios
+                    </p>
+                  </div>
+
+                  {(data?.meta?.total ?? 0) > limit && (
+                    <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => setPage(1)}
+                        title="Primera página"
+                      >
+                        <ChevronsLeft className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => setPage(page - 1)}
+                      >
+                        <ChevronLeft className="size-3.5" />
+                        Anterior
+                      </Button>
+                      {(() => {
+                        const totalPages = Math.ceil((data?.meta?.total ?? 0) / limit);
+                        const pages: (number | "...")[] = [];
+                        if (totalPages <= 7) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          if (page > 3) pages.push("...");
+                          for (
+                            let i = Math.max(2, page - 1);
+                            i <= Math.min(totalPages - 1, page + 1);
+                            i++
+                          )
+                            pages.push(i);
+                          if (page < totalPages - 2) pages.push("...");
+                          pages.push(totalPages);
+                        }
+                        return pages.map((p, i) =>
+                          p === "..." ? (
+                            <span
+                              key={`ellipsis-${i}`}
+                              className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground select-none"
+                            >
+                              ...
+                            </span>
+                          ) : (
+                            <Button
+                              key={p}
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
+                                p === page
+                                  ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
+                                  : "bg-muted/55 hover:bg-muted/80",
+                              )}
+                              onClick={() => setPage(p as number)}
+                            >
+                              {p}
+                            </Button>
+                          ),
+                        );
+                      })()}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= (data?.meta?.total ?? 0)}
+                        onClick={() => setPage(page + 1)}
+                      >
+                        Siguiente
+                        <ChevronRight className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= (data?.meta?.total ?? 0)}
+                        onClick={() => setPage(Math.ceil((data?.meta?.total ?? 0) / limit))}
+                        title="Última página"
+                      >
+                        <ChevronsRight className="size-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {selectionMode && selectedCards.size > 0 && (
                 <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-border/80 bg-background/95 p-3 shadow-xl backdrop-blur-md animate-fade-in-up">
@@ -873,6 +923,72 @@ export default function ServiciosPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* ── Advanced Filters Sheet ── */}
+      <Sheet open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+        <SheetContent className="w-full sm:max-w-md flex flex-col h-full rounded-l-3xl border-l p-0 border-border/80 shadow-2xl">
+          <SheetHeader className="border-b px-5 py-4 text-left bg-muted/5">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="size-4 text-primary" />
+              <SheetTitle className="text-base font-bold text-foreground">Filtros avanzados</SheetTitle>
+            </div>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
+              Refina la lista de servicios.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            <div className="space-y-2.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Estado del Servicio
+              </label>
+              <div className="flex w-full gap-1 p-1 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/40">
+                {[
+                  { value: "all", label: "Todos" },
+                  { value: "activos", label: "Activos" },
+                  { value: "inactivos", label: "Inactivos" },
+                ].map((option) => {
+                  const isActive = draftEstadoFilter === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={cn(
+                        "flex flex-1 items-center justify-center rounded-lg py-1.5 px-3 text-xs font-semibold transition-all duration-300 relative select-none",
+                        isActive
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => setDraftEstadoFilter(option.value)}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <SheetFooter className="border-t px-5 py-4 bg-muted/10 gap-2 sm:justify-between flex flex-row">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-9 rounded-xl text-xs hover:bg-muted"
+              onClick={clearFilters}
+            >
+              Limpiar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 rounded-xl text-xs"
+              onClick={applyFilterPopover}
+            >
+              Aplicar filtros
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <ServicioFormModal
         open={modalOpen}

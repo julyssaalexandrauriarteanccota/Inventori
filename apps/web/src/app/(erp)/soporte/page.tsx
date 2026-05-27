@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -12,9 +13,11 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  RefreshCcw,
+  Ban,
   Trash2,
   X,
+  FileText,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -23,25 +26,25 @@ import {
   PrioridadTicket,
   TipoServicio,
   type TicketListItem,
-  type TicketFormPayload,
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useTickets,
   useDeleteTicket,
-  useCreateTicket,
-  useUpdateTicket,
+  useUpdateTicketStatus,
 } from "@/hooks/use-soporte";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
+import { useConfigEmpresa } from "@/hooks/use-configuracion";
+import { generateTicketSoporteBlobUrl } from "@/lib/ticket-soporte-pdf";
+import { api } from "@/lib/api";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { TicketStatusAction } from "@/components/soporte/ticket-status-action";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
-import { TicketDetalleModal } from "@/components/modals/ticket-detalle-modal";
 import { useDebounce } from "@/hooks/use-debounce";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +69,6 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -76,7 +78,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TicketForm } from "@/components/forms/ticket-form";
 
 /* ── Label maps ─────────────────────────────────────── */
 
@@ -111,9 +112,14 @@ function formatDate(iso: string) {
   });
 }
 
-function hasNuevoParam() {
-  if (typeof window === "undefined") return false;
-  return new URLSearchParams(window.location.search).get("nuevo") === "1";
+function formatClienteNombre(cliente: TicketListItem["cliente"]) {
+  if (!cliente) return "";
+  return (
+    cliente.razonSocial ||
+    [cliente.nombre, cliente.apellido].filter(Boolean).join(" ").trim() ||
+    cliente.nombre ||
+    ""
+  );
 }
 
 /* ── Constants ──────────────────────────────────────── */
@@ -121,12 +127,13 @@ function hasNuevoParam() {
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const SOPORTE_REFRESH_TOAST_ID = "soporte-refresh";
+
 
 /* ── Page ───────────────────────────────────────────── */
 
 export default function SoportePage() {
-  const { hasRole, user } = useAuth();
+  const isMobile = useIsMobile();
+  const { hasRole } = useAuth();
 
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
@@ -141,9 +148,37 @@ export default function SoportePage() {
   const [draftTipo, setDraftTipo] = useState<string>("all");
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [openCreate, setOpenCreate] = useState(() => hasNuevoParam());
-  const [editTicket, setEditTicket] = useState<TicketListItem | null>(null);
-  const [viewDetailId, setViewDetailId] = useState<string | null>(null);
+
+  const { data: empresaRes } = useConfigEmpresa();
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewTicket, setPreviewTicket] = useState<TicketListItem | null>(null);
+
+  const handleRowPdfPreview = useCallback(
+    async (ticketListItem: TicketListItem) => {
+      try {
+        setPdfLoadingId(ticketListItem.id);
+        const res = await api.get<{
+          data: any;
+          meta: { timestamp: string };
+        }>(`/soporte/tickets/${ticketListItem.id}`);
+        
+        const empresa = empresaRes?.data;
+        const blobUrl = await generateTicketSoporteBlobUrl(res.data, empresa);
+        setPreviewUrl(blobUrl);
+        setPreviewTicket(ticketListItem);
+      } catch (err) {
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "No se pudo generar la vista previa del PDF",
+        );
+      } finally {
+        setPdfLoadingId(null);
+      }
+    },
+    [empresaRes],
+  );
 
   const filters = useMemo(
     () => ({
@@ -179,53 +214,20 @@ export default function SoportePage() {
   });
 
   const deleteMutation = useDeleteTicket();
-  const createMutation = useCreateTicket();
-  const updateMutation = useUpdateTicket(editTicket?.id ?? "");
+  const statusMutation = useUpdateTicketStatus();
 
-  const canDelete = hasRole(RolUsuario.ADMIN);
+  const canDelete = hasRole(
+    RolUsuario.ADMIN,
+    RolUsuario.ENCARGADO,
+    RolUsuario.TECNICO,
+  );
   const canEdit = hasRole(
     RolUsuario.ADMIN,
     RolUsuario.ENCARGADO,
     RolUsuario.TECNICO,
   );
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "soporte",
-    toastLabel: "Tickets",
-    manualToastMessage: "Lista actualizada",
-    toastId: SOPORTE_REFRESH_TOAST_ID,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
 
-  const handleCreate = useCallback(
-    (payload: TicketFormPayload) => {
-      createMutation.mutate(payload, {
-        onSuccess: () => {
-          toast.success("Ticket creado correctamente");
-          setOpenCreate(false);
-        },
-        onError: (err: Error) => {
-          toast.error(err.message || "Error al crear el ticket");
-        },
-      });
-    },
-    [createMutation],
-  );
-
-  const handleUpdate = useCallback(
-    (payload: TicketFormPayload) => {
-      updateMutation.mutate(payload, {
-        onSuccess: () => {
-          toast.success("Ticket actualizado correctamente");
-          setEditTicket(null);
-        },
-        onError: (err: Error) => {
-          toast.error(err.message || "Error al actualizar el ticket");
-        },
-      });
-    },
-    [updateMutation],
-  );
 
   const handleDelete = useCallback(() => {
     if (!deleteId) return;
@@ -239,6 +241,20 @@ export default function SoportePage() {
       },
     });
   }, [deleteId, deleteMutation]);
+
+  const handleCancelTicket = useCallback(
+    (ticketId: string) => {
+      statusMutation.mutate(
+        { id: ticketId, estado: EstadoTicket.CANCELADO },
+        {
+          onSuccess: () => toast.success("Ticket cancelado correctamente"),
+          onError: (err: Error) =>
+            toast.error(err.message || "Error al cancelar el ticket"),
+        },
+      );
+    },
+    [statusMutation],
+  );
 
   const handleExportCSV = useCallback(() => {
     const rows = data?.data ?? [];
@@ -344,7 +360,7 @@ export default function SoportePage() {
         accessorKey: "cliente",
         header: "Cliente",
         cell: ({ row }) => {
-          const nombre = row.original.cliente?.nombre;
+          const nombre = formatClienteNombre(row.original.cliente);
           return (
             <span
               className="text-sm truncate max-w-40 block"
@@ -352,6 +368,37 @@ export default function SoportePage() {
             >
               {nombre ?? <span className="text-muted-foreground/50">—</span>}
             </span>
+          );
+        },
+      },
+      {
+        id: "equipo",
+        header: "Equipo",
+        cell: ({ row }) => {
+          const equipo = row.original.equipo;
+          const clienteEquipo = row.original.clienteEquipo;
+          const label = equipo
+            ? equipo.numeroSerie
+            : clienteEquipo
+              ? clienteEquipo.numeroSerie
+              : null;
+          const tipo = equipo ? "Entregado" : clienteEquipo ? "Externo" : null;
+
+          if (!label) {
+            return (
+              <span className="text-sm text-muted-foreground/50">—</span>
+            );
+          }
+
+          return (
+            <div className="flex max-w-44 flex-col gap-1">
+              <span className="truncate font-mono text-xs" title={label}>
+                {label}
+              </span>
+              <Badge variant="outline" className="w-fit text-[10px]">
+                {tipo}
+              </Badge>
+            </div>
           );
         },
       },
@@ -371,41 +418,12 @@ export default function SoportePage() {
         accessorKey: "estado",
         header: "Estado",
         cell: ({ row }) => {
-          const e = row.original.estado;
           return (
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
-              <span className="relative flex size-2 shrink-0">
-                {e === EstadoTicket.ABIERTO && (
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                )}
-                <span
-                  className={cn("relative inline-flex size-2 rounded-full", {
-                    "bg-blue-500": e === EstadoTicket.ABIERTO,
-                    "bg-yellow-500": e === EstadoTicket.EN_PROCESO,
-                    "bg-orange-500": e === EstadoTicket.EN_ESPERA,
-                    "bg-green-500": e === EstadoTicket.CERRADO,
-                    "bg-red-500": e === EstadoTicket.CANCELADO,
-                  })}
-                />
-              </span>
-              <Badge
-                variant="outline"
-                className={cn("whitespace-nowrap text-xs gap-1.5", {
-                  "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300":
-                    e === EstadoTicket.ABIERTO,
-                  "bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300":
-                    e === EstadoTicket.EN_PROCESO,
-                  "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300":
-                    e === EstadoTicket.EN_ESPERA,
-                  "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/40 dark:text-green-300":
-                    e === EstadoTicket.CERRADO,
-                  "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/40 dark:text-red-300":
-                    e === EstadoTicket.CANCELADO,
-                })}
-              >
-                {ESTADO_LABELS[e]}
-              </Badge>
-            </div>
+            <TicketStatusAction
+              ticketId={row.original.id}
+              estado={row.original.estado}
+              compact
+            />
           );
         },
       },
@@ -470,18 +488,42 @@ export default function SoportePage() {
         id: "acciones",
         header: "",
         enableHiding: false,
-        cell: ({ row }) => (
+        cell: ({ row }) => {
+          const canModifyRow =
+            row.original.estado !== EstadoTicket.CERRADO &&
+            row.original.estado !== EstadoTicket.CANCELADO;
+          const canRemoveRow = canDelete;
+          const hasRowActions = (canEdit && canModifyRow) || canRemoveRow;
+
+          return (
           <div className="flex items-center justify-end gap-1.5">
             <Button
+              asChild
               variant="outline"
               size="sm"
               className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
-              onClick={() => setViewDetailId(row.original.id)}
             >
-              <Eye className="size-3.5" />
-              Ver
+              <Link href={`/soporte/${row.original.id}`}>
+                <Eye className="size-3.5" />
+                Ver
+              </Link>
             </Button>
-            {(canEdit || canDelete) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
+              onClick={() => void handleRowPdfPreview(row.original)}
+              disabled={pdfLoadingId === row.original.id}
+              title="Vista previa PDF"
+            >
+              {pdfLoadingId === row.original.id ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <FileText className="size-3.5" />
+              )}
+              PDF
+            </Button>
+            {hasRowActions && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -495,14 +537,23 @@ export default function SoportePage() {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-40">
                   <DropdownMenuGroup>
-                    {canEdit && (
-                      <DropdownMenuItem
-                        onClick={() => setEditTicket(row.original)}
-                      >
-                        <Pencil className="size-4" /> Editar
+                    {canEdit && canModifyRow && (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/soporte/${row.original.id}/editar`}>
+                          <Pencil className="size-4" /> Editar
+                        </Link>
                       </DropdownMenuItem>
                     )}
-                    {canDelete && (
+                    {canEdit && canModifyRow && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={statusMutation.isPending}
+                          onClick={() => handleCancelTicket(row.original.id)}
+                        >
+                          <Ban className="size-4" /> Anular
+                        </DropdownMenuItem>
+                      )}
+                    {canRemoveRow && (
                       <DropdownMenuItem
                         variant="destructive"
                         onClick={() => setDeleteId(row.original.id)}
@@ -515,75 +566,67 @@ export default function SoportePage() {
               </DropdownMenu>
             )}
           </div>
-        ),
+          );
+        },
       },
     ],
-    [canDelete, canEdit],
+    [
+      canDelete,
+      canEdit,
+      handleCancelTicket,
+      statusMutation.isPending,
+      pdfLoadingId,
+      handleRowPdfPreview,
+    ],
   );
 
   return (
-    <div className="flex flex-col gap-5 w-full min-w-0 flex-1 min-h-0">
-      <PageHeader
-        title="Soporte"
-        description="Gestión de tickets de soporte técnico"
-        hideTitleVisually
-        actions={
-          <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            <PageActionsMenu
-              items={[
-                {
-                  label: "Actualizar lista",
-                  icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
-                },
-                {
-                  label: "Exportar CSV",
-                  icon: Download,
-                  onSelect: handleExportCSV,
-                },
-              ]}
-            />
-            <Button
-              onClick={() => setOpenCreate(true)}
-              className="erp-page-primary-cta rounded-xl"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Nuevo ticket</span>
-              <span className="sm:hidden">Nuevo</span>
-            </Button>
-          </>
-        }
-      />
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/8 dark:bg-indigo-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/6 dark:bg-sky-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-red-400/5 dark:bg-red-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+      <TopbarActions>
+        <RealtimeStatus />
+        <Button asChild className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150">
+          <Link href="/soporte/nuevo">
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo ticket</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Link>
+        </Button>
+      </TopbarActions>
+      <h1 className="sr-only">Soporte</h1>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
         <StatCard
           label="Total tickets"
           value={totalData?.meta?.total}
           icon={Headphones}
-          index={0}
+          theme="indigo"
+          subtitle="Histórico"
         />
         <StatCard
           label="Abiertos"
           value={abiertosData?.meta?.total}
           icon={MessageSquare}
-          color="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-          index={1}
+          theme="sky"
+          subtitle="Sin atender"
         />
         <StatCard
           label="En proceso"
           value={enProcesoData?.meta?.total}
           icon={Clock}
-          color="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-          index={2}
+          theme="amber"
+          subtitle="En atención"
         />
         <StatCard
           label="Críticos"
           value={criticosData?.meta?.total}
           icon={AlertTriangle}
-          color="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-          index={3}
+          theme="red"
+          subtitle="Alta prioridad"
         />
       </div>
 
@@ -594,48 +637,50 @@ export default function SoportePage() {
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por código, título, cliente…"
+            className="sm:w-72 lg:w-80"
+            inputClassName="border-border bg-background hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 dark:focus-visible:ring-indigo-500/25 shadow-sm"
           />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end w-full sm:w-auto">
             {/* Estado tabs */}
-            <Tabs value={estadoFilter} onValueChange={handleEstadoChange}>
-              <TabsList className="h-9 max-w-[calc(100vw-2rem)] gap-0.5 overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-0.5 flex-nowrap sm:max-w-none">
+            <Tabs value={estadoFilter} onValueChange={handleEstadoChange} className="w-full sm:w-auto min-w-0">
+              <TabsList className="scrollbar-none h-9 w-full justify-start gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 flex flex-nowrap sm:w-auto">
                 <TabsTrigger
                   value="all"
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   <Headphones className="size-3.5" />
                   <span className="hidden sm:inline">Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.ABIERTO}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   <MessageSquare className="size-3.5" />
                   <span className="hidden sm:inline">Abierto</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.EN_PROCESO}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   <Clock className="size-3.5" />
                   <span className="hidden sm:inline">En proceso</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.EN_ESPERA}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   <span className="hidden sm:inline">En espera</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.CERRADO}
-                  className="h-8 shrink-0 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   Cerrado
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.CANCELADO}
-                  className="h-8 shrink-0 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                 >
                   Cancelado
                 </TabsTrigger>
@@ -653,7 +698,7 @@ export default function SoportePage() {
               <PopoverContent
                 align="end"
                 sideOffset={10}
-                className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+                className="w-[calc(100vw-2rem)] sm:w-70 max-w-xs rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
               >
                 <div className="border-b border-border/60 px-4 py-3">
                   <p className="text-sm font-semibold">Filtros</p>
@@ -795,6 +840,7 @@ export default function SoportePage() {
         pageSizeOptions={PAGE_SIZE_OPTIONS}
         enableColumnVisibility
         columnVisibilityStorageKey="erp:soporte:table-columns"
+        fillAvailableHeight={!isMobile}
       />
 
       {/* AlertDialog: Eliminar */}
@@ -820,8 +866,9 @@ export default function SoportePage() {
                 ¿Eliminar ticket?
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Esta acción no se puede deshacer. El ticket será eliminado del
-                sistema.
+                Esta acción solo elimina el registro del ticket. No revierte
+                repuestos ni movimientos de stock; para revertir la operación
+                usa Anular.
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
@@ -840,83 +887,63 @@ export default function SoportePage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Dialog: Crear ticket */}
-      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-100 dark:bg-blue-900/40">
-                <Plus className="size-4 text-blue-600 dark:text-blue-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-base sm:text-lg font-semibold">
-                  Nuevo ticket
-                </DialogTitle>
-                <DialogDescription className="text-xs mt-0.5">
-                  Registra un nuevo caso de soporte técnico.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
-            <TicketForm
-              mode="create"
-              onSubmit={handleCreate}
-              isLoading={createMutation.isPending}
-              userRol={user?.rol}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog: Editar ticket */}
+      {/* Dialog: Vista previa PDF */}
       <Dialog
-        open={!!editTicket}
-        onOpenChange={(open) => !open && setEditTicket(null)}
+        open={!!previewUrl}
+        onOpenChange={(o) => {
+          if (!o) {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+            setPreviewTicket(null);
+          }
+        }}
       >
-        <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col">
-          <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
-                <Pencil className="size-4 text-orange-600 dark:text-orange-400" />
-              </div>
-              <div>
-                <DialogTitle className="text-base sm:text-lg font-semibold">
-                  Editar ticket
+        <DialogContent className="flex h-[90vh] w-full flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl rounded-2xl">
+          <DialogHeader className="shrink-0 border-b border-border/40 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between w-full">
+              <div className="min-w-0 text-left">
+                <DialogTitle className="text-base font-semibold sm:text-lg">
+                  Vista Previa - Orden de Servicio
                 </DialogTitle>
-                <DialogDescription className="text-xs mt-0.5">
-                  Modifica los datos del ticket de soporte.
-                </DialogDescription>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {previewTicket ? `${previewTicket.codigo} — ${formatClienteNombre(previewTicket.cliente)}` : ""}
+                </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-3 text-xs"
+                onClick={() => {
+                  if (previewUrl && previewTicket) {
+                    const a = document.createElement("a");
+                    a.href = previewUrl;
+                    a.download = `ticket-${previewTicket.codigo}.pdf`;
+                    a.click();
+                  }
+                }}
+              >
+                <Download className="size-3.5" />
+                Descargar
+              </Button>
             </div>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
-            {editTicket && (
-              <TicketForm
-                mode="edit"
-                onSubmit={handleUpdate}
-                isLoading={updateMutation.isPending}
-                defaultValues={{
-                  titulo: editTicket.titulo,
-                  prioridad: editTicket.prioridad,
-                  tipoServicio: editTicket.tipoServicio,
-                }}
-                userRol={user?.rol}
+          <div className="flex-1 bg-zinc-900 dark:bg-zinc-950 p-0 flex items-center justify-center">
+            {previewUrl ? (
+              <iframe
+                src={`${previewUrl}#view=FitH`}
+                className="w-full h-full border-0"
+                title="Vista previa del PDF de soporte"
               />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-zinc-400">
+                <Loader2 className="size-6 animate-spin" />
+                <span className="text-sm">Cargando visor...</span>
+              </div>
             )}
           </div>
         </DialogContent>
       </Dialog>
 
-      <TicketDetalleModal
-        id={viewDetailId}
-        onClose={() => setViewDetailId(null)}
-        onEdit={(t) => {
-          setViewDetailId(null);
-          setEditTicket(t as unknown as TicketListItem);
-        }}
-        canEdit={canEdit}
-      />
     </div>
   );
 }
