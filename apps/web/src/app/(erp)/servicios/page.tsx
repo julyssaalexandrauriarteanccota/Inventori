@@ -569,10 +569,10 @@ export default function ServiciosPage() {
             onValueChange={handleCategoriaChange}
             className="w-full sm:w-auto min-w-0 max-w-full shrink-0"
           >
-            <TabsList className="scrollbar-none h-9 w-full justify-start overflow-x-auto rounded-xl border border-border/80 bg-muted/65 p-0.5 flex gap-0.5 sm:w-auto">
+            <TabsList className="scrollbar-none h-9 w-full justify-start overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 flex gap-0.5 sm:w-auto">
               <TabsTrigger
                 value="all"
-                className="h-8 shrink-0 rounded-lg px-3.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+                className="h-8 shrink-0 rounded-md px-3.5 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
               >
                 Todas las categorias
               </TabsTrigger>
@@ -580,7 +580,7 @@ export default function ServiciosPage() {
                 <TabsTrigger
                   key={categoria.id}
                   value={categoria.id}
-                  className="h-8 shrink-0 rounded-lg px-3.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs"
+                  className="h-8 shrink-0 rounded-md px-3.5 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   {categoria.nombre}
                 </TabsTrigger>

@@ -619,17 +619,17 @@ export default function InventarioPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="stock" className="flex flex-col flex-1 min-h-0">
-        <TabsList className="flex h-10 w-full gap-0.5 bg-muted/60 p-1 rounded-xl border border-border/60 shrink-0">
+        <TabsList className="flex h-10 w-full gap-0.5 bg-muted/70 p-1 rounded-xl border border-border/70 shrink-0">
           <TabsTrigger
             value="stock"
-            className="flex-1 gap-1.5 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+            className="flex-1 gap-1.5 text-sm rounded-lg text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           >
             <Package className="size-4" />
             Stock
           </TabsTrigger>
           <TabsTrigger
             value="movimientos"
-            className="flex-1 gap-1.5 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+            className="flex-1 gap-1.5 text-sm rounded-lg text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           >
             <ArrowRightLeft className="size-4" />
             <span className="hidden sm:inline">Movimientos</span>
@@ -637,7 +637,7 @@ export default function InventarioPage() {
           </TabsTrigger>
           <TabsTrigger
             value="alertas"
-            className="flex-1 gap-1.5 text-sm data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-lg"
+            className="flex-1 gap-1.5 text-sm rounded-lg text-muted-foreground data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-red-500/30 dark:data-[state=active]:bg-red-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]"
           >
             <AlertTriangle className="size-4" />
             Alertas
@@ -666,10 +666,10 @@ export default function InventarioPage() {
               <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
                 {/* Almacén quick-filter tabs */}
                 <Tabs value={stockAlmacen} onValueChange={handleStockAlmacen}>
-                  <TabsList className="h-9 max-w-70 gap-0.5 overflow-x-auto rounded-lg border border-border/60 bg-muted/60 p-0.5 sm:max-w-none">
+                  <TabsList className="h-9 max-w-70 gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 sm:max-w-none">
                     <TabsTrigger
                       value="all"
-                      className="h-8 gap-1.5 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                      className="h-8 gap-1.5 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                     >
                       <Warehouse className="size-3.5" />
                       <span className="hidden sm:inline">Todos</span>
@@ -678,7 +678,7 @@ export default function InventarioPage() {
                       <TabsTrigger
                         key={a.id}
                         value={a.id}
-                        className="h-8 max-w-30 shrink-0 truncate rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                        className="h-8 max-w-30 shrink-0 truncate rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                       >
                         {a.nombre}
                       </TabsTrigger>
@@ -842,10 +842,10 @@ export default function InventarioPage() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               {/* Tipo quick-filter tabs */}
               <Tabs value={effectiveMovTipo} onValueChange={handleMovTipo}>
-                <TabsList className="h-9 gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60 overflow-x-auto max-w-[calc(100vw-2rem)] sm:max-w-none flex-nowrap">
+                <TabsList className="h-9 gap-0.5 bg-muted/70 p-0.5 rounded-lg border border-border/70 overflow-x-auto max-w-[calc(100vw-2rem)] sm:max-w-none flex-nowrap">
                   <TabsTrigger
                     value="all"
-                    className="h-8 gap-1.5 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                    className="h-8 gap-1.5 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                   >
                     Todos
                   </TabsTrigger>
@@ -853,7 +853,7 @@ export default function InventarioPage() {
                     <TabsTrigger
                       key={item.codigo}
                       value={item.codigo}
-                      className="h-8 px-2.5 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                      className="h-8 px-2.5 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
                     >
                       {item.nombre}
                     </TabsTrigger>

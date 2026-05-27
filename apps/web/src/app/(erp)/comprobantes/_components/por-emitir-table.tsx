@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, FilterX, Send } from "lucide-react";
+import { ArrowUpDown, FilterX, Search, Send } from "lucide-react";
 import {
   EstadoFacturacionVenta,
   EstadoVenta,
@@ -13,6 +13,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -215,32 +216,33 @@ export function PorEmitirTable() {
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 lg:grid-cols-[minmax(220px,1.5fr)_repeat(2,minmax(140px,0.8fr))_repeat(2,minmax(110px,0.65fr))_minmax(170px,1fr)_minmax(160px,1fr)_auto]">
-        <Input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Buscar por venta o cliente..."
-          className="rounded-lg"
-        />
-        <Input
-          type="date"
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Buscar por venta o cliente..."
+            className="pl-8 rounded-xl border-border bg-background shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 dark:focus-visible:ring-indigo-500/25 transition-colors"
+          />
+        </div>
+        <DatePicker
           value={fechaDesde}
-          onChange={(e) => {
-            setFechaDesde(e.target.value);
+          onChange={(value) => {
+            setFechaDesde(value ?? "");
             setPage(1);
           }}
-          className="rounded-lg"
+          placeholder="Desde"
         />
-        <Input
-          type="date"
+        <DatePicker
           value={fechaHasta}
-          onChange={(e) => {
-            setFechaHasta(e.target.value);
+          onChange={(value) => {
+            setFechaHasta(value ?? "");
             setPage(1);
           }}
-          className="rounded-lg"
+          placeholder="Hasta"
         />
         <Input
           value={totalMin}
@@ -250,7 +252,7 @@ export function PorEmitirTable() {
           }}
           inputMode="decimal"
           placeholder="Min."
-          className="rounded-lg"
+          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
         />
         <Input
           value={totalMax}
@@ -260,7 +262,7 @@ export function PorEmitirTable() {
           }}
           inputMode="decimal"
           placeholder="Max."
-          className="rounded-lg"
+          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
         />
         <Select
           value={estadoComercial ?? ALL_VALUE}
@@ -271,7 +273,7 @@ export function PorEmitirTable() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="rounded-lg">
+          <SelectTrigger className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-indigo-400/25 transition-colors">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
@@ -289,15 +291,15 @@ export function PorEmitirTable() {
             setPage(1);
           }}
           placeholder="Vendedor"
-          className="rounded-lg"
+          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
         />
         <Button
           type="button"
           variant="outline"
-          className="gap-1 rounded-lg"
+          className="gap-1.5 rounded-xl h-9 border-border/70 hover:border-red-400/60 dark:hover:border-red-500/60 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95"
           onClick={clearFilters}
         >
-          <FilterX className="size-4" />
+          <FilterX className="size-3.5" />
           Limpiar
         </Button>
       </div>

@@ -7,12 +7,13 @@
  *
  * Diferencia con /ventas:
  *   - /ventas              → vista global de ventas en cualquier estado.
- *   - /ventas/cotizaciones → solo cotizaciones, foco en convertir o cancelar.
+ *   - /ventas/cotizaciones → solo propuestas comerciales para PDF/cliente.
  *   - /pos                 → POS de mostrador (catálogo + cobro).
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   ArrowLeft,
@@ -24,13 +25,11 @@ import {
   Plus,
   RefreshCcw,
   Trash2,
-  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   RolUsuario,
   EstadoVenta,
-  type ConfirmarVentaPayload,
   type VentaFormPayload,
   type VentaListItem,
 } from "@erp/shared";
@@ -41,34 +40,19 @@ import {
   useVentas,
   useVenta,
   useCreateVenta,
-  useConfirmarVenta,
-  useCancelarVenta,
   useDeleteVenta,
 } from "@/hooks/use-ventas";
-import { useAlmacenes } from "@/hooks/use-inventario";
-import {
-  useConfigEmpresa,
-  useMetodosPago,
-} from "@/hooks/use-configuracion";
-import { downloadCotizacionPdf } from "@/lib/cotizacion-pdf";
+import { useConfigEmpresa } from "@/hooks/use-configuracion";
+import { downloadCotizacionPdf, generateCotizacionPdfBlobUrl } from "@/lib/cotizacion-pdf";
 import type { CotizacionPdfData } from "@/components/pdf/cotizacion-pdf";
-import { api } from "@/lib/api";
+import { api, getApiAssetUrl } from "@/lib/api";
 
-import { PageHeader } from "@/components/layout/page-header";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { StatCard } from "@/components/layout/stat-card";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -134,12 +118,36 @@ type VentaDetalle = VentaListItem & {
       garantiaMaxCopias?: number | null;
       marca?: { nombre: string } | null;
       modeloCatalogo?: { nombre: string } | null;
+      atributos?: any | null;
     } | null;
   }>;
 };
 
-function formatCurrency(amount: number) {
-  return `S/ ${amount.toFixed(2)}`;
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return "";
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseAtributos(atributos: any): Array<{ clave: string; valor: string }> {
+  if (!atributos) return [];
+  if (Array.isArray(atributos)) return atributos;
+  if (typeof atributos === "string") {
+    try {
+      const parsed = JSON.parse(atributos);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function formatCurrency(amount: any) {
+  const num = typeof amount === "number" ? amount : Number(amount ?? 0);
+  return `S/ ${num.toFixed(2)}`;
 }
 
 function formatDate(value?: string | null) {
@@ -159,15 +167,25 @@ function getClienteNombre(c: VentaListItem["cliente"]) {
   return parts.length > 0 ? parts.join(" ") : "—";
 }
 
+function getCotizacionNumero(numero?: string | null) {
+  if (!numero) return "COT";
+  return numero.replace(/^VTA-/i, "COT-");
+}
+
+function getCotizacionSearch(search: string) {
+  const trimmed = search.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/^COT-/i, "VTA-");
+}
+
 export default function CotizacionesPage() {
+  const searchParams = useSearchParams();
   const { hasRole } = useAuth();
   const canCreate = hasRole(
     RolUsuario.ADMIN,
     RolUsuario.ENCARGADO,
     RolUsuario.TECNICO,
   );
-  const canConfirm = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
-  const canCancel = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canDelete = hasRole(RolUsuario.ADMIN);
 
   const [page, setPage] = useState(1);
@@ -177,21 +195,17 @@ export default function CotizacionesPage() {
 
   const [openCreate, setOpenCreate] = useState(false);
   const [viewId, setViewId] = useState<string | null>(null);
-  const [confirmCotizacion, setConfirmCotizacion] =
-    useState<VentaListItem | null>(null);
-  const [cancelId, setCancelId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const [metodoPagoId, setMetodoPagoId] = useState("");
-  const [almacenId, setAlmacenId] = useState("");
-  const [referenciaPago, setReferenciaPago] = useState("");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewVenta, setPreviewVenta] = useState<VentaListItem | null>(null);
 
   const filters = useMemo(
     () => ({
       page,
       limit,
       estado: EstadoVenta.COTIZACION,
-      search: debouncedSearch || undefined,
+      search: getCotizacionSearch(debouncedSearch),
     }),
     [page, limit, debouncedSearch],
   );
@@ -203,25 +217,35 @@ export default function CotizacionesPage() {
     isError: isDetailError,
     refetch: refetchDetail,
   } = useVenta(viewId ?? undefined);
-  const { data: almacenesRes } = useAlmacenes();
-  const { data: metodosRes } = useMetodosPago();
   const { data: empresaRes } = useConfigEmpresa();
   const detail = detailRes?.data as VentaDetalle | undefined;
 
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
+  const prefillCotizacion = useMemo<Partial<VentaFormPayload> | undefined>(() => {
+    const productoId = searchParams.get("productoId");
+    if (!productoId) return undefined;
 
-  const generatePdf = useCallback(
-    async (venta: VentaDetalle) => {
-      const empresa = empresaRes?.data;
-      if (!empresa) {
-        toast.error("No hay configuración de empresa cargada todavía.");
-        return;
-      }
-      const igvPercent = empresa.porcentajeIGV
-        ? Number(empresa.porcentajeIGV)
-        : 18;
-      const pdfData: CotizacionPdfData = {
-        numero: venta.numero,
+    return {
+      detalles: [
+        {
+          productoId: productoId ?? "",
+          cantidad: 1,
+          precioUnitario: 0,
+        },
+      ],
+    };
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (prefillCotizacion && canCreate) {
+      setOpenCreate(true);
+    }
+  }, [canCreate, prefillCotizacion]);
+
+  const getPdfData = useCallback(
+    (venta: VentaDetalle): CotizacionPdfData => {
+      return {
+        numero: getCotizacionNumero(venta.numero),
         createdAt: venta.createdAt ?? null,
         validoHasta: venta.validoHasta ?? null,
         notas: venta.notas ?? null,
@@ -247,12 +271,11 @@ export default function CotizacionesPage() {
           producto: d.producto ?? null,
         })),
       };
-      await downloadCotizacionPdf(pdfData, empresa, igvPercent);
     },
-    [empresaRes],
+    [],
   );
 
-  const handleRowPdf = useCallback(
+  const handleRowPdfPreview = useCallback(
     async (venta: VentaListItem) => {
       try {
         setPdfLoadingId(venta.id);
@@ -260,44 +283,60 @@ export default function CotizacionesPage() {
           data: VentaDetalle;
           meta: { timestamp: string };
         }>(`/ventas/${venta.id}`);
-        await generatePdf(res.data);
+
+        const empresa = empresaRes?.data;
+        if (!empresa) {
+          toast.error("No hay configuración de empresa cargada todavía.");
+          return;
+        }
+        const igvPercent = empresa.porcentajeIGV
+          ? Number(empresa.porcentajeIGV)
+          : 18;
+
+        const pdfData = getPdfData(res.data);
+        const blobUrl = await generateCotizacionPdfBlobUrl(pdfData, empresa, igvPercent);
+
+        setPreviewUrl(blobUrl);
+        setPreviewVenta(venta);
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "No se pudo generar el PDF",
+          err instanceof Error ? err.message : "No se pudo generar la vista previa del PDF",
         );
       } finally {
         setPdfLoadingId(null);
       }
     },
-    [generatePdf],
+    [empresaRes, getPdfData],
   );
 
-  const handleDetailPdf = useCallback(async () => {
+  const handleDetailPdfPreview = useCallback(async () => {
     if (!detail) return;
     try {
       setPdfLoadingId(detail.id);
-      await generatePdf(detail);
+      const empresa = empresaRes?.data;
+      if (!empresa) {
+        toast.error("No hay configuración de empresa cargada todavía.");
+        return;
+      }
+      const igvPercent = empresa.porcentajeIGV
+        ? Number(empresa.porcentajeIGV)
+        : 18;
+
+      const pdfData = getPdfData(detail);
+      const blobUrl = await generateCotizacionPdfBlobUrl(pdfData, empresa, igvPercent);
+
+      setPreviewUrl(blobUrl);
+      setPreviewVenta(detail);
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "No se pudo generar el PDF",
+        err instanceof Error ? err.message : "No se pudo generar la vista previa del PDF",
       );
     } finally {
       setPdfLoadingId(null);
     }
-  }, [detail, generatePdf]);
-
-  const almacenesActivos = useMemo(
-    () => (almacenesRes?.data ?? []).filter((almacen) => almacen.activo),
-    [almacenesRes],
-  );
-  const metodosActivos = useMemo(
-    () => (metodosRes?.data ?? []).filter((metodo) => metodo.activo),
-    [metodosRes],
-  );
+  }, [detail, empresaRes, getPdfData]);
 
   const createMutation = useCreateVenta();
-  const confirmMutation = useConfirmarVenta(confirmCotizacion?.id ?? "");
-  const cancelMutation = useCancelarVenta();
   const deleteMutation = useDeleteVenta();
 
   const handleCreate = useCallback(
@@ -313,58 +352,6 @@ export default function CotizacionesPage() {
     },
     [createMutation],
   );
-
-  const openConfirm = useCallback((venta: VentaListItem) => {
-    setConfirmCotizacion(venta);
-    setMetodoPagoId("");
-    setAlmacenId("");
-    setReferenciaPago("");
-  }, []);
-
-  const closeConfirm = useCallback(() => {
-    setConfirmCotizacion(null);
-    setMetodoPagoId("");
-    setAlmacenId("");
-    setReferenciaPago("");
-  }, []);
-
-  const handleConvert = useCallback(() => {
-    if (!confirmCotizacion || !metodoPagoId || !almacenId) return;
-    const payload: ConfirmarVentaPayload = {
-      metodoPagoId,
-      almacenId,
-      referenciaPago: referenciaPago || undefined,
-    };
-    confirmMutation.mutate(payload, {
-      onSuccess: () => {
-        toast.success("Cotización convertida en venta confirmada");
-        closeConfirm();
-      },
-      onError: (err: Error) => toast.error(err.message || "Error al confirmar"),
-    });
-  }, [
-    confirmCotizacion,
-    metodoPagoId,
-    almacenId,
-    referenciaPago,
-    confirmMutation,
-    closeConfirm,
-  ]);
-
-  const handleCancel = useCallback(() => {
-    if (!cancelId) return;
-    cancelMutation.mutate(
-      { id: cancelId },
-      {
-        onSuccess: () => {
-          toast.success("Cotización cancelada");
-          setCancelId(null);
-        },
-        onError: (err: Error) =>
-          toast.error(err.message || "Error al cancelar"),
-      },
-    );
-  }, [cancelId, cancelMutation]);
 
   const handleDelete = useCallback(() => {
     if (!deleteId) return;
@@ -384,7 +371,7 @@ export default function CotizacionesPage() {
         header: "N.°",
         cell: ({ row }) => (
           <span className="font-mono text-sm font-medium whitespace-nowrap">
-            {row.original.numero}
+            {getCotizacionNumero(row.original.numero)}
           </span>
         ),
       },
@@ -441,37 +428,17 @@ export default function CotizacionesPage() {
               variant="outline"
               size="sm"
               className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
-              onClick={() => void handleRowPdf(row.original)}
+              onClick={() => void handleRowPdfPreview(row.original)}
               disabled={pdfLoadingId === row.original.id}
-              title="Descargar PDF"
+              title="Vista previa PDF"
             >
               {pdfLoadingId === row.original.id ? (
                 <Loader2 className="size-3.5 animate-spin" />
               ) : (
-                <Download className="size-3.5" />
+                <Eye className="size-3.5" />
               )}
               <span className="hidden lg:inline">PDF</span>
             </Button>
-            {canConfirm && (
-              <Button
-                size="sm"
-                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
-                onClick={() => openConfirm(row.original)}
-              >
-                <CheckCircle2 className="size-3.5" /> Convertir
-              </Button>
-            )}
-            {canCancel && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-1.5 rounded-lg px-2 text-xs text-destructive hover:bg-destructive/10"
-                onClick={() => setCancelId(row.original.id)}
-                title="Cancelar cotización"
-              >
-                <XCircle className="size-3.5" />
-              </Button>
-            )}
             {canDelete && (
               <Button
                 variant="ghost"
@@ -487,50 +454,56 @@ export default function CotizacionesPage() {
         ),
       },
     ],
-    [canConfirm, canCancel, canDelete, openConfirm, handleRowPdf, pdfLoadingId],
+    [
+      canDelete,
+      handleRowPdfPreview,
+      pdfLoadingId,
+    ],
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-5">
-      <PageHeader
-        title="Cotizaciones"
-        description="Propuestas comerciales pendientes — conviértelas en venta confirmada cuando el cliente acepte."
-        actions={
-          <>
-            <Button variant="outline" asChild className="rounded-xl">
-              <Link href="/ventas">
-                <ArrowLeft className="size-4" /> Ventas
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => void refetch()}
-              className="rounded-xl"
-            >
-              <RefreshCcw className="size-4" />
-              <span className="hidden sm:inline">Actualizar</span>
-            </Button>
-            {canCreate ? (
-              <Button
-                onClick={() => setOpenCreate(true)}
-                className="erp-page-primary-cta rounded-xl"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nueva cotización</span>
-                <span className="sm:hidden">Nueva</span>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-6">
+      {/* Decorative backing glows */}
+      <div className="pointer-events-none absolute -z-10 bg-amber-400/8 dark:bg-amber-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-emerald-400/6 dark:bg-emerald-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/5 dark:bg-sky-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <TopbarActions>
+        <Button variant="outline" asChild size="sm" className="gap-1.5 rounded-xl h-9">
+          <Link href="/ventas">
+            <ArrowLeft className="size-4" /> Ventas
+          </Link>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void refetch()}
+          className="gap-1.5 rounded-xl h-9"
+        >
+          <RefreshCcw className="size-4" />
+          <span className="hidden sm:inline">Actualizar</span>
+        </Button>
+        {canCreate ? (
+          <Button
+            size="sm"
+            onClick={() => setOpenCreate(true)}
+            className="erp-page-primary-cta gap-2 rounded-xl h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nueva cotización</span>
+            <span className="sm:hidden">Nueva</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      <h1 className="sr-only">Cotizaciones</h1>
+
+      <div className="grid gap-4 grid-cols-1 min-[400px]:grid-cols-2 lg:grid-cols-3">
         <StatCard
           label="Cotizaciones activas"
           value={data?.meta?.total ?? 0}
           icon={FileText}
-          color="bg-[oklch(0.96_0.02_75)] text-[oklch(0.38_0.08_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)]"
-          subtitle="En estado cotización"
+          theme="amber"
+          subtitle="Activas para PDF/cliente"
           isLoading={isLoading}
           index={0}
         />
@@ -540,7 +513,7 @@ export default function CotizacionesPage() {
             .reduce((acc, v) => acc + Number(v.total ?? 0), 0)
             .toFixed(2)}`}
           icon={CheckCircle2}
-          color="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400"
+          theme="emerald"
           subtitle="Suma de la página actual"
           isLoading={isLoading}
           index={1}
@@ -549,22 +522,26 @@ export default function CotizacionesPage() {
           label="Items por página"
           value={data?.data?.length ?? 0}
           icon={Eye}
-          color="bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-400"
+          theme="sky"
           subtitle={`Página ${page} · ${limit}/pág`}
           isLoading={isLoading}
           index={2}
         />
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <ToolbarSearchInput
-          value={search}
-          onChange={(value) => {
-            setSearch(value);
-            setPage(1);
-          }}
-          placeholder="Buscar por número o cliente…"
-        />
+      <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <ToolbarSearchInput
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            placeholder="Buscar por número o cliente…"
+            className="sm:w-80 lg:w-96"
+            inputClassName="border-border bg-background hover:border-amber-400/60 dark:hover:border-amber-500/60 focus-visible:border-amber-500 dark:focus-visible:border-amber-400 focus-visible:ring-amber-400/25 dark:focus-visible:ring-amber-500/25 shadow-sm"
+          />
+        </div>
       </div>
 
       {isError ? (
@@ -602,17 +579,22 @@ export default function CotizacionesPage() {
                   Nueva cotización
                 </DialogTitle>
                 <DialogDescription className="mt-0.5 text-xs">
-                  Registra una propuesta comercial para convertirla en venta
-                  cuando el cliente acepte.
+                  Registra una propuesta comercial para entregar al cliente.
                 </DialogDescription>
               </div>
             </div>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5">
             <VentaForm
+              key={
+                prefillCotizacion?.detalles?.[0]?.productoId ??
+                "nueva-cotizacion"
+              }
               mode="create"
+              defaultValues={prefillCotizacion}
               onSubmit={handleCreate}
               isLoading={createMutation.isPending}
+              soloEquipos
             />
           </div>
         </DialogContent>
@@ -636,7 +618,7 @@ export default function CotizacionesPage() {
                 </DialogTitle>
                 <DialogDescription className="mt-0.5 text-xs">
                   {detail
-                    ? `${detail.numero} — ${getClienteNombre(detail.cliente)}`
+                    ? `${getCotizacionNumero(detail.numero)} — ${getClienteNombre(detail.cliente)}`
                     : "Consulta el resumen completo de la cotización."}
                 </DialogDescription>
               </div>
@@ -706,40 +688,91 @@ export default function CotizacionesPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/60">
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="font-medium">Items cotizados</p>
-                </div>
-                <div className="divide-y divide-border/60">
-                  {detail.detalles.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex flex-col gap-2 px-4 py-3 md:flex-row md:items-start md:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-medium">
+              {(() => {
+                const item = detail.detalles[0];
+                if (!item) return null;
+                const attrs = parseAtributos(item.producto?.atributos);
+                
+                return (
+                  <div className="space-y-5">
+                    {/* Main Card */}
+                    <div className="flex flex-col gap-4 rounded-xl border border-border/50 bg-card p-4 sm:flex-row sm:items-center sm:gap-6">
+                      {item.producto?.imagen && (
+                        <div className="flex size-24 shrink-0 items-center justify-center rounded-xl border border-border bg-background p-1.5 self-center">
+                          <img
+                            src={getApiAssetUrl(item.producto.imagen)}
+                            alt={item.producto.nombre}
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1 text-center sm:text-left">
+                        <h4 className="text-base font-bold text-foreground">
                           {item.producto?.nombre || "Producto sin nombre"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.producto?.sku || "Sin SKU"}
-                          {item.equipoSerie
-                            ? ` · Serie ${item.equipoSerie}`
-                            : ""}
-                        </p>
-                      </div>
-                      <div className="text-sm md:text-right">
-                        <p>
-                          {item.cantidad} x{" "}
-                          {formatCurrency(item.precioUnitario)}
-                        </p>
-                        <p className="font-medium tabular-nums">
-                          {formatCurrency(item.subtotal)}
+                        </h4>
+                        <div className="mt-2 flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                          {item.producto?.sku && (
+                            <Badge variant="outline" className="text-[10px]">
+                              SKU: {item.producto.sku}
+                            </Badge>
+                          )}
+                          {item.producto?.marca?.nombre && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Marca: {item.producto.marca.nombre}
+                            </Badge>
+                          )}
+                          {item.producto?.modeloCatalogo?.nombre && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Modelo: {item.producto.modeloCatalogo.nombre}
+                            </Badge>
+                          )}
+                          {item.equipoSerie && (
+                            <Badge variant="outline" className="text-[10px] bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800">
+                              Serie: {item.equipoSerie}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="mt-3 text-sm font-semibold text-primary">
+                          Precio Unitario: {formatCurrency(item.precioUnitario)}
                         </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </div>
+
+                    {/* Descripción Comercial */}
+                    {item.producto?.descripcion && (
+                      <div className="rounded-xl border border-border/60 bg-background p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-2">
+                          Descripción Comercial
+                        </p>
+                        <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-wrap">
+                          {stripHtml(item.producto.descripcion)}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Ficha Técnica / Atributos */}
+                    {attrs.length > 0 && (
+                      <div className="rounded-xl border border-border/60 bg-background p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-primary mb-3">
+                          Ficha Técnica
+                        </p>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {attrs.map((attr, aIdx) => (
+                            <div key={aIdx} className="space-y-1">
+                              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">
+                                {attr.clave}
+                              </p>
+                              <div className="rounded-lg border border-border/80 bg-muted/20 px-3 py-2 text-sm font-medium text-foreground">
+                                {attr.valor}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-start">
                 <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
@@ -784,139 +817,21 @@ export default function CotizacionesPage() {
                 Cerrar
               </Button>
               <Button
-                onClick={() => void handleDetailPdf()}
+                onClick={() => void handleDetailPdfPreview()}
                 disabled={pdfLoadingId === detail.id}
                 className="erp-page-primary-cta rounded-xl"
               >
                 {pdfLoadingId === detail.id ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <Download className="size-4" />
+                  <Eye className="size-4" />
                 )}
-                Descargar PDF
+                Vista Previa PDF
               </Button>
             </div>
           ) : null}
         </DialogContent>
       </Dialog>
-
-      <Dialog
-        open={!!confirmCotizacion}
-        onOpenChange={(open) => {
-          if (!open) closeConfirm();
-        }}
-      >
-        <DialogContent className="w-full overflow-hidden p-0 sm:max-w-md">
-          <DialogHeader className="border-b border-border/40 px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-green-100 dark:bg-green-900/40">
-                <CheckCircle2 className="size-4 text-green-700 dark:text-green-400" />
-              </div>
-              <div className="min-w-0 text-left">
-                <DialogTitle className="text-base font-semibold">
-                  Convertir a venta confirmada
-                </DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs">
-                  {confirmCotizacion
-                    ? `${confirmCotizacion.numero} — ${formatCurrency(confirmCotizacion.total)}`
-                    : "Selecciona los datos de entrega y pago."}
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 px-5 py-4">
-            <div className="grid gap-1.5">
-              <Label>Almacén *</Label>
-              <Select value={almacenId} onValueChange={setAlmacenId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar almacén" />
-                </SelectTrigger>
-                <SelectContent>
-                  {almacenesActivos.map((almacen) => (
-                    <SelectItem key={almacen.id} value={almacen.id}>
-                      {almacen.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Método de pago *</Label>
-              <Select value={metodoPagoId} onValueChange={setMetodoPagoId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar método" />
-                </SelectTrigger>
-                <SelectContent>
-                  {metodosActivos.map((metodo) => (
-                    <SelectItem key={metodo.id} value={metodo.id}>
-                      {metodo.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-1.5">
-              <Label>Referencia de pago</Label>
-              <Input
-                value={referenciaPago}
-                onChange={(e) => setReferenciaPago(e.target.value)}
-                placeholder="N.° operación (opcional)"
-              />
-            </div>
-            <div className="flex flex-col-reverse gap-2 border-t border-border/60 pt-4 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={closeConfirm} className="rounded-xl">
-                Cancelar
-              </Button>
-              <Button
-                onClick={handleConvert}
-                disabled={
-                  !metodoPagoId || !almacenId || confirmMutation.isPending
-                }
-                className="rounded-xl"
-              >
-                {confirmMutation.isPending ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="size-4" />
-                )}
-                Confirmar venta
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={!!cancelId}
-        onOpenChange={(open) => {
-          if (!open) setCancelId(null);
-        }}
-      >
-        <AlertDialogContent className="w-full rounded-2xl p-6 sm:max-w-md">
-          <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0 text-left">
-            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-[oklch(0.96_0.02_75)] dark:bg-[oklch(0.16_0.03_75)]">
-              <XCircle className="size-5 text-[oklch(0.40_0.08_75)] dark:text-[oklch(0.78_0.08_75)]" />
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <AlertDialogTitle className="text-xl">
-                ¿Cancelar cotización?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                Quedará marcada como cancelada y ya no podrá convertirse.
-              </AlertDialogDescription>
-            </div>
-          </AlertDialogHeader>
-          <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end">
-            <AlertDialogCancel className="mt-0 rounded-xl">Volver</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleCancel}
-              className="rounded-xl bg-[oklch(0.60_0.14_75)] text-white hover:bg-[oklch(0.52_0.12_75)] dark:bg-[oklch(0.72_0.14_75)] dark:text-black dark:hover:bg-[oklch(0.65_0.12_75)] transition-all duration-200"
-            >
-              Cancelar cotización
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog
         open={!!deleteId}
@@ -949,6 +864,64 @@ export default function CotizacionesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog: Vista previa PDF */}
+      <Dialog
+        open={!!previewUrl}
+        onOpenChange={(o) => {
+          if (!o) {
+            if (previewUrl) URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+            setPreviewVenta(null);
+          }
+        }}
+      >
+        <DialogContent className="flex h-[90vh] w-full flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl rounded-2xl">
+          <DialogHeader className="shrink-0 border-b border-border/40 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between w-full">
+              <div className="min-w-0 text-left">
+                <DialogTitle className="text-base font-semibold sm:text-lg">
+                  Vista Previa - Cotización
+                </DialogTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {previewVenta ? `${getCotizacionNumero(previewVenta.numero)} — ${getClienteNombre(previewVenta.cliente)}` : ""}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-3 text-xs"
+                onClick={() => {
+                  if (previewUrl && previewVenta) {
+                    const a = document.createElement("a");
+                    a.href = previewUrl;
+                    a.download = `cotizacion-${getCotizacionNumero(previewVenta.numero)}.pdf`;
+                    a.click();
+                  }
+                }}
+              >
+                <Download className="size-3.5" />
+                Descargar
+              </Button>
+            </div>
+          </DialogHeader>
+          <div className="flex-1 bg-zinc-900 dark:bg-zinc-950 p-0 flex items-center justify-center">
+            {previewUrl ? (
+              <iframe
+                src={`${previewUrl}#view=FitH`}
+                className="w-full h-full border-0"
+                title="Vista previa de la cotización"
+              />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-zinc-400">
+                <Loader2 className="size-6 animate-spin" />
+                <span className="text-sm">Cargando visor...</span>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

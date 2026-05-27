@@ -29,8 +29,19 @@ import {
   XCircle,
   LayoutGrid,
   List,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { VentaCard } from "./venta-card";
 import { FloatingSelectionBar } from "./floating-selection-bar";
 import {
@@ -45,7 +56,7 @@ import {
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { StatCard } from "@/components/layout/stat-card";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
@@ -84,7 +95,7 @@ import {
   useConfigFiscal,
   type ConfigEmpresaFiscalItem,
 } from "@/hooks/use-facturacion";
-import { usePageAutoRefresh, type PageAutoRefreshState } from "@/hooks/use-page-auto-refresh";
+
 import { usePublicBranding } from "@/hooks/use-public-branding";
 import {
   useCancelarVenta,
@@ -886,10 +897,8 @@ function getInitialViewMode() {
 
 export function HistorialVentasWorkspace({
   showCreateButton = true,
-  autoRefresh: autoRefreshProp,
 }: {
   showCreateButton?: boolean;
-  autoRefresh?: PageAutoRefreshState;
 }) {
   const [search, setSearch] = useState("");
   const debounced = useDebounce(search, 300);
@@ -935,6 +944,40 @@ export function HistorialVentasWorkspace({
   );
 
   const { data, isLoading, isError, refetch } = useVentas(filters);
+
+  const total = data?.meta?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / limit));
+  const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1;
+  const rangeEnd = total === 0 ? 0 : Math.min(page * limit, total);
+
+  const paginationItems = useMemo<(number | "ellipsis")[]>(() => {
+    if (pageCount <= 7) {
+      return Array.from({ length: pageCount }, (_, index) => index + 1);
+    }
+
+    const items: (number | "ellipsis")[] = [1];
+    const windowStart = Math.max(2, page - 1);
+    const windowEnd = Math.min(pageCount - 1, page + 1);
+
+    if (windowStart > 2) {
+      items.push("ellipsis");
+    }
+
+    for (
+      let currentPage = windowStart;
+      currentPage <= windowEnd;
+      currentPage += 1
+    ) {
+      items.push(currentPage);
+    }
+
+    if (windowEnd < pageCount - 1) {
+      items.push("ellipsis");
+    }
+
+    items.push(pageCount);
+    return items;
+  }, [page, pageCount]);
   const { data: statsTotal } = useVentas({
     page: 1,
     limit: 1,
@@ -964,13 +1007,7 @@ export function HistorialVentasWorkspace({
   const cancelar = useCancelarVenta();
   const eliminar = useDeleteVenta();
 
-  const localAutoRefresh = usePageAutoRefresh({
-    scope: "ventas",
-    toastLabel: "Ventas",
-    manualToastMessage: "Lista actualizada",
-  });
-  const autoRefresh = autoRefreshProp ?? localAutoRefresh;
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
@@ -1253,28 +1290,32 @@ export function HistorialVentasWorkspace({
           label="Total ventas"
           value={statsTotal?.meta?.total}
           icon={ShoppingCart}
-          color="bg-[var(--accent-soft)] text-[var(--accent)]"
+          theme="sky"
+          subtitle="Histórico"
           index={0}
         />
         <StatCard
           label="Reservadas"
           value={statsReservadas?.meta?.total}
           icon={CalendarClock}
-          color="bg-[var(--semantic-warning-soft)] text-[var(--semantic-warning)]"
+          theme="amber"
+          subtitle="Pendientes de confirmar"
           index={1}
         />
         <StatCard
           label="Confirmadas"
           value={statsConfirmadas?.meta?.total}
           icon={CircleCheckBig}
-          color="bg-[var(--semantic-info-soft)] text-[var(--semantic-info)]"
+          theme="indigo"
+          subtitle="Listas para entregar"
           index={2}
         />
         <StatCard
           label="Entregadas"
           value={statsEntregadas?.meta?.total}
           icon={PackageCheck}
-          color="bg-[var(--semantic-success-soft)] text-[var(--semantic-success)]"
+          theme="emerald"
+          subtitle="Cerradas"
           index={3}
         />
       </div>
@@ -1285,42 +1326,44 @@ export function HistorialVentasWorkspace({
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por número o cliente..."
+            className="sm:w-80 lg:w-96"
+            inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
             <Tabs value={estadoFilter} onValueChange={handleEstadoChange}>
-              <TabsList className="h-9 max-w-[calc(100vw-2rem)] flex-nowrap gap-0.5 overflow-x-auto rounded-xl border border-border bg-muted p-0.5 sm:max-w-none">
+              <TabsList className="h-9 max-w-[calc(100vw-2rem)] flex-nowrap gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 sm:max-w-none">
                 <TabsTrigger
                   value="all"
-                  className="h-8 gap-1.5 shrink-0 rounded-lg px-3 text-xs text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="h-8 gap-1.5 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <ShoppingCart className="size-3.5" />
                   Todos
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoVenta.RESERVADA}
-                  className="h-8 gap-1.5 shrink-0 rounded-lg px-3 text-xs text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="h-8 gap-1.5 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <CalendarClock className="size-3.5" />
                   Reservada
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoVenta.ORDEN_CONFIRMADA}
-                  className="h-8 gap-1.5 shrink-0 rounded-lg px-3 text-xs text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="h-8 gap-1.5 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <CircleCheckBig className="size-3.5" />
                   Confirmada
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoVenta.ENTREGADA}
-                  className="h-8 gap-1.5 shrink-0 rounded-lg px-3 text-xs text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="h-8 gap-1.5 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <PackageCheck className="size-3.5" />
                   Entregada
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoVenta.CANCELADA}
-                  className="h-8 gap-1.5 shrink-0 rounded-lg px-3 text-xs text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="h-8 gap-1.5 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-red-500/30 dark:data-[state=active]:bg-red-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <XCircle className="size-3.5" />
                   Cancelada
@@ -1369,15 +1412,13 @@ export function HistorialVentasWorkspace({
               </ToggleGroupItem>
             </ToggleGroup>
 
-            {!autoRefreshProp && (
-              <PageAutoRefreshControl autoRefresh={autoRefresh} />
-            )}
+            <RealtimeStatus />
             <PageActionsMenu
               items={[
                 {
                   label: "Actualizar lista",
                   icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
+                  onSelect: () => void refetch(),
                 },
                 {
                   label: "Exportar CSV",
@@ -1494,31 +1535,106 @@ export function HistorialVentasWorkspace({
             </div>
           )}
 
-          {/* Pagination for cards view */}
-          {data?.meta && data.meta.total > limit && (
-            <div className="flex items-center justify-between border-t border-border/40 pt-4 mt-2">
-              <span className="text-xs text-muted-foreground">
-                Mostrando {((page - 1) * limit) + 1} - {Math.min(page * limit, data.meta.total)} de {data.meta.total}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page === 1}
-                  onClick={() => setPage(page - 1)}
-                  className="h-8 rounded-lg"
-                >
-                  Anterior
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page * limit >= data.meta.total}
-                  onClick={() => setPage(page + 1)}
-                  className="h-8 rounded-lg"
-                >
-                  Siguiente
-                </Button>
+          {/* Pagination for cards view (matching ServerDataTable layout) */}
+          {(total > 0) && (
+            <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between mt-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                    Filas por página
+                  </span>
+                  <Select
+                    value={String(limit)}
+                    onValueChange={(value) => handleLimitChange(Number(value))}
+                  >
+                    <SelectTrigger className="h-8 min-w-22 rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent align="start">
+                      {PAGE_SIZE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={String(option)}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <p className="text-xs text-muted-foreground">
+                  {rangeStart}-{rangeEnd} de {total} registro{total !== 1 ? "s" : ""}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                {pageCount > 1 ? (
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(1)}
+                      disabled={page <= 1}
+                      className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                      title="Primera página"
+                    >
+                      <ChevronsLeft className="size-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page <= 1}
+                      className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      Anterior
+                    </Button>
+                    {paginationItems.map((item, index) =>
+                      item === "ellipsis" ? (
+                        <span
+                          key={`ellipsis-${index}`}
+                          className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground"
+                        >
+                          ...
+                        </span>
+                      ) : (
+                        <Button
+                          key={item}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setPage(item)}
+                          className={cn(
+                            "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
+                            item === page
+                              ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
+                              : "bg-muted/55 hover:bg-muted/80"
+                          )}
+                        >
+                          {item}
+                        </Button>
+                      )
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page >= pageCount}
+                      className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                    >
+                      Siguiente
+                      <ChevronRight className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(pageCount)}
+                      disabled={page >= pageCount}
+                      className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                      title="Última página"
+                    >
+                      <ChevronsRight className="size-4" />
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
           )}

@@ -733,46 +733,46 @@ export default function ComprasPage() {
 
           <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
             <Tabs value={estadoFilter} onValueChange={handleEstadoChange}>
-              <TabsList className="h-9 gap-0.5 bg-muted/60 p-0.5 rounded-lg border border-border/60 overflow-x-auto max-w-[calc(100vw-2rem)] sm:max-w-none flex-nowrap">
+              <TabsList className="h-9 gap-0.5 bg-muted/70 p-0.5 rounded-lg border border-border/70 overflow-x-auto max-w-[calc(100vw-2rem)] sm:max-w-none flex-nowrap">
                 <TabsTrigger
                   value="all"
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Todos
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.BORRADOR}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-slate-500/30 dark:data-[state=active]:bg-slate-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Borrador
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.APROBADA}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Aprobada
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.ENVIADA_PROVEEDOR}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Enviada
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.RECIBIDA_PARCIAL}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 dark:data-[state=active]:bg-violet-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Rec. parcial
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.RECIBIDA_TOTAL}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Recibida
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoOrdenCompra.CANCELADA}
-                  className="h-8 px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md shrink-0"
+                  className="h-8 px-3 text-xs shrink-0 rounded-md text-muted-foreground data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-red-500/30 dark:data-[state=active]:bg-red-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   Cancelada
                 </TabsTrigger>
