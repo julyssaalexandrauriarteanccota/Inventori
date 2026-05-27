@@ -9,8 +9,9 @@ export const navButtonClasses = cn(
   "text-sidebar-foreground/85 hover:text-foreground",
   "data-[active=true]:bg-[var(--sidebar-active-bg)] data-[active=true]:text-[var(--sidebar-active-fg)] data-[active=true]:font-semibold",
   "data-[active=true]:hover:bg-[var(--sidebar-active-bg)] data-[active=true]:hover:text-[var(--sidebar-active-fg)]",
-  "data-[active=true]:before:absolute data-[active=true]:before:inset-y-1.5 data-[active=true]:before:left-0",
-  "data-[active=true]:before:w-[3px] data-[active=true]:before:rounded-full data-[active=true]:before:bg-[var(--sidebar-primary)]",
+  "data-[active=true]:before:absolute data-[active=true]:before:inset-y-1 data-[active=true]:before:-left-1.5",
+  "data-[active=true]:before:w-1 data-[active=true]:before:rounded-full data-[active=true]:before:bg-[var(--sidebar-primary)]",
+  "data-[active=true]:before:shadow-[0_0_12px_-1px_var(--sidebar-primary)]",
   "group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:gap-0 group-data-[collapsible=icon]:!size-10 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:p-0",
   "group-data-[collapsible=icon]:before:hidden",
 )
@@ -45,12 +46,12 @@ export function SidebarNavIconTile({
         "relative flex size-7 group-data-[collapsible=icon]:size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300",
         active
           ? "bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] shadow-sm shadow-[var(--sidebar-primary)]/25 dark:shadow-none"
-          : "bg-[var(--sidebar-accent)]/60 text-[var(--sidebar-icon-fg)] group-hover/item:bg-[var(--sidebar-primary)]/[0.10] group-hover/item:text-[var(--sidebar-primary)]",
+          : "bg-transparent text-[var(--sidebar-icon-fg)] group-hover/item:bg-[var(--sidebar-primary)]/[0.10] group-hover/item:text-[var(--sidebar-primary)]",
       )}
     >
       <Icon
         className={cn(
-          "size-4.5 group-data-[collapsible=icon]:size-5 transition-transform duration-300 ease-out group-hover/item:scale-115",
+          "size-4.5 group-data-[collapsible=icon]:size-5 transition-transform duration-300 ease-out group-hover/item:scale-110",
           className
         )}
         strokeWidth={1.85}

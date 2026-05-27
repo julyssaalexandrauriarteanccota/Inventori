@@ -69,12 +69,16 @@ function SidebarConfigView({
       </SidebarGroup>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4 pr-1 [scrollbar-gutter:stable]">
-        {CONFIGURATION_SECTION_GROUPS.map((group) => (
+        {CONFIGURATION_SECTION_GROUPS.map((group, idx) => (
           <SidebarGroup
             key={group.label}
-            className="py-1 group-data-[collapsible=icon]:px-0"
+            className={cn(
+              "py-1 group-data-[collapsible=icon]:px-0",
+              idx > 0 &&
+                "mt-1 pt-3 border-t border-sidebar-border/50 group-data-[collapsible=icon]:border-t-0 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:pt-0",
+            )}
           >
-            <SidebarGroupLabel className="px-2 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--sidebar-primary)]/50 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
+            <SidebarGroupLabel className="px-2 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--sidebar-primary)]/60 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
               {group.label}
             </SidebarGroupLabel>
             <SidebarMenu>
