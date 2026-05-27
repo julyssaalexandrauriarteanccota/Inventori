@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Building2,
   Calendar,
@@ -13,6 +14,7 @@ import {
   Monitor,
   Pencil,
   Phone,
+  Plus,
   Ticket,
   User,
 } from "lucide-react";
@@ -21,9 +23,10 @@ import { TipoCliente, type EstadoValidacionSunat } from "@erp/shared";
 
 import {
   useCliente,
-  useClienteEquipos,
+  useClienteEquipos as useClienteEquiposPropios,
   useClienteTickets,
 } from "@/hooks/use-clientes";
+import { useClienteEquipos as useEquiposExternosCliente } from "@/hooks/use-equipos";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +40,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LocationMap } from "@/components/location/location-map";
+import { EquipoQuickCreateModal } from "@/components/modals/equipo-quick-create-modal";
 
 function InfoItem({
   label,
@@ -50,15 +54,15 @@ function InfoItem({
   copyable?: boolean;
 }) {
   return (
-    <div className="group flex flex-col gap-1">
+    <div className="group flex flex-col gap-1 min-w-0 w-full">
       <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
         {label}
       </span>
-      <div className="flex items-center gap-1.5 min-w-0">
+      <div className="flex items-start gap-1.5 min-w-0 w-full">
         {Icon && (
-          <Icon className="size-3.5 shrink-0 text-muted-foreground/40 transition-colors" />
+          <Icon className="size-3.5 shrink-0 text-muted-foreground/40 transition-colors mt-0.5" />
         )}
-        <span className="text-sm font-medium text-foreground truncate">
+        <span className="text-sm font-medium text-foreground break-words whitespace-normal leading-normal flex-1 min-w-0">
           {value || (
             <span className="text-muted-foreground/40 font-normal italic text-xs">
               —
@@ -281,9 +285,14 @@ export function ClienteDetalleModal({
   canEdit,
 }: ClienteDetalleModalProps) {
   const { data: clienteRes, isLoading, isError } = useCliente(id || undefined);
-  const { data: equiposRes, isLoading: equiposLoading } = useClienteEquipos(
-    id || undefined,
-  );
+  const { data: equiposRes, isLoading: equiposLoading } =
+    useClienteEquiposPropios(id || undefined);
+  const { data: equiposExternosRes, isLoading: equiposExternosLoading } =
+    useEquiposExternosCliente(
+      { clienteId: id || undefined, limit: 50 },
+      { enabled: !!id },
+    );
+  const [equipoExternoOpen, setEquipoExternoOpen] = useState(false);
   const { data: ticketsRes, isLoading: ticketsLoading } = useClienteTickets(
     id || undefined,
   );
@@ -311,6 +320,10 @@ export function ClienteDetalleModal({
         ? (cliente.razonSocial as string)
         : [cliente.nombre, cliente.apellido].filter(Boolean).join(" ")
     : "";
+  const equiposPropios = equiposRes?.data ?? [];
+  const equiposExternos = equiposExternosRes?.data ?? [];
+  const tickets = ticketsRes?.data ?? [];
+  const equiposTotal = equiposPropios.length + equiposExternos.length;
 
   const initials = displayName
     ? displayName
@@ -323,19 +336,19 @@ export function ClienteDetalleModal({
 
   return (
     <Dialog open={!!id} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[88vh] w-full max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl md:max-w-4xl lg:max-w-5xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+      <DialogContent className="flex h-[88vh] max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
         {/* ── HEADER ── */}
         <DialogHeader className="shrink-0 border-b border-border/40 bg-background px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Avatar */}
+            {/* Avatar — solid type colour (indigo / amber) matching the table row avatar */}
             <div
               className={cn(
-                "flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl font-bold text-base sm:text-lg select-none shadow-md ring-2 ring-background dark:ring-border transition-all",
+                "flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl font-bold text-base sm:text-lg select-none text-white shadow-md ring-2 ring-background dark:ring-border transition-all",
                 isLoading
                   ? "bg-muted ring-0 shadow-none text-muted-foreground"
                   : tipo === TipoCliente.EMPRESA
-                    ? "bg-[var(--accent)]/90 text-[var(--accent-text)]"
-                    : "bg-[var(--accent)]/70 text-[var(--accent-text)]",
+                    ? "bg-indigo-500 shadow-indigo-500/30"
+                    : "bg-amber-500 shadow-amber-500/30",
               )}
             >
               {initials}
@@ -343,7 +356,7 @@ export function ClienteDetalleModal({
 
             {/* Title + badges */}
             <div className="flex-1 min-w-0">
-              <DialogTitle className="text-base sm:text-xl font-semibold leading-tight truncate font-display">
+              <DialogTitle className="text-base sm:text-xl font-semibold leading-tight font-display break-words pr-12 sm:pr-0">
                 {isLoading ? (
                   <Skeleton className="h-5 w-48" />
                 ) : (
@@ -352,10 +365,13 @@ export function ClienteDetalleModal({
               </DialogTitle>
               {cliente && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <Badge
-                    variant="outline"
+                  {/* Type pill — solid colour (matches the table) */}
+                  <span
                     className={cn(
-                      "text-xs h-5 gap-1 font-medium bg-[var(--accent-soft)] text-[var(--accent)] border-[var(--accent)]/20",
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm whitespace-nowrap",
+                      tipo === TipoCliente.EMPRESA
+                        ? "bg-indigo-500 shadow-indigo-500/30"
+                        : "bg-amber-500 shadow-amber-500/30",
                     )}
                   >
                     {tipo === TipoCliente.EMPRESA ? (
@@ -369,26 +385,26 @@ export function ClienteDetalleModal({
                         Natural
                       </>
                     )}
-                  </Badge>
-                  <Badge
-                    variant="outline"
+                  </span>
+                  {/* Active state pill */}
+                  <span
                     className={cn(
-                      "text-xs h-5 gap-1.5",
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
                       (cliente.activo as boolean)
-                        ? "bg-[var(--semantic-success-soft)] text-[var(--semantic-success)] border-[var(--semantic-success)]/20"
-                        : "text-muted-foreground",
+                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                        : "bg-muted text-muted-foreground border border-border/60",
                     )}
                   >
                     {(cliente.activo as boolean) ? (
                       <span className="relative flex size-1.5 shrink-0">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--semantic-success)] opacity-75" />
-                        <span className="relative inline-flex size-1.5 rounded-full bg-[var(--semantic-success)]" />
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex size-1.5 rounded-full bg-white" />
                       </span>
                     ) : (
                       <span className="size-1.5 rounded-full inline-block bg-muted-foreground/40" />
                     )}
                     {(cliente.activo as boolean) ? "Activo" : "Inactivo"}
-                  </Badge>
+                  </span>
                 </div>
               )}
               <DialogDescription className="sr-only">
@@ -396,24 +412,23 @@ export function ClienteDetalleModal({
               </DialogDescription>
             </div>
 
-            {/* Edit button */}
+            {/* Edit button — solid primary CTA */}
             {canEdit && cliente && !isGeneric && (
               <Button
-                variant="outline"
                 size="sm"
-                className="gap-1.5 shrink-0 mr-8 sm:mr-10 h-8 rounded-xl px-3 transition-colors duration-150"
+                className="gap-1.5 shrink-0 mr-8 sm:mr-10 h-9 rounded-xl px-3.5 bg-sky-500 hover:bg-sky-600 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-500 dark:hover:bg-sky-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95"
                 onClick={() => onEdit?.(id)}
                 aria-label="Editar cliente"
               >
                 <Pencil className="size-3.5" />
-                <span className="hidden sm:inline text-xs">Editar</span>
+                <span className="hidden sm:inline text-xs font-semibold">Editar</span>
               </Button>
             )}
           </div>
         </DialogHeader>
 
         {/* ── BODY ── */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-5">
           {isLoading ? (
             <DetailSkeleton />
           ) : isError || !cliente ? (
@@ -423,36 +438,36 @@ export function ClienteDetalleModal({
           ) : (
             <Tabs
               defaultValue="informacion"
-              className="flex h-full flex-col gap-4"
+              className="flex flex-col gap-4"
             >
-              <TabsList className="mb-4 h-10 w-full shrink-0">
+              <TabsList className="mb-4 h-10 w-full shrink-0 gap-0.5 rounded-xl border border-border/70 bg-muted/70 p-0.5">
                 <TabsTrigger
                   value="informacion"
-                  className="flex-1 gap-1.5 text-xs sm:text-sm font-sans transition-colors duration-150"
+                  className="flex-1 gap-1 sm:gap-1.5 text-[11px] sm:text-sm font-sans rounded-lg data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-200 ease-out"
                 >
-                  <Info className="size-3.5 shrink-0" />
+                  <Info className="size-3.5 shrink-0 hidden sm:inline" />
                   Información
                 </TabsTrigger>
                 <TabsTrigger
                   value="equipos"
-                  className="flex-1 gap-1.5 text-xs sm:text-sm font-sans transition-colors duration-150"
+                  className="flex-1 gap-1 sm:gap-1.5 text-[11px] sm:text-sm font-sans rounded-lg data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-200 ease-out"
                 >
-                  <Monitor className="size-3.5 shrink-0" />
+                  <Monitor className="size-3.5 shrink-0 hidden sm:inline" />
                   Equipos
-                  {(equiposRes?.data?.length ?? 0) > 0 && (
-                    <span className="ml-0.5 flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
-                      {equiposRes!.data.length}
+                  {equiposTotal > 0 && (
+                    <span className="ml-0.5 flex size-4 items-center justify-center rounded-full bg-white/25 text-[10px] font-semibold text-current">
+                      {equiposTotal}
                     </span>
                   )}
                 </TabsTrigger>
                 <TabsTrigger
                   value="tickets"
-                  className="flex-1 gap-1.5 text-xs sm:text-sm font-sans transition-colors duration-150"
+                  className="flex-1 gap-1 sm:gap-1.5 text-[11px] sm:text-sm font-sans rounded-lg data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-200 ease-out"
                 >
-                  <Ticket className="size-3.5 shrink-0" />
+                  <Ticket className="size-3.5 shrink-0 hidden sm:inline" />
                   Tickets
                   {(ticketsRes?.data?.length ?? 0) > 0 && (
-                    <span className="ml-0.5 flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-semibold">
+                    <span className="ml-0.5 flex size-4 items-center justify-center rounded-full bg-white/25 text-[10px] font-semibold text-current">
                       {ticketsRes!.data.length}
                     </span>
                   )}
@@ -466,13 +481,13 @@ export function ClienteDetalleModal({
               >
                 <div className="flex flex-col gap-3 sm:gap-4">
                   {/* 1 — Identidad */}
-                  <section className="rounded-2xl border border-border/50 border-l-[3px] border-l-[var(--accent)]/60 bg-card p-4 sm:p-5">
+                  <section className="rounded-2xl border border-border/60 border-l-4 border-l-sky-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
                     <div className="mb-5 flex items-center gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent)] ring-2 ring-[var(--accent)]/10">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white shadow-sm shadow-sky-500/30">
                         1
                       </span>
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
-                        <User className="size-4 text-[var(--accent)]" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+                        <User className="size-4" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground font-sans">Identidad</h3>
@@ -515,13 +530,13 @@ export function ClienteDetalleModal({
                   </section>
 
                   {/* 2 — Documento fiscal */}
-                  <section className="rounded-2xl border border-border/50 border-l-[3px] border-l-purple-500/40 bg-card p-4 sm:p-5">
+                  <section className="rounded-2xl border border-border/60 border-l-4 border-l-violet-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
                     <div className="mb-5 flex items-center gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-purple-50 text-xs font-bold text-purple-600 ring-2 ring-purple-500/10 dark:bg-purple-950 dark:text-purple-400">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white shadow-sm shadow-violet-500/30">
                         2
                       </span>
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-950">
-                        <Fingerprint className="size-4 text-purple-600 dark:text-purple-400" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30">
+                        <Fingerprint className="size-4" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground font-sans">Documento fiscal</h3>
@@ -614,13 +629,13 @@ export function ClienteDetalleModal({
                   </section>
 
                   {/* 3 — Contacto */}
-                  <section className="rounded-2xl border border-border/50 border-l-[3px] border-l-blue-500/40 bg-card p-4 sm:p-5">
+                  <section className="rounded-2xl border border-border/60 border-l-4 border-l-emerald-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
                     <div className="mb-5 flex items-center gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600 ring-2 ring-blue-500/10 dark:bg-blue-950 dark:text-blue-400">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-500/30">
                         3
                       </span>
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950">
-                        <Mail className="size-4 text-blue-600 dark:text-blue-400" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+                        <Mail className="size-4" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground font-sans">Contacto</h3>
@@ -650,13 +665,13 @@ export function ClienteDetalleModal({
                   </section>
 
                   {/* 4 — Ubicación */}
-                  <section className="rounded-2xl border border-border/50 border-l-[3px] border-l-emerald-500/40 bg-card p-4 sm:p-5">
+                  <section className="rounded-2xl border border-border/60 border-l-4 border-l-amber-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
                     <div className="mb-5 flex items-center gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600 ring-2 ring-emerald-500/10 dark:bg-emerald-950 dark:text-emerald-400">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-sm shadow-amber-500/30">
                         4
                       </span>
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950">
-                        <MapPin className="size-4 text-emerald-600 dark:text-emerald-400" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30">
+                        <MapPin className="size-4" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-foreground font-sans">Ubicación</h3>
@@ -700,7 +715,7 @@ export function ClienteDetalleModal({
                           <FileText className="size-3.5 text-muted-foreground/50" />
                           <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">Notas internas</span>
                         </div>
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
+                        <p className="whitespace-pre-wrap break-words min-w-0 text-sm leading-relaxed text-foreground/80">
                           {cliente.notas as string}
                         </p>
                       </div>
@@ -708,13 +723,13 @@ export function ClienteDetalleModal({
                   </section>
 
                   {/* 5 — Auditoría */}
-                  <section className="rounded-2xl border border-border/50 border-l-[3px] border-l-slate-400/40 bg-slate-100/50 dark:bg-slate-900/50 p-4 sm:p-5">
+                  <section className="rounded-2xl border border-border/60 border-l-4 border-l-slate-500 bg-slate-100/60 dark:bg-slate-900/40 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
                     <div className="mb-5 flex items-center gap-3">
-                      <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-600 ring-2 ring-slate-400/10 dark:bg-slate-900 dark:text-slate-400">
+                      <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-600 text-xs font-bold text-white shadow-sm shadow-slate-600/30 dark:bg-slate-500 dark:shadow-slate-500/30">
                         5
                       </span>
-                      <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-900">
-                        <Clock className="size-4 text-slate-600 dark:text-slate-400" />
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-600 text-white shadow-sm shadow-slate-600/30 dark:bg-slate-500 dark:shadow-slate-500/30">
+                        <Clock className="size-4" />
                       </div>
                       <div>
                         <h3 className="text-sm font-semibold text-muted-foreground font-sans">Auditoría</h3>
@@ -742,7 +757,7 @@ export function ClienteDetalleModal({
                 value="equipos"
                 className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:duration-150"
               >
-                {equiposLoading ? (
+                {equiposLoading || equiposExternosLoading ? (
                   <div className="grid gap-4 sm:grid-cols-2">
                     {Array.from({ length: 2 }).map((_, i) => (
                       <div key={i} className="flex flex-col gap-3 rounded-2xl border border-border/40 bg-card p-4">
@@ -761,9 +776,147 @@ export function ClienteDetalleModal({
                       </div>
                     ))}
                   </div>
-                ) : (equiposRes?.data?.length ?? 0) > 0 ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    {equiposRes!.data.map((equipo, i) => {
+                ) : equiposTotal > 0 ? (
+                  <div className="flex flex-col gap-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 dark:border-sky-800/60 border-l-4 border-l-sky-500 bg-sky-50/70 dark:bg-sky-950/40 p-4">
+                      <div>
+                        <h3 className="text-sm font-semibold">
+                          Equipos del cliente
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          Propios entregados y externos reutilizables para nuevos tickets.
+                        </p>
+                      </div>
+                      {!isGeneric ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-8 rounded-xl gap-1.5 text-xs bg-sky-500 hover:bg-sky-600 text-white shadow-sm shadow-sky-500/25 border-0"
+                          onClick={() => setEquipoExternoOpen(true)}
+                        >
+                          <Plus className="size-3.5" />
+                          Registrar externo
+                        </Button>
+                      ) : null}
+                    </div>
+
+                    {equiposExternos.length > 0 ? (
+                      <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                            Equipos externos del cliente
+                          </h4>
+                          <Badge variant="outline" className="text-[10px] border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300">
+                            No afectan stock
+                          </Badge>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          {equiposExternos.map((equipo) => {
+                            const relatedTickets = tickets.filter(
+                              (ticket) =>
+                                (ticket.clienteEquipoId as string | null) ===
+                                equipo.id,
+                            );
+                            const latestTicket = relatedTickets[0];
+                            const title =
+                              equipo.producto?.nombre ??
+                              equipo.nombre ??
+                              ([equipo.marca, equipo.modelo]
+                                .filter(Boolean)
+                                .join(" ") ||
+                                "Equipo externo");
+
+                            return (
+                              <div
+                                key={equipo.id}
+                                className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-card p-4 shadow-xs transition-colors duration-150 hover:bg-muted/30 hover:border-border-strong/60"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    <h4 className="text-sm font-semibold text-foreground break-words whitespace-normal leading-snug">
+                                      {title}
+                                    </h4>
+                                    <p className="mt-1 text-xs text-muted-foreground break-words whitespace-normal leading-normal">
+                                      {[equipo.marca, equipo.modelo]
+                                        .filter(Boolean)
+                                        .join(" — ") || "Sin marca/modelo"}
+                                    </p>
+                                  </div>
+                                  <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 shadow-sm shadow-sky-500/25">
+                                    <Monitor className="size-4 text-white" />
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <Badge
+                                    variant="outline"
+                                    className="border-[var(--accent)]/20 bg-[var(--accent-soft)] text-[var(--accent)] text-[10px] uppercase"
+                                  >
+                                    Externo
+                                  </Badge>
+                                  <Badge variant="outline" className="text-[10px] uppercase">
+                                    {equipo.estado}
+                                  </Badge>
+                                  <span
+                                    className="ml-auto max-w-[140px] truncate rounded-md border border-border/30 bg-muted/60 px-2 py-0.5 font-mono text-[10px] text-muted-foreground"
+                                    title={equipo.numeroSerie}
+                                  >
+                                    {equipo.numeroSerie}
+                                  </span>
+                                </div>
+
+                                {(equipo.ubicacion || equipo.notas) && (
+                                  <div className="space-y-1.5 border-t border-border/30 pt-2 text-xs text-muted-foreground">
+                                    {equipo.ubicacion ? (
+                                      <p className="flex items-center gap-1.5">
+                                        <MapPin className="size-3" />
+                                        {equipo.ubicacion}
+                                      </p>
+                                    ) : null}
+                                    {equipo.notas ? (
+                                      <p className="whitespace-pre-wrap rounded-lg border border-border/30 bg-muted/40 p-2 italic">
+                                        {equipo.notas}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                )}
+
+                                <div className="border-t border-border/30 pt-2 text-xs text-muted-foreground">
+                                  {relatedTickets.length > 0 ? (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <Ticket className="size-3.5" />
+                                      <span>
+                                        {relatedTickets.length} ticket(s)
+                                      </span>
+                                      {latestTicket ? (
+                                        <span className="truncate">
+                                          Último: {latestTicket.codigo as string}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  ) : (
+                                    <span>Sin tickets registrados todavía.</span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    ) : null}
+
+                    {equiposPropios.length > 0 ? (
+                      <section className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                            Equipos propios entregados
+                          </h4>
+                          <Badge variant="outline" className="text-[10px] border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300">
+                            Inventario empresa
+                          </Badge>
+                        </div>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                    {equiposPropios.map((equipo, i) => {
                       // Determine condition badge style
                       const cond = String(equipo.condicion).toUpperCase();
                       const condClass =
@@ -788,16 +941,16 @@ export function ClienteDetalleModal({
                           className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-card p-4 shadow-xs transition-colors duration-150 hover:bg-muted/30 hover:border-border-strong/60"
                         >
                           <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h4 className="text-sm font-semibold text-foreground truncate font-sans">
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-sm font-semibold text-foreground break-words whitespace-normal leading-snug font-sans">
                                 {(equipo.productoNombre as string) ?? "Equipo"}
                               </h4>
-                              <p className="text-xs text-muted-foreground mt-0.5 truncate font-sans">
+                              <p className="text-xs text-muted-foreground mt-1 break-words whitespace-normal leading-normal font-sans">
                                 {(equipo.marca as string) || "Genérica"} — {(equipo.modelo as string) || "—"}
                               </p>
                             </div>
-                            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-muted/60">
-                              <Monitor className="size-4 text-muted-foreground/60" />
+                            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500 shadow-sm shadow-indigo-500/25">
+                              <Monitor className="size-4 text-white" />
                             </div>
                           </div>
 
@@ -844,11 +997,14 @@ export function ClienteDetalleModal({
                         </div>
                       );
                     })}
+                        </div>
+                      </section>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground bg-card rounded-2xl border border-border/40 shadow-xs">
-                    <div className="flex size-14 items-center justify-center rounded-full bg-muted/60">
-                      <Monitor className="size-6 opacity-40" />
+                  <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground bg-sky-50/40 dark:bg-sky-950/20 rounded-2xl border border-sky-200/60 dark:border-sky-800/40 shadow-xs">
+                    <div className="flex size-14 items-center justify-center rounded-full bg-sky-100 dark:bg-sky-950/60 ring-2 ring-sky-200 dark:ring-sky-800">
+                      <Monitor className="size-6 text-sky-400 dark:text-sky-500" />
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium">
@@ -858,6 +1014,17 @@ export function ClienteDetalleModal({
                         Este cliente no tiene equipos asociados
                       </p>
                     </div>
+                    {!isGeneric ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="mt-2 rounded-xl gap-1.5 bg-sky-500 hover:bg-sky-600 text-white shadow-sm shadow-sky-500/25 border-0"
+                        onClick={() => setEquipoExternoOpen(true)}
+                      >
+                        <Plus className="size-3.5" />
+                        Registrar equipo externo
+                      </Button>
+                    ) : null}
                   </div>
                 )}
               </TabsContent>
@@ -867,7 +1034,7 @@ export function ClienteDetalleModal({
                 value="tickets"
                 className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-50 data-[state=active]:duration-150"
               >
-                <div className="rounded-2xl border border-border/40 bg-muted/10 p-4 sm:p-6">
+                <div className="rounded-2xl border border-violet-200/60 dark:border-violet-800/40 border-l-4 border-l-violet-500 bg-violet-50/30 dark:bg-violet-950/20 p-4 sm:p-6">
                   {ticketsLoading ? (
                     <div className="flex flex-col gap-3">
                       {Array.from({ length: 3 }).map((_, i) => (
@@ -875,16 +1042,19 @@ export function ClienteDetalleModal({
                       ))}
                     </div>
                   ) : (ticketsRes?.data?.length ?? 0) > 0 ? (
-                    <div className="relative pl-6 ml-2 border-l border-border/60 space-y-6 py-2 max-h-[48vh] overflow-y-auto pr-2 scrollbar-thin">
+                    <div className="relative space-y-6 py-2 max-h-[48vh] overflow-y-auto pr-2 scrollbar-thin">
+                      {/* Timeline line */}
+                      <div className="absolute left-[15px] sm:left-[21px] top-0 bottom-0 w-px bg-border/60" />
+                      
                       {ticketsRes!.data.map((ticket, i) => {
                         const estadoMeta = getEstadoTicketMeta(ticket.estado as string);
                         const prioridadMeta = getPrioridadTicketMeta(ticket.prioridad as string);
                         
                         return (
-                          <div key={i} className="group/timeline relative">
+                          <div key={i} className="relative pl-8 sm:pl-10 group/timeline">
                             {/* Dot on the timeline */}
                             <div className={cn(
-                              "absolute -left-[31px] top-1.5 flex size-4 items-center justify-center rounded-full bg-background border-2 shadow-sm",
+                              "absolute left-[7px] sm:left-[13px] top-1.5 flex size-4 items-center justify-center rounded-full bg-background border-2 shadow-sm z-10",
                               estadoMeta.dotColor
                             )}>
                               <span className="size-1.5 rounded-full bg-current" />
@@ -972,9 +1142,9 @@ export function ClienteDetalleModal({
                       })}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground bg-card rounded-2xl border border-border/40 shadow-xs">
-                      <div className="flex size-14 items-center justify-center rounded-full bg-muted/60">
-                        <Ticket className="size-6 opacity-40" />
+                    <div className="flex flex-col items-center gap-3 py-16 text-muted-foreground bg-violet-50/40 dark:bg-violet-950/20 rounded-2xl border border-violet-200/60 dark:border-violet-800/40 shadow-xs">
+                      <div className="flex size-14 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-950/60 ring-2 ring-violet-200 dark:ring-violet-800">
+                        <Ticket className="size-6 text-violet-400 dark:text-violet-500" />
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-medium">
@@ -991,6 +1161,14 @@ export function ClienteDetalleModal({
             </Tabs>
           )}
         </div>
+        {id ? (
+          <EquipoQuickCreateModal
+            open={equipoExternoOpen}
+            onClose={() => setEquipoExternoOpen(false)}
+            clienteId={id}
+            onCreated={() => setEquipoExternoOpen(false)}
+          />
+        ) : null}
       </DialogContent>
     </Dialog>
   );

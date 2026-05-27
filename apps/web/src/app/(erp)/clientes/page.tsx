@@ -1641,25 +1641,25 @@ export default function ClientesPage() {
         open={!!deleteId}
         onOpenChange={(o) => (!o ? setDeleteId(null) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl border-l-4 border-l-red-500 p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogCancel
             variant="ghost"
             size="icon"
             onClick={() => setDeleteId(null)}
-            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-105 active:scale-95 active:duration-150"
+            className="absolute right-4 top-4 size-6 text-muted-foreground hover:bg-muted mt-0 border-0 z-10 transition-all duration-200 ease-out hover:scale-105 active:scale-95"
           >
             <X className="size-4" />
           </AlertDialogCancel>
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950 ring-1 ring-red-500/10">
-              <Trash2 className="size-5 text-destructive" />
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+              <Trash2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
-              <AlertDialogTitle className="text-xl">
+              <AlertDialogTitle className="text-xl font-semibold">
                 ¿Eliminar cliente?
               </AlertDialogTitle>
               <AlertDialogDescription asChild>
-                <div className="space-y-1">
+                <div className="space-y-1.5 text-sm text-muted-foreground">
                   {(() => {
                     const c = clientes.find((x) => x.id === deleteId);
                     const nombre = c
@@ -1670,7 +1670,7 @@ export default function ClientesPage() {
                     return nombre ? (
                       <p>
                         Se eliminará el registro de{" "}
-                        <span className="font-medium text-foreground">
+                        <span className="font-semibold text-foreground">
                           {nombre}
                         </span>
                         .
@@ -1678,25 +1678,27 @@ export default function ClientesPage() {
                     ) : null;
                   })()}
                   <p>Esta acción no se puede deshacer.</p>
-                  <p className="mt-2 rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive/80">
-                    ⚠️ Los registros asociados (equipos, tickets) no se
-                    eliminarán.
+                  <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+                    <span>Los registros asociados (equipos, tickets) no se eliminarán.</span>
                   </p>
                 </div>
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end w-full">
-            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150">
+            <AlertDialogCancel className="w-full sm:w-auto rounded-xl mt-0 border-border/80 hover:bg-muted transition-all duration-200 ease-out active:scale-95">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
-                "Eliminando..."
+                <>
+                  <Loader2 className="size-3.5 animate-spin" /> Eliminando…
+                </>
               ) : (
                 <>
                   <Trash2 className="size-3.5" /> Sí, eliminar
@@ -1712,42 +1714,55 @@ export default function ClientesPage() {
         open={bulkDeleteIds.length > 0}
         onOpenChange={(o) => (!o ? setBulkDeleteIds([]) : null)}
       >
-        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl border-l-4 border-l-red-500 p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-red-50 dark:bg-red-950 ring-1 ring-red-500/10">
-              <Trash2 className="size-5 text-destructive" />
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+              <Trash2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
-              <AlertDialogTitle className="text-xl">
-                ¿Eliminar {bulkDeleteIds.length} clientes?
-              </AlertDialogTitle>
-              <AlertDialogDescription>
-                <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive">
+              <AlertDialogTitle className="text-xl font-semibold inline-flex items-center gap-2 flex-wrap">
+                ¿Eliminar
+                <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold px-2 py-0.5 shadow-sm shadow-red-500/30">
                   {bulkDeleteIds.length}
-                </span>{" "}
-                Esta acción no se puede deshacer. Se eliminarán{" "}
-                {bulkDeleteIds.length} clientes seleccionados.
+                </span>
+                clientes?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-1.5 text-sm text-muted-foreground">
+                  <p>
+                    Se eliminarán{" "}
+                    <span className="font-semibold text-foreground">
+                      {bulkDeleteIds.length} clientes seleccionados
+                    </span>
+                    . Esta acción no se puede deshacer.
+                  </p>
+                  <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+                    <AlertCircle className="size-3.5 shrink-0 mt-0.5" />
+                    <span>Los registros asociados (equipos, tickets) no se eliminarán.</span>
+                  </p>
+                </div>
               </AlertDialogDescription>
             </div>
           </AlertDialogHeader>
           <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end w-full">
             <AlertDialogCancel
-              className="w-full sm:w-auto rounded-xl mt-0 hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+              className="w-full sm:w-auto rounded-xl mt-0 border-border/80 hover:bg-muted transition-all duration-200 ease-out active:scale-95"
               onClick={() => setBulkDeleteIds([])}
             >
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="w-full sm:w-auto rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
-                "Eliminando..."
+                <>
+                  <Loader2 className="size-3.5 animate-spin" /> Eliminando…
+                </>
               ) : (
                 <>
-                  <Trash2 className="size-3.5" /> Sí, eliminar{" "}
-                  {bulkDeleteIds.length}
+                  <Trash2 className="size-3.5" /> Sí, eliminar {bulkDeleteIds.length}
                 </>
               )}
             </AlertDialogAction>
@@ -1760,8 +1775,8 @@ export default function ClientesPage() {
         <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--accent-soft)] to-[var(--accent)]/10 ring-1 ring-[var(--accent)]/10">
-                <Users className="size-4 text-[var(--accent)]" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/25">
+                <Users className="size-4" />
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-semibold">
@@ -1792,8 +1807,8 @@ export default function ClientesPage() {
         <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-50 dark:bg-amber-950 ring-1 ring-amber-500/10">
-                <Pencil className="size-4 text-amber-600 dark:text-amber-400" />
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-500/25">
+                <Pencil className="size-4" />
               </div>
               <div>
                 <DialogTitle className="text-base sm:text-lg font-semibold">
