@@ -342,8 +342,8 @@ function ClienteCard({
     ? "from-indigo-400 via-indigo-500 to-indigo-600"
     : "from-amber-400 via-amber-500 to-amber-600";
   const avatarCls = isEmpresa
-    ? "bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30"
-    : "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30";
+    ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:shadow-indigo-500/40"
+    : "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:shadow-amber-500/40";
   return (
     <div
       className={cn(
@@ -847,10 +847,10 @@ export default function ClientesPage() {
           return (
             <span
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm",
                 isEmpresa
-                  ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300"
-                  : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300",
+                  ? "bg-indigo-500 shadow-indigo-500/30"
+                  : "bg-amber-500 shadow-amber-500/30",
               )}
             >
               {isEmpresa ? (
@@ -870,8 +870,8 @@ export default function ClientesPage() {
           const text = getDisplayName(row.original);
           const isEmpresa = row.original.tipo === TipoCliente.EMPRESA;
           const avatarCls = isEmpresa
-            ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300"
-            : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
+            ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30"
+            : "bg-amber-500 text-white shadow-sm shadow-amber-500/30";
           return (
             <div className="flex items-center gap-2.5 min-w-0">
               <span
@@ -1225,7 +1225,7 @@ export default function ClientesPage() {
             onChange={handleSearchChange}
             placeholder="Buscar por nombre, RUC, DNI…"
             className="sm:w-80 lg:w-96"
-            inputClassName="border-border/70 bg-background/60 hover:bg-muted/60 focus-visible:border-sky-400/60 dark:focus-visible:border-sky-500/60 focus-visible:ring-sky-400/15 dark:focus-visible:ring-sky-500/15"
+            inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
 
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
@@ -1234,21 +1234,21 @@ export default function ClientesPage() {
               <TabsList className="flex w-full sm:w-auto h-9 gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5">
                 <TabsTrigger
                   value="all"
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-100 data-[state=active]:text-sky-700 dark:data-[state=active]:bg-sky-500/20 dark:data-[state=active]:text-sky-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Users className="size-3.5" />
                   <span className="hidden sm:inline">Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.EMPRESA}
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-100 data-[state=active]:text-indigo-700 dark:data-[state=active]:bg-indigo-500/20 dark:data-[state=active]:text-indigo-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Building2 className="size-3.5" />
                   <span className="hidden sm:inline">Empresa</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.NATURAL}
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <User className="size-3.5" />
                   <span className="hidden sm:inline">Natural</span>

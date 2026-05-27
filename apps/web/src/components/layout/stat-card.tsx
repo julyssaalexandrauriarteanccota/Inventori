@@ -43,51 +43,51 @@ const THEME_MAP: Record<
   { card: string; tile: string; text: string; watermark: string }
 > = {
   sky: {
-    card: "bg-sky-50 dark:bg-sky-500/[0.08] border-sky-200 dark:border-sky-500/25",
-    tile: "bg-sky-100 dark:bg-sky-500/20",
-    text: "text-sky-600 dark:text-sky-400",
+    card: "bg-sky-100/80 dark:bg-sky-500/15 border-sky-300 dark:border-sky-500/40",
+    tile: "bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-500 dark:text-white dark:shadow-sky-500/30",
+    text: "text-white",
     watermark: "text-sky-500 dark:text-sky-400",
   },
   indigo: {
-    card: "bg-indigo-50 dark:bg-indigo-500/[0.08] border-indigo-200 dark:border-indigo-500/25",
-    tile: "bg-indigo-100 dark:bg-indigo-500/20",
-    text: "text-indigo-600 dark:text-indigo-400",
+    card: "bg-indigo-100/80 dark:bg-indigo-500/15 border-indigo-300 dark:border-indigo-500/40",
+    tile: "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-500 dark:text-white dark:shadow-indigo-500/30",
+    text: "text-white",
     watermark: "text-indigo-500 dark:text-indigo-400",
   },
   violet: {
-    card: "bg-violet-50 dark:bg-violet-500/[0.08] border-violet-200 dark:border-violet-500/25",
-    tile: "bg-violet-100 dark:bg-violet-500/20",
-    text: "text-violet-600 dark:text-violet-400",
+    card: "bg-violet-100/80 dark:bg-violet-500/15 border-violet-300 dark:border-violet-500/40",
+    tile: "bg-violet-500 text-white shadow-sm shadow-violet-500/30 dark:bg-violet-500 dark:text-white dark:shadow-violet-500/30",
+    text: "text-white",
     watermark: "text-violet-500 dark:text-violet-400",
   },
   amber: {
-    card: "bg-amber-50 dark:bg-amber-500/[0.08] border-amber-200 dark:border-amber-500/25",
-    tile: "bg-amber-100 dark:bg-amber-500/20",
-    text: "text-amber-600 dark:text-amber-400",
+    card: "bg-amber-100/80 dark:bg-amber-500/15 border-amber-300 dark:border-amber-500/40",
+    tile: "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-500 dark:text-white dark:shadow-amber-500/30",
+    text: "text-white",
     watermark: "text-amber-500 dark:text-amber-400",
   },
   emerald: {
-    card: "bg-emerald-50 dark:bg-emerald-500/[0.08] border-emerald-200 dark:border-emerald-500/25",
-    tile: "bg-emerald-100 dark:bg-emerald-500/20",
-    text: "text-emerald-600 dark:text-emerald-400",
+    card: "bg-emerald-100/80 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/40",
+    tile: "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-500 dark:text-white dark:shadow-emerald-500/30",
+    text: "text-white",
     watermark: "text-emerald-500 dark:text-emerald-400",
   },
   red: {
-    card: "bg-red-50 dark:bg-red-500/[0.08] border-red-200 dark:border-red-500/25",
-    tile: "bg-red-100 dark:bg-red-500/20",
-    text: "text-red-600 dark:text-red-400",
+    card: "bg-red-100/80 dark:bg-red-500/15 border-red-300 dark:border-red-500/40",
+    tile: "bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-500 dark:text-white dark:shadow-red-500/30",
+    text: "text-white",
     watermark: "text-red-500 dark:text-red-400",
   },
   rose: {
-    card: "bg-rose-50 dark:bg-rose-500/[0.08] border-rose-200 dark:border-rose-500/25",
-    tile: "bg-rose-100 dark:bg-rose-500/20",
-    text: "text-rose-600 dark:text-rose-400",
+    card: "bg-rose-100/80 dark:bg-rose-500/15 border-rose-300 dark:border-rose-500/40",
+    tile: "bg-rose-500 text-white shadow-sm shadow-rose-500/30 dark:bg-rose-500 dark:text-white dark:shadow-rose-500/30",
+    text: "text-white",
     watermark: "text-rose-500 dark:text-rose-400",
   },
   slate: {
-    card: "bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700",
-    tile: "bg-slate-200 dark:bg-slate-800/60",
-    text: "text-slate-600 dark:text-slate-300",
+    card: "bg-slate-200/70 dark:bg-slate-700/40 border-slate-300 dark:border-slate-600",
+    tile: "bg-slate-600 text-white shadow-sm shadow-slate-700/20 dark:bg-slate-500 dark:text-white",
+    text: "text-white",
     watermark: "text-slate-500 dark:text-slate-400",
   },
 }
@@ -208,7 +208,7 @@ function StatCardInner({
         <Icon
           aria-hidden
           className={cn(
-            "pointer-events-none absolute -right-3 -bottom-3 size-20 opacity-[0.10] dark:opacity-[0.14] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110",
+            "pointer-events-none absolute -right-3 -bottom-3 size-20 opacity-[0.18] dark:opacity-[0.22] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 group-hover:opacity-[0.28] dark:group-hover:opacity-[0.32]",
             styles.watermark,
           )}
         />
