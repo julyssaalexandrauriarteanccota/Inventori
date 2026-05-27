@@ -2,7 +2,6 @@
 
 import {
   AlertTriangle,
-  ArrowRight,
   ArrowUpRight,
   CheckCircle2,
   Package,
@@ -305,27 +304,27 @@ function QuickActions({ hasRole }: { hasRole: (...roles: RolUsuario[]) => boolea
       label: 'Nueva venta',
       icon: ShoppingCart,
       href: '/ventas',
-      cls: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20',
+      cls: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20 dark:brightness-75 dark:hover:brightness-90',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
     {
       label: 'Crear ticket',
       icon: Ticket,
       href: '/soporte/nuevo',
-      cls: 'bg-[var(--sidebar-primary)] hover:bg-[var(--sidebar-primary)]/90 text-white shadow-primary/20',
+      cls: 'bg-[var(--sidebar-primary)] hover:bg-[var(--sidebar-primary)]/90 text-white shadow-primary/20 dark:brightness-75 dark:hover:brightness-90',
     },
     {
       label: 'Registrar cliente',
       icon: Users,
       href: '/clientes/nuevo',
-      cls: 'bg-card border border-border hover:border-primary/30 hover:bg-primary/5 text-foreground',
+      cls: 'bg-card border border-border hover:border-primary/30 hover:bg-primary/5 text-foreground dark:hover:bg-primary/10 dark:brightness-105',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
     {
       label: 'Ver inventario',
       icon: Package,
       href: '/inventario',
-      cls: 'bg-card border border-border hover:border-violet-500/30 hover:bg-violet-500/5 text-foreground',
+      cls: 'bg-card border border-border hover:border-violet-500/30 hover:bg-violet-500/5 text-foreground dark:hover:bg-violet-500/10 dark:brightness-105',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
   ].filter((p) => !p.roles || hasRole(...p.roles))
@@ -553,10 +552,10 @@ function FeaturedCard({
 }) {
   return (
     <Link href="/ventas" className="block">
-      <div className="group relative overflow-hidden rounded-2xl p-5 flex flex-col justify-between h-full min-h-[130px] bg-[var(--sidebar-primary)] text-white shadow-lg shadow-[var(--sidebar-primary)]/20 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--sidebar-primary)]/30 cursor-pointer">
+      <div className="group relative overflow-hidden rounded-2xl p-5 flex flex-col justify-between h-full min-h-[130px] bg-[var(--sidebar-primary)] text-white shadow-lg shadow-[var(--sidebar-primary)]/20 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--sidebar-primary)]/30 cursor-pointer dark:brightness-75">
         {/* decorative ambient glows inside the card */}
-        <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-12 left-2 size-32 rounded-full bg-white/6 blur-2xl" />
+        <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/15 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-12 left-2 size-32 rounded-full bg-white/10 blur-2xl" />
 
         <div className="relative flex items-start justify-between">
           <div className="flex size-10 items-center justify-center rounded-xl bg-white/15">
@@ -569,7 +568,7 @@ function FeaturedCard({
         </div>
 
         <div className="relative mt-3">
-          <p className="text-[11px] font-semibold uppercase tracking-widest text-white/60">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-white/75 dark:text-white/80">
             Ventas del mes
           </p>
           {isLoading ? (
@@ -579,7 +578,7 @@ function FeaturedCard({
               {value}
             </p>
           )}
-          <p className="mt-0.5 text-xs text-white/55">{subtitle}</p>
+          <p className="mt-0.5 text-xs text-white/65 dark:text-white/75">{subtitle}</p>
         </div>
 
         <div className="absolute right-4 bottom-4 flex size-8 items-center justify-center rounded-full bg-white/15 transition-all group-hover:bg-white/25">
@@ -591,6 +590,37 @@ function FeaturedCard({
 }
 
 /* ─────────────────────────── CompactKpiCard ─────────────────────────── */
+
+const THEME_MAP = {
+  amber: {
+    card: 'bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30',
+    tile: 'bg-amber-100 dark:bg-amber-500/20',
+    text: 'text-amber-600 dark:text-amber-400',
+    border: 'border-amber-200 dark:border-amber-500/30',
+    lightText: 'text-amber-600',
+  },
+  red: {
+    card: 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30',
+    tile: 'bg-red-100 dark:bg-red-500/20',
+    text: 'text-red-600 dark:text-red-400',
+    border: 'border-red-200 dark:border-red-500/30',
+    lightText: 'text-red-600',
+  },
+  slate: {
+    card: 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700',
+    tile: 'bg-slate-200 dark:bg-slate-800/40',
+    text: 'text-slate-500 dark:text-slate-400',
+    border: 'border-slate-200 dark:border-slate-700',
+    lightText: 'text-slate-500',
+  },
+  sky: {
+    card: 'bg-sky-50 dark:bg-sky-500/10 border-sky-200 dark:border-sky-500/30',
+    tile: 'bg-sky-100 dark:bg-sky-500/20',
+    text: 'text-sky-600 dark:text-sky-400',
+    border: 'border-sky-200 dark:border-sky-500/30',
+    lightText: 'text-sky-600',
+  },
+}
 
 function CompactKpiCard({
   label,
@@ -611,59 +641,33 @@ function CompactKpiCard({
   isLoading: boolean
   index?: number
 }) {
-  /* Parse classes from color string supporting both light and dark variants.
-     Example: "bg-amber-50 dark:bg-amber-500/10 border-amber-200
-              dark:border-amber-500/30 text-amber-600 dark:text-amber-400" */
-  const tokens = color.split(' ')
+  let theme: 'amber' | 'red' | 'slate' | 'sky' = 'slate'
+  if (color.includes('amber')) theme = 'amber'
+  else if (color.includes('red')) theme = 'red'
+  else if (color.includes('sky')) theme = 'sky'
 
-  /* All bg-* and border-* (light + dark) go on the card */
-  const cardBgBorderCls = tokens
-    .filter((t) => /^(dark:)?(bg|border)-/.test(t))
-    .join(' ')
-
-  /* All text-* (light + dark) go on the colored icons */
-  const iconTextCls = tokens
-    .filter((t) => /^(dark:)?text-/.test(t))
-    .join(' ') || 'text-primary'
-
-  /* Light-only text (used for ArrowUpRight which needs a single color anchor) */
-  const lightTextOnly = tokens.find((t) => t.startsWith('text-') && !t.startsWith('dark:')) ?? 'text-primary'
-
-  /* Icon tile: light = shade bumped (-50 → -100); dark = opacity doubled */
-  const lightBg = tokens.find((t) => /^bg-[a-z]+-\d+$/.test(t))
-  const darkBg  = tokens.find((t) => /^dark:bg-/.test(t))
-  const tileLightCls = lightBg?.replace(/-(\d+)$/, (_, n) => {
-    const num = Number(n)
-    const next = num === 50 ? 100 : Math.min(num + 100, 900)
-    return `-${next}`
-  }) ?? ''
-  const tileDarkCls = darkBg
-    ? darkBg
-        .replace(/\/\[(0?\.\d+)\]/, (_, op) => `/[${Math.min(Number(op) * 2, 0.4).toFixed(2)}]`)
-        .replace(/\/(\d+)$/, (_, n) => `/${Math.min(Number(n) * 2, 40)}`)
-    : ''
-  const tileCls = `${tileLightCls} ${tileDarkCls}`.trim()
+  const styles = THEME_MAP[theme]
 
   return (
     <Link href={href} className="block">
       <div
         className={cn(
           'group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md animate-fade-up min-h-[130px] flex flex-col justify-between',
-          cardBgBorderCls,
+          styles.card,
         )}
         style={{ animationDelay: `${index * 70}ms` }}
       >
         {/* top row: solid colored icon tile + arrow circle */}
         <div className="flex items-center justify-between">
-          <div className={cn('flex size-10 items-center justify-center rounded-xl', tileCls)}>
-            <Icon className={cn('size-5', iconTextCls)} />
+          <div className={cn('flex size-10 items-center justify-center rounded-xl', styles.tile)}>
+            <Icon className={cn('size-5', styles.text)} />
           </div>
           <div className={cn(
             'flex size-8 items-center justify-center rounded-full border transition-all',
-            cardBgBorderCls.split(' ').filter((t) => /^(dark:)?border-/.test(t)).join(' '),
+            styles.border,
             'group-hover:bg-current/10',
           )}>
-            <ArrowUpRight className={cn('size-3.5 transition-colors', lightTextOnly, 'opacity-60 group-hover:opacity-100')} />
+            <ArrowUpRight className={cn('size-3.5 transition-colors', styles.lightText, 'opacity-60 group-hover:opacity-100')} />
           </div>
         </div>
 
@@ -684,7 +688,7 @@ function CompactKpiCard({
 
         {/* watermark icon */}
         <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.12] dark:opacity-[0.18]">
-          <Icon className={cn('size-24', iconTextCls)} />
+          <Icon className={cn('size-24', styles.text)} />
         </div>
       </div>
     </Link>
