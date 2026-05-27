@@ -1432,29 +1432,39 @@ export default function ProveedoresPage() {
         onClose={() => setViewDetailId(null)}
         canEdit={canEdit}
         onEdit={(proveedor) => {
+          const pickString = (key: string): string | null =>
+            typeof proveedor[key] === "string"
+              ? (proveedor[key] as string)
+              : null;
+          const pickNumber = (key: string): number | null =>
+            typeof proveedor[key] === "number"
+              ? (proveedor[key] as number)
+              : null;
+          const pickIsoString = (key: string): string =>
+            typeof proveedor[key] === "string"
+              ? (proveedor[key] as string)
+              : new Date().toISOString();
+
           const nextEditItem: ProveedorListItem = {
             id: String(proveedor.id ?? ""),
             razonSocial: String(proveedor.razonSocial ?? ""),
             ruc: String(proveedor.ruc ?? ""),
-            email: typeof proveedor.email === "string" ? proveedor.email : null,
-            telefono:
-              typeof proveedor.telefono === "string"
-                ? proveedor.telefono
-                : null,
-            direccion:
-              typeof proveedor.direccion === "string"
-                ? proveedor.direccion
-                : null,
-            contactoNombre:
-              typeof proveedor.contactoNombre === "string"
-                ? proveedor.contactoNombre
-                : null,
-            contactoTelefono:
-              typeof proveedor.contactoTelefono === "string"
-                ? proveedor.contactoTelefono
-                : null,
-            notas: typeof proveedor.notas === "string" ? proveedor.notas : null,
+            email: pickString("email"),
+            telefono: pickString("telefono"),
+            celular: pickString("celular"),
+            direccion: pickString("direccion"),
+            distrito: pickString("distrito"),
+            provincia: pickString("provincia"),
+            departamento: pickString("departamento"),
+            referencia: pickString("referencia"),
+            latitud: pickNumber("latitud"),
+            longitud: pickNumber("longitud"),
+            contactoNombre: pickString("contactoNombre"),
+            contactoTelefono: pickString("contactoTelefono"),
+            notas: pickString("notas"),
             activo: Boolean(proveedor.activo),
+            createdAt: pickIsoString("createdAt"),
+            updatedAt: pickIsoString("updatedAt"),
           };
 
           setViewDetailId(null);
