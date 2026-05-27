@@ -199,7 +199,7 @@ function AuditoriaCard({
 
   // Custom theme colors for operator avatar
   const avatarCls = user
-    ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:shadow-indigo-500/40"
+    ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-600 dark:shadow-none"
     : "bg-slate-500 text-white shadow-sm shadow-slate-500/30 dark:shadow-slate-500/40";
 
   const initials = user
@@ -212,11 +212,11 @@ function AuditoriaCard({
   // Dynamic colors for action badge
   const actionCls = 
     item.accion === "CREAR"
-      ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20"
+      ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/20 dark:bg-emerald-600 dark:shadow-none"
       : item.accion === "ACTUALIZAR"
-        ? "bg-sky-500 text-white shadow-sm shadow-sky-500/20"
+        ? "bg-sky-500 text-white shadow-sm shadow-sky-500/20 dark:bg-sky-600 dark:shadow-none"
         : item.accion === "ELIMINAR"
-          ? "bg-red-500 text-white shadow-sm shadow-red-500/20"
+          ? "bg-red-500 text-white shadow-sm shadow-red-500/20 dark:bg-red-600 dark:shadow-none"
           : "bg-muted text-muted-foreground";
 
   return (
@@ -560,7 +560,7 @@ export default function AuditoriaPage() {
             return (
               <div className="flex items-center gap-2.5 min-w-0">
                 <span
-                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:shadow-indigo-500/40 font-bold text-[10px]"
+                  className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-600 dark:shadow-none font-bold text-[10px]"
                   aria-hidden
                 >
                   {user.nombre.slice(0, 2).toUpperCase()}

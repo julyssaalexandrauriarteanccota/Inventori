@@ -40,6 +40,8 @@ type AtmosphereMeta = {
   label: string;
   description: string;
   preview: { base: string; accent: string };
+  fontVar: string;
+  fontLabel: string;
 };
 
 const ATMOSPHERE_OPTIONS: AtmosphereMeta[] = [
@@ -47,22 +49,28 @@ const ATMOSPHERE_OPTIONS: AtmosphereMeta[] = [
     value: "industrial",
     label: "Industrial",
     description:
-      "Gris neutro nítido y acento azul. Máxima claridad y alto contraste para reporte formal.",
+      "Gris neutro nítido y acento azul. Inter + Playfair Display. Máxima claridad para reporte formal.",
     preview: { base: "oklch(0.975 0 0)", accent: "oklch(0.60 0.25 250)" },
+    fontVar: "var(--font-playfair)",
+    fontLabel: "Aa",
   },
   {
     value: "tecnologica",
     label: "Tecnológica",
     description:
-      "Gris frío matizado y acento jade. Look técnico ligeramente opaco para uso prolongado.",
+      "Gris frío matizado y acento jade. IBM Plex + Montserrat. Look técnico para uso prolongado.",
     preview: { base: "oklch(0.965 0.006 185)", accent: "oklch(0.58 0.15 185)" },
+    fontVar: "var(--font-montserrat)",
+    fontLabel: "Aa",
   },
   {
     value: "comercial",
     label: "Comercial",
     description:
-      "Fondo cálido tipo cream y acento naranja. Suave y acogedor para atención al cliente y POS.",
+      "Fondo cálido cream y acento naranja. Poppins + Bricolage. Suave y acogedor para POS.",
     preview: { base: "oklch(0.955 0.018 35)", accent: "oklch(0.65 0.22 45)" },
+    fontVar: "var(--font-bricolage)",
+    fontLabel: "Aa",
   },
 ];
 
@@ -111,15 +119,15 @@ export function PreferenciasSettingsContent() {
                 className={cn(
                   "group/theme flex flex-col items-start gap-2 rounded-xl border p-3 text-left transition-colors",
                   selected
-                    ? "border-(--sidebar-primary)/60 bg-(--sidebar-primary)/8"
-                    : "border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40",
+                    ? "border-(--sidebar-primary) bg-(--sidebar-primary)/10 shadow-sm"
+                    : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/40",
                 )}
               >
                 <span
                   className={cn(
                     "flex size-8 items-center justify-center rounded-lg transition-colors",
                     selected
-                      ? "bg-(--sidebar-primary)/15 text-(--sidebar-primary)"
+                      ? "bg-(--sidebar-primary) text-(--sidebar-primary-foreground) shadow-sm shadow-[var(--sidebar-primary)]/25 dark:shadow-none"
                       : "bg-background text-muted-foreground group-hover/theme:text-foreground",
                   )}
                 >
@@ -145,7 +153,7 @@ export function PreferenciasSettingsContent() {
       </section>
 
       {/* Atmósfera de trabajo */}
-      <section className="flex flex-col gap-3 border-t border-border/40 pt-4">
+      <section className="flex flex-col gap-3 border-t border-border/70 pt-5">
         <div>
           <h3 className="text-sm font-medium text-foreground">
             Atmósfera de trabajo
@@ -172,8 +180,8 @@ export function PreferenciasSettingsContent() {
                 className={cn(
                   "group/atmosphere flex items-center gap-4 rounded-xl border p-3.5 text-left transition-colors",
                   selected
-                    ? "border-(--sidebar-primary)/60 bg-(--sidebar-primary)/8"
-                    : "border-border/50 bg-muted/20 hover:border-border hover:bg-muted/40",
+                    ? "border-(--sidebar-primary) bg-(--sidebar-primary)/10 shadow-sm"
+                    : "border-border/70 bg-muted/20 hover:border-border hover:bg-muted/40",
                 )}
               >
                 <span
@@ -181,9 +189,14 @@ export function PreferenciasSettingsContent() {
                   style={{ backgroundColor: option.preview.base }}
                 >
                   <span
-                    className="size-6 rounded-full ring-1 ring-black/10 shadow-sm"
-                    style={{ backgroundColor: option.preview.accent }}
-                  />
+                    className="flex size-7 items-center justify-center rounded-full text-[13px] font-semibold leading-none text-white ring-1 ring-black/10 shadow-sm"
+                    style={{
+                      backgroundColor: option.preview.accent,
+                      fontFamily: option.fontVar,
+                    }}
+                  >
+                    {option.fontLabel}
+                  </span>
                 </span>
                 <div className="flex flex-1 flex-col gap-0.5">
                   <span
@@ -211,7 +224,7 @@ export function PreferenciasSettingsContent() {
       </section>
 
       {/* Más opciones */}
-      <section className="flex flex-col gap-3 border-t border-border/40 pt-4">
+      <section className="flex flex-col gap-3 border-t border-border/70 pt-5">
         <div>
           <h3 className="text-sm font-medium text-foreground">Más opciones</h3>
           <p className="text-xs text-muted-foreground">Próximamente</p>

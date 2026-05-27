@@ -234,7 +234,7 @@ export function ConfigurationPageContent() {
           />
 
           <ResizablePanel defaultSize={78} minSize={50}>
-            <section className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-border/60 bg-card p-4 text-card-foreground shadow-sm sm:p-5">
+            <section className="flex h-full min-h-0 min-w-0 flex-col overflow-y-auto rounded-2xl border border-border/70 bg-card/75 backdrop-blur-sm p-4 text-card-foreground shadow-[0_14px_34px_-34px_rgba(15,23,42,0.42)] sm:p-5">
               <SectionContent
                 sectionId={activeSection}
                 onRequestDeleteAction={handleRequestDelete}

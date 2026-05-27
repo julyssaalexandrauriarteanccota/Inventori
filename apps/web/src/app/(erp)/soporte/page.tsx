@@ -1132,7 +1132,7 @@ function HighlightedText({ text, search }: HighlightedTextProps) {
       >
         <AlertDialogContent className="w-full sm:max-w-md rounded-3xl border-l-4 border-l-red-500 p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none">
               <Trash2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
@@ -1165,7 +1165,7 @@ function HighlightedText({ text, search }: HighlightedTextProps) {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (

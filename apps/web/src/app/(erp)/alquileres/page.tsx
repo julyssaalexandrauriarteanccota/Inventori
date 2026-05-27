@@ -368,7 +368,7 @@ export default function AlquileresPage() {
         cell: ({ row }) => (
           <div className="flex items-center gap-2.5 min-w-0">
             <span
-              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:shadow-emerald-500/40"
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-600 dark:shadow-none"
               aria-hidden
             >
               <ShieldCheck className="size-4" />

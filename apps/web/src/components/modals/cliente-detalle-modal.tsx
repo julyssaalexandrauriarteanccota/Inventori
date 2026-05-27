@@ -391,7 +391,7 @@ export function ClienteDetalleModal({
                     className={cn(
                       "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
                       (cliente.activo as boolean)
-                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-600 dark:shadow-none"
                         : "bg-muted text-muted-foreground border border-border/60",
                     )}
                   >
@@ -486,7 +486,7 @@ export function ClienteDetalleModal({
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white shadow-sm shadow-sky-500/30">
                         1
                       </span>
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-600 dark:shadow-none">
                         <User className="size-4" />
                       </div>
                       <div>
@@ -535,7 +535,7 @@ export function ClienteDetalleModal({
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white shadow-sm shadow-violet-500/30">
                         2
                       </span>
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30 dark:bg-violet-600 dark:shadow-none">
                         <Fingerprint className="size-4" />
                       </div>
                       <div>
@@ -634,7 +634,7 @@ export function ClienteDetalleModal({
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-500/30">
                         3
                       </span>
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-600 dark:shadow-none">
                         <Mail className="size-4" />
                       </div>
                       <div>
@@ -670,7 +670,7 @@ export function ClienteDetalleModal({
                       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-sm shadow-amber-500/30">
                         4
                       </span>
-                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30">
+                      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600 dark:shadow-none">
                         <MapPin className="size-4" />
                       </div>
                       <div>

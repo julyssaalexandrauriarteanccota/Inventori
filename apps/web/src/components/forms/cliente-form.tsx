@@ -463,7 +463,7 @@ export function ClienteForm({
         <div className="rounded-2xl border border-border/60 border-l-4 border-l-sky-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white shadow-sm shadow-sky-500/30">1</span>
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-600 dark:shadow-none">
               <User className="size-4" />
             </div>
             <div>
@@ -716,7 +716,7 @@ export function ClienteForm({
         <div className="rounded-2xl border border-border/60 border-l-4 border-l-emerald-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-500/30">2</span>
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:bg-emerald-600 dark:shadow-none">
               <Mail className="size-4" />
             </div>
             <div>
@@ -783,7 +783,7 @@ export function ClienteForm({
         <div className="rounded-2xl border border-border/60 border-l-4 border-l-amber-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-sm shadow-amber-500/30">3</span>
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600 dark:shadow-none">
               <MapPin className="size-4" />
             </div>
             <div>
@@ -942,7 +942,7 @@ export function ClienteForm({
         <div className="rounded-2xl border border-border/60 border-l-4 border-l-violet-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
             <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white shadow-sm shadow-violet-500/30">4</span>
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30 dark:bg-violet-600 dark:shadow-none">
               <CheckCircle2 className="size-4" />
             </div>
             <div>

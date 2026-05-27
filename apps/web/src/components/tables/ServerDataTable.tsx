@@ -94,8 +94,8 @@ function getDefaultColumnVisibility<TData, TValue>(
 function DataTableSkeleton({ columns }: { columns: number }) {
   return (
     <div className="flex flex-col gap-3">
-      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
-        <div className="border-b border-border/60 bg-muted/50 px-4 py-3.5">
+      <div className="overflow-hidden rounded-2xl border border-border/70 bg-card/75 backdrop-blur-sm">
+        <div className="border-b border-border/70 bg-muted/30 px-4 py-3.5">
           <div
             className="grid gap-4"
             style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
@@ -348,7 +348,7 @@ export function ServerDataTable<TData, TValue>({
       )}
       <div
         className={cn(
-          "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_14px_34px_-34px_rgba(15,23,42,0.42)]",
+          "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/75 backdrop-blur-sm shadow-[0_14px_34px_-34px_rgba(15,23,42,0.42)]",
           fillAvailableHeight && "flex-1",
         )}
       >
@@ -503,7 +503,7 @@ export function ServerDataTable<TData, TValue>({
       </div>
 
       {(total > 0 || onLimitChange) && (
-        <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             {onLimitChange && pageSizeOptions?.length ? (
               <div className="flex items-center gap-2">
