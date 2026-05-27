@@ -5094,7 +5094,7 @@ export function SettingsDialog({
         </DialogDescription>
 
         <div className="grid h-[min(84vh,720px)] grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[240px_minmax(0,1fr)] md:grid-rows-none">
-          <aside className="flex min-h-0 max-h-64 flex-col border-b border-border/50 bg-muted/15 p-3 md:max-h-none md:border-b-0 md:border-r">
+          <aside className="flex min-h-0 max-h-64 flex-col border-b border-border/70 bg-muted/30 p-3 md:max-h-none md:border-b-0 md:border-r md:border-border/70">
             <div className="px-2 py-2">
               <h2 className="text-sm font-semibold text-foreground">Ajustes</h2>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -5113,22 +5113,22 @@ export function SettingsDialog({
                     type="button"
                     onClick={() => setActiveSection(section.id)}
                     className={cn(
-                      "group flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors",
+                      "group flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition-colors",
                       "hover:bg-background/70 hover:text-foreground",
                       isActive
-                        ? "bg-background text-foreground shadow-sm ring-1 ring-border/60"
+                        ? "bg-background text-foreground shadow-sm ring-1 ring-border/70"
                         : "text-muted-foreground",
                     )}
                   >
                     <span
                       className={cn(
-                        "flex size-8 shrink-0 items-center justify-center rounded-xl transition-colors",
+                        "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
                         isActive
-                          ? "bg-primary/10 text-primary"
+                          ? "bg-primary text-primary-foreground shadow-sm shadow-primary/25 dark:shadow-none"
                           : "bg-muted text-muted-foreground group-hover:text-foreground",
                       )}
                     >
-                      <Icon className="size-4" />
+                      <Icon className="size-4" strokeWidth={1.85} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">
@@ -5151,7 +5151,7 @@ export function SettingsDialog({
               })}
             </nav>
 
-            <div className="mt-3 rounded-2xl border border-border/60 bg-background/70 p-3">
+            <div className="mt-3 rounded-2xl border border-border/70 bg-background/70 p-3">
               <h3 className="text-xs font-semibold text-foreground">
                 Configuración estructural
               </h3>
@@ -5173,7 +5173,7 @@ export function SettingsDialog({
           </aside>
 
           <div className="flex min-h-0 flex-col">
-            <div className="border-b border-border/40 px-4 py-4 sm:px-6">
+            <div className="border-b border-border/70 px-4 py-4 sm:px-6">
               <h2 className="text-base font-semibold text-foreground">
                 {quickDialogSections.find((item) => item.id === activeSection)
                   ?.name ?? "Ajustes rápidos"}

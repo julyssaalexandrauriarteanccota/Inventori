@@ -11,7 +11,6 @@ import {
 } from 'lucide-react'
 import { SocketEvents } from '@erp/shared'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Popover,
   PopoverContent,
@@ -130,7 +129,11 @@ export function NotificationCenter() {
           {unreadCount > 0 ? `Notificaciones (${unreadCount} sin leer)` : 'Notificaciones'}
         </TooltipContent>
       </Tooltip>
-      <PopoverContent align="end" className="w-80 p-0 border-sidebar-border/70 bg-sidebar text-sidebar-foreground">
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-[22rem] p-0 border-sidebar-border bg-sidebar supports-[backdrop-filter]:bg-sidebar text-sidebar-foreground backdrop-blur-none shadow-[0_24px_60px_-24px_rgba(15,23,42,0.45)] ring-1 ring-black/5 dark:ring-white/5 overflow-hidden"
+      >
         <div className="flex items-center justify-between border-b border-sidebar-border/70 px-4 py-3">
           <h4 className="text-sm font-semibold text-sidebar-foreground">Notificaciones</h4>
           {unreadCount > 0 && (
