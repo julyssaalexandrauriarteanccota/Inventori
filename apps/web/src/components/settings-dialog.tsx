@@ -137,7 +137,6 @@ import { StatCard } from "@/components/layout/stat-card";
 import { TopbarActions } from "@/components/layout/topbar-actions";
 import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { cn } from "@/lib/utils";
-import ProveedoresPage from "@/app/(erp)/compras/proveedores/page";
 import { getApiAssetUrl } from "@/lib/api";
 import { getUploadAcceptAttr, uploadSelectedFiles } from "@/lib/file-uploads";
 import { generateSecurePassword } from "@/lib/passwords";
@@ -4960,7 +4959,6 @@ export function SectionContent({
     return <UsuariosContent onRequestDelete={onRequestDeleteAction} />;
   if (sectionId === "almacenes")
     return <AlmacenesContent onRequestDelete={onRequestDeleteAction} />;
-  if (sectionId === "proveedores") return <ProveedoresPage />;
   if (sectionId === "categorias")
     return <CategoriasContent onRequestDelete={onRequestDeleteAction} />;
   if (sectionId === "marcas")
