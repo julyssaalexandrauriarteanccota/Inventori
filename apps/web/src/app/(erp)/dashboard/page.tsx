@@ -617,27 +617,60 @@ function CompactKpiCard({
   const textCls = color.split(' ').find((c) => c.startsWith('text-') && !c.startsWith('dark:')) ?? 'text-primary'
   const bgCls   = color.split(' ').find((c) => c.startsWith('bg-'))  ?? 'bg-primary/10'
 
+  /* For colored cards: the whole card uses the tinted background;
+     for muted cards (alerts when count=0): fall back to standard card style */
+  const isMuted = bgCls.startsWith('bg-muted')
+  /* derive border color from bg class: bg-amber-500/10 → border-amber-500/20 */
+  const borderCls = isMuted
+    ? 'border-border'
+    : bgCls.replace('bg-', 'border-').replace('/10', '/20')
+
   return (
     <Link href={href} className="block">
       <div
-        className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg hover:border-border/80 animate-fade-up min-h-[130px] flex flex-col justify-between"
+        className={cn(
+          'group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg animate-fade-up min-h-[130px] flex flex-col justify-between',
+          isMuted ? 'bg-card border-border' : cn(bgCls, borderCls),
+        )}
         style={{ animationDelay: `${index * 70}ms` }}
       >
         {/* top row: icon square + arrow circle */}
         <div className="flex items-center justify-between">
-          <div className={cn('flex size-10 items-center justify-center rounded-xl', bgCls)}>
-            <Icon className={cn('size-5', textCls)} />
-          </div>
-          <div className="flex size-8 items-center justify-center rounded-full border border-border/70 transition-all group-hover:border-primary/30 group-hover:bg-primary/5">
-            <ArrowUpRight className="size-3.5 text-muted-foreground/40 transition-colors group-hover:text-primary" />
+          {/* frosted white tile on tinted cards; normal tinted tile on muted */}
+          {isMuted ? (
+            <div className={cn('flex size-10 items-center justify-center rounded-xl', bgCls)}>
+              <Icon className={cn('size-5', textCls)} />
+            </div>
+          ) : (
+            <div className="flex size-10 items-center justify-center rounded-xl bg-white/70 shadow-sm dark:bg-white/10">
+              <Icon className={cn('size-5', textCls)} />
+            </div>
+          )}
+          <div className={cn(
+            'flex size-8 items-center justify-center rounded-full transition-all',
+            isMuted
+              ? 'border border-border/70 group-hover:border-primary/30 group-hover:bg-primary/5'
+              : 'border border-current/20 group-hover:bg-current/10',
+          )}>
+            <ArrowUpRight className={cn(
+              'size-3.5 transition-colors',
+              isMuted
+                ? 'text-muted-foreground/40 group-hover:text-primary'
+                : cn(textCls, 'opacity-50 group-hover:opacity-90'),
+            )} />
           </div>
         </div>
 
         {/* label + number */}
         <div className="mt-3">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <p className={cn(
+            'text-xs font-medium',
+            isMuted ? 'text-muted-foreground' : 'text-foreground/65',
+          )}>
+            {label}
+          </p>
           {isLoading ? (
-            <div className="mt-1.5 h-9 w-14 animate-pulse rounded-lg bg-muted" />
+            <div className="mt-1.5 h-9 w-14 animate-pulse rounded-lg bg-foreground/[0.08]" />
           ) : (
             <p className="mt-0.5 text-4xl font-display font-bold tabular-nums leading-none">
               {value}
@@ -646,7 +679,12 @@ function CompactKpiCard({
         </div>
 
         {/* subtitle */}
-        <p className="mt-1.5 text-xs text-muted-foreground leading-tight">{subtitle}</p>
+        <p className={cn(
+          'mt-1.5 text-xs leading-tight',
+          isMuted ? 'text-muted-foreground' : 'text-foreground/55',
+        )}>
+          {subtitle}
+        </p>
 
         {/* watermark icon — large + faint in bottom-right */}
         <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.07]">

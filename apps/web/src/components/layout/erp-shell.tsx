@@ -116,15 +116,21 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
         <SidebarInset className="overflow-hidden">
           <header
             className={cn(
-              "flex h-16 shrink-0 items-center justify-between gap-2 px-3 sm:gap-4 sm:px-4",
+              "relative flex h-16 shrink-0 items-center justify-between gap-2 px-3 sm:gap-4 sm:px-4",
               "bg-sidebar text-sidebar-foreground",
               "border-b border-sidebar-border/70",
-              "shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_2px_8px_-2px_rgba(0,0,0,0.06),inset_0_-1px_0_color-mix(in_srgb,var(--accent)_18%,var(--sidebar-border))]",
+              "shadow-[0_2px_8px_-2px_rgba(0,0,0,0.07),inset_0_-1px_0_rgba(0,0,0,0.04)]",
               // Icons always painted with accent color, hover brightens
               "[&_button>svg]:text-sidebar-primary [&_button>svg]:opacity-75 [&_button:hover>svg]:opacity-100 [&_button>svg]:transition-opacity",
             )}
           >
-            <div className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 shadow-none sm:gap-3 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--sidebar-accent))] sm:px-4 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/82">
+            {/* 2px brand accent stripe at the very top of the content header */}
+            <div
+              className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+              style={{ background: 'color-mix(in srgb, var(--sidebar-primary) 40%, transparent)' }}
+              aria-hidden
+            />
+            <div className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 shadow-none sm:gap-3 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-sidebar-accent sm:px-4 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/90">
               <Tooltip>
                 <TooltipTrigger asChild>
                   <SidebarTrigger
@@ -142,7 +148,7 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
                 <DynamicBreadcrumb />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1 border-0 bg-transparent p-0 shadow-none sm:gap-2 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-[color-mix(in_srgb,var(--accent-soft)_55%,var(--sidebar-accent))] sm:px-3 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/82">
+            <div className="flex shrink-0 items-center gap-1 border-0 bg-transparent p-0 shadow-none sm:gap-2 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-sidebar-accent sm:px-3 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/90">
               <AppCommand />
               <NotificationCenter />
               <ThemeToggle />
