@@ -553,7 +553,7 @@ function FeaturedCard({
 }) {
   return (
     <Link href="/ventas" className="block">
-      <div className="group relative overflow-hidden rounded-2xl p-5 flex flex-col justify-between min-h-[128px] bg-[var(--sidebar-primary)] text-white shadow-lg shadow-[var(--sidebar-primary)]/20 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--sidebar-primary)]/30 cursor-pointer">
+      <div className="group relative overflow-hidden rounded-2xl p-5 flex flex-col justify-between h-full min-h-[130px] bg-[var(--sidebar-primary)] text-white shadow-lg shadow-[var(--sidebar-primary)]/20 transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-[var(--sidebar-primary)]/30 cursor-pointer">
         {/* decorative ambient glows inside the card */}
         <div className="pointer-events-none absolute -right-8 -top-8 size-40 rounded-full bg-white/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-12 left-2 size-32 rounded-full bg-white/6 blur-2xl" />
@@ -611,32 +611,46 @@ function CompactKpiCard({
   isLoading: boolean
   index?: number
 }) {
+  /* extract individual classes from the combined color string
+     e.g. "bg-amber-500/10 text-amber-600 dark:text-amber-400" */
+  /* pull light-mode text class (first text-* that is NOT a dark: variant) */
+  const textCls = color.split(' ').find((c) => c.startsWith('text-') && !c.startsWith('dark:')) ?? 'text-primary'
+  const bgCls   = color.split(' ').find((c) => c.startsWith('bg-'))  ?? 'bg-primary/10'
+
   return (
     <Link href={href} className="block">
       <div
-        className="group flex items-center gap-3.5 rounded-2xl border border-border bg-card/80 backdrop-blur-sm px-4 py-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md animate-fade-up"
+        className="group relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg hover:border-border/80 animate-fade-up min-h-[130px] flex flex-col justify-between"
         style={{ animationDelay: `${index * 70}ms` }}
       >
-        <div
-          className={cn(
-            'flex size-11 shrink-0 items-center justify-center rounded-xl transition-all group-hover:scale-110',
-            color,
-          )}
-        >
-          <Icon className="size-5" />
+        {/* top row: icon square + arrow circle */}
+        <div className="flex items-center justify-between">
+          <div className={cn('flex size-10 items-center justify-center rounded-xl', bgCls)}>
+            <Icon className={cn('size-5', textCls)} />
+          </div>
+          <div className="flex size-8 items-center justify-center rounded-full border border-border/70 transition-all group-hover:border-primary/30 group-hover:bg-primary/5">
+            <ArrowUpRight className="size-3.5 text-muted-foreground/40 transition-colors group-hover:text-primary" />
+          </div>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] uppercase tracking-wide font-semibold text-muted-foreground leading-tight">
-            {label}
-          </p>
+
+        {/* label + number */}
+        <div className="mt-3">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
           {isLoading ? (
-            <div className="mt-1 h-7 w-12 animate-pulse rounded bg-muted" />
+            <div className="mt-1.5 h-9 w-14 animate-pulse rounded-lg bg-muted" />
           ) : (
-            <p className="mt-0.5 text-2xl font-display font-bold tabular-nums leading-tight">
+            <p className="mt-0.5 text-4xl font-display font-bold tabular-nums leading-none">
               {value}
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{subtitle}</p>
+        </div>
+
+        {/* subtitle */}
+        <p className="mt-1.5 text-xs text-muted-foreground leading-tight">{subtitle}</p>
+
+        {/* watermark icon — large + faint in bottom-right */}
+        <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.07]">
+          <Icon className={cn('size-24', textCls)} />
         </div>
       </div>
     </Link>
@@ -677,9 +691,9 @@ export default function DashboardPage() {
             Resumen general del sistema
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
-          <div className="size-1.5 rounded-full bg-primary animate-pulse" />
-          <span className="text-sm font-semibold text-foreground">{todayLabel()}</span>
+        <div className="flex shrink-0 items-center gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm self-start">
+          <div className="size-2 rounded-full bg-primary animate-pulse" />
+          <span className="text-sm font-semibold text-foreground whitespace-nowrap">{todayLabel()}</span>
         </div>
       </div>
 
@@ -728,7 +742,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── KPI cards ──────────────────────────────────────────────────── */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 [&>*]:h-full">
         {showAdmin && (
           <FeaturedCard
             value={kpisQ.isLoading ? '--' : formatCurrency(ventasMes?.totalMonto ?? 0)}
