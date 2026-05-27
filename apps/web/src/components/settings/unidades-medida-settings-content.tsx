@@ -131,7 +131,7 @@ export function UnidadesMedidaSettingsContent() {
         size: 220,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-600 dark:shadow-none">
               <Ruler className="size-4" />
             </div>
             <span className="truncate font-medium text-foreground">

@@ -299,7 +299,7 @@ function EquipoCard({
   animationDelay,
 }: EquipoCardProps) {
   const accentBar = "from-sky-400 via-sky-500 to-sky-600";
-  const avatarCls = "bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:shadow-sky-500/40";
+  const avatarCls = "bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-600 dark:shadow-none";
   const title = formatEquipoNombre(eq);
   const marcaModelo = [eq.marca, eq.modelo].filter(Boolean).join(" · ") || "Sin marca/modelo";
   const initials = (eq.marca || "EQ").slice(0, 2).toUpperCase();

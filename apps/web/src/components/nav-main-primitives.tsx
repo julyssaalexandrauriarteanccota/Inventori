@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils"
 import type { NavBadgeValue } from "@/components/nav-badges"
 
 export const navButtonClasses = cn(
-  "group/item relative h-9 gap-2.5 rounded-md font-medium",
+  "group/item relative h-9 gap-2.5 rounded-xl font-medium",
   "!transition-[background-color,color,font-weight]",
   "text-sidebar-foreground/85 hover:text-foreground",
   "data-[active=true]:bg-[var(--sidebar-active-bg)] data-[active=true]:text-[var(--sidebar-active-fg)] data-[active=true]:font-semibold",
@@ -42,10 +42,10 @@ export function SidebarNavIconTile({
   return (
     <span
       className={cn(
-        "relative flex size-7 group-data-[collapsible=icon]:size-8 shrink-0 items-center justify-center rounded-[8px] transition-all duration-300",
+        "relative flex size-7 group-data-[collapsible=icon]:size-8 shrink-0 items-center justify-center rounded-lg transition-all duration-300",
         active
-          ? "bg-[var(--sidebar-primary)]/15 text-[var(--sidebar-primary)] ring-1 ring-[var(--sidebar-primary)]/25"
-          : "text-[var(--sidebar-icon-fg)] group-hover/item:bg-[var(--sidebar-primary)]/[0.07] group-hover/item:text-[var(--sidebar-primary)]",
+          ? "bg-[var(--sidebar-primary)] text-[var(--sidebar-primary-foreground)] shadow-sm shadow-[var(--sidebar-primary)]/25 dark:shadow-none"
+          : "bg-[var(--sidebar-accent)]/60 text-[var(--sidebar-icon-fg)] group-hover/item:bg-[var(--sidebar-primary)]/[0.10] group-hover/item:text-[var(--sidebar-primary)]",
       )}
     >
       <Icon

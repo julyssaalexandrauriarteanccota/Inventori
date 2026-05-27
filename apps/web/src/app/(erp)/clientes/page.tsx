@@ -340,8 +340,8 @@ function ClienteCard({
     ? "from-indigo-400 via-indigo-500 to-indigo-600"
     : "from-amber-400 via-amber-500 to-amber-600";
   const avatarCls = isEmpresa
-    ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:shadow-indigo-500/40"
-    : "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:shadow-amber-500/40";
+    ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-600 dark:shadow-none"
+    : "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600 dark:shadow-none";
   return (
     <div
       className={cn(
@@ -851,8 +851,8 @@ export default function ClientesPage() {
           const text = getDisplayName(row.original);
           const isEmpresa = row.original.tipo === TipoCliente.EMPRESA;
           const avatarCls = isEmpresa
-            ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30"
-            : "bg-amber-500 text-white shadow-sm shadow-amber-500/30";
+            ? "bg-indigo-500 text-white shadow-sm shadow-indigo-500/30 dark:bg-indigo-600 dark:shadow-none"
+            : "bg-amber-500 text-white shadow-sm shadow-amber-500/30 dark:bg-amber-600 dark:shadow-none";
           return (
             <div className="flex items-center gap-2.5 min-w-0">
               <span
@@ -1651,7 +1651,7 @@ export default function ClientesPage() {
             <X className="size-4" />
           </AlertDialogCancel>
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none">
               <Trash2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
@@ -1692,7 +1692,7 @@ export default function ClientesPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
-              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
@@ -1716,7 +1716,7 @@ export default function ClientesPage() {
       >
         <AlertDialogContent className="w-full sm:max-w-md rounded-3xl border-l-4 border-l-red-500 p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none">
               <Trash2 className="size-5" />
             </div>
             <div className="flex flex-col gap-1.5 text-left">
@@ -1753,7 +1753,7 @@ export default function ClientesPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleBulkDelete}
-              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 dark:bg-red-600 dark:shadow-none hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? (
@@ -1775,7 +1775,7 @@ export default function ClientesPage() {
         <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/25">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/25 dark:bg-sky-600 dark:shadow-none">
                 <Users className="size-4" />
               </div>
               <div>
@@ -1807,7 +1807,7 @@ export default function ClientesPage() {
         <DialogContent className="w-full sm:max-w-2xl md:max-w-4xl lg:max-w-5xl overflow-hidden p-0 max-h-[90vh] flex flex-col rounded-3xl border border-border/60 bg-background shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 sm:px-6 py-4">
             <div className="flex items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-500/25">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-sm shadow-amber-500/25 dark:bg-amber-600 dark:shadow-none">
                 <Pencil className="size-4" />
               </div>
               <div>

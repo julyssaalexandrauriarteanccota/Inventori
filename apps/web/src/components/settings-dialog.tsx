@@ -1039,7 +1039,7 @@ function CategoriaRow({
         ) : (
           <span className="size-4.5" />
         )}
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:bg-sky-600 dark:shadow-none">
           <FolderTree className="size-3.5" />
         </div>
         <div className="min-w-0 flex-1">
