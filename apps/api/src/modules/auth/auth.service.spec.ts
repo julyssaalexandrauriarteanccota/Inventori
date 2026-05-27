@@ -153,6 +153,43 @@ describe('AuthService', () => {
     });
   });
 
+  describe('register', () => {
+    const registerDto = {
+      nombre: 'Nuevo',
+      apellido: 'Usuario',
+      email: 'nuevo@erp.local',
+      password: 'Password123!',
+    };
+
+    beforeEach(() => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue(null);
+      mockPrismaService.usuario.create.mockResolvedValue({
+        id: 'uuid-nuevo',
+        email: registerDto.email,
+        nombre: registerDto.nombre,
+      });
+      mockPrismaService.emailVerificationOtp.updateMany.mockResolvedValue({});
+      mockPrismaService.emailVerificationOtp.create.mockResolvedValue({});
+    });
+
+    it('should self-register with activo=false and mustChangePassword=false', async () => {
+      const result = await service.register(registerDto);
+
+      const createCall = mockPrismaService.usuario.create.mock.calls[0][0];
+      expect(createCall.data.activo).toBe(false);
+      // Usuario eligió su propia pwd → no se le pide rotarla.
+      expect(createCall.data.mustChangePassword).toBe(false);
+      expect(createCall.data.emailVerificado).toBe(false);
+      expect(result.requiresEmailVerification).toBe(true);
+    });
+
+    it('should reject weak passwords', async () => {
+      await expect(
+        service.register({ ...registerDto, password: 'weak' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('refresh', () => {
     it('should refresh tokens with valid refresh token', async () => {
       mockPrismaService.refreshToken.findFirst.mockResolvedValue({

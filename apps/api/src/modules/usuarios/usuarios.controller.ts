@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { RolUsuario } from '@erp/shared';
 import { UsuariosService } from './usuarios.service';
 import {
+  ActivarUsuarioDto,
   CreateUsuarioDto,
   UpdateUsuarioDto,
   QueryUsuarioDto,
@@ -62,21 +63,26 @@ export class UsuariosController {
   @Patch(':id/password')
   @Roles(RolUsuario.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Cambiar contraseña de usuario' })
+  @ApiOperation({ summary: 'Cambiar contraseña de usuario (admin)' })
   changePassword(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangePasswordDto,
   ) {
-    return this.usuariosService.changePassword(id, dto);
+    // Admin elige la pwd → forzar rotación en el próximo login.
+    return this.usuariosService.changePassword(id, dto, { forceChange: true });
   }
 
   @Patch(':id/activar')
   @Roles(RolUsuario.ADMIN)
   @ApiOperation({
-    summary: 'Activar cuenta (requiere email verificado) y enviar bienvenida',
+    summary:
+      'Activar cuenta y asignar rol (requiere email verificado, envía bienvenida)',
   })
-  activar(@Param('id', ParseUUIDPipe) id: string) {
-    return this.usuariosService.activar(id);
+  activar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ActivarUsuarioDto,
+  ) {
+    return this.usuariosService.activar(id, dto);
   }
 
   @Patch(':id/desactivar')

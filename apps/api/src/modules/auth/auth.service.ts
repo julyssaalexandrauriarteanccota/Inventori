@@ -127,9 +127,13 @@ export class AuthService {
         apellido: dto.apellido,
         email: dto.email,
         password: hashedPassword,
+        // Placeholder hasta que el admin elija el rol al activar.
+        // El usuario no puede loguear mientras activo:false.
         rol: RolUsuario.TECNICO,
         activo: false,
-        mustChangePassword: true,
+        // El propio usuario eligió su contraseña en signup, no hay que
+        // forzar cambio en el primer login.
+        mustChangePassword: false,
         emailVerificado: false,
       },
     });

@@ -51,6 +51,11 @@ export interface CreateUsuarioPayload {
   password: string;
   rol: RolUsuario;
   activo?: boolean;
+  mustChangePassword?: boolean;
+}
+
+export interface ActivarUsuarioPayload {
+  rol: RolUsuario;
 }
 
 export interface UpdateUsuarioPayload {
@@ -125,8 +130,11 @@ export function useDeleteUsuario() {
 export function useActivarUsuario() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      api.patch<{ id: string; message: string }>(`/usuarios/${id}/activar`),
+    mutationFn: ({ id, rol }: { id: string } & ActivarUsuarioPayload) =>
+      api.patch<{ id: string; message: string }>(
+        `/usuarios/${id}/activar`,
+        { rol },
+      ),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [USUARIOS_KEY] });
     },

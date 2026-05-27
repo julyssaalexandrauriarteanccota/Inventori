@@ -46,4 +46,13 @@ export class CreateUsuarioDto {
   @IsBoolean()
   @IsOptional()
   activo?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Cuando el admin crea al usuario, por defecto se exige cambio de contraseña en el primer login.',
+  })
+  @IsBoolean()
+  @IsOptional()
+  mustChangePassword?: boolean;
 }

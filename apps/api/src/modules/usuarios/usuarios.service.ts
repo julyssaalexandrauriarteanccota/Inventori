@@ -16,6 +16,7 @@ import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../auth/email.service';
 import { buildAccountActivatedEmail } from '../auth/email-templates';
 import {
+  ActivarUsuarioDto,
   CreateUsuarioDto,
   UpdateUsuarioDto,
   QueryUsuarioDto,
@@ -65,12 +66,18 @@ export class UsuariosService {
    * Reglas:
    *  - El usuario debe existir y NO estar borrado.
    *  - Su email debe estar verificado (`emailVerificado = true`).
-   *  - Si ya está activo, retorna sin enviar correo (idempotente).
+   *  - El admin DEBE indicar el rol a asignar (sobreescribe el placeholder
+   *    que dejó el signup).
+   *  - Si ya está activo y el rol coincide, retorna sin enviar correo
+   *    (idempotente).
+   *
+   * También limpia `mustChangePassword: false` para destrabar usuarios que
+   * venían con el flag colgado por el bug anterior del flujo de registro.
    *
    * Envía correo de bienvenida con link al login. Si SMTP falla, la
    * activación se aplica igual y se registra warn en logs.
    */
-  async activar(id: string) {
+  async activar(id: string, dto: ActivarUsuarioDto) {
     const usuario = await this.prisma.usuario.findFirst({
       where: { id, deletedAt: null },
       select: {
@@ -90,13 +97,22 @@ export class UsuariosService {
         'El usuario aún no ha verificado su correo. No se puede activar hasta entonces.',
       );
     }
-    if (usuario.activo) {
+    if (usuario.activo && (usuario.rol as RolUsuario) === dto.rol) {
       return { id: usuario.id, message: 'La cuenta ya estaba activa.' };
     }
 
     await this.prisma.usuario.update({
       where: { id },
-      data: { activo: true },
+      data: {
+        activo: true,
+        rol: dto.rol,
+        // Self-register no fuerza cambio de contraseña; este reset limpia
+        // el flag colgado en usuarios pre-existentes del bug anterior.
+        mustChangePassword: false,
+        // Invalida access tokens previos si el rol cambió (alineado con
+        // la spec de sesión única).
+        sessionVersion: { increment: 1 },
+      },
     });
 
     const frontendUrl =
@@ -107,7 +123,7 @@ export class UsuariosService {
     const template = buildAccountActivatedEmail({
       nombre: usuario.nombre,
       loginUrl,
-      rolLabel: ROL_LABELS[usuario.rol as RolUsuario] ?? String(usuario.rol),
+      rolLabel: ROL_LABELS[dto.rol] ?? String(dto.rol),
       brand,
     });
     await this.emailService.send(usuario.email, template);
@@ -149,10 +165,15 @@ export class UsuariosService {
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
+    const { mustChangePassword: mustChangeOverride, ...rest } = dto;
+
     const usuario = await this.prisma.usuario.create({
       data: {
-        ...dto,
+        ...rest,
         password: hashedPassword,
+        // Admin eligió la contraseña; por defecto se exige rotación en el
+        // primer login. El admin puede saltearlo enviando explicit false.
+        mustChangePassword: mustChangeOverride ?? true,
       },
       select: SELECT_USUARIO,
     });
@@ -236,7 +257,20 @@ export class UsuariosService {
     return usuario;
   }
 
-  async changePassword(id: string, dto: ChangePasswordDto) {
+  /**
+   * Cambia la contraseña de un usuario.
+   *
+   * `opts.forceChange` controla si el usuario debe rotar la contraseña en
+   * su próximo login:
+   *  - `true`  → admin reseteó la pwd; el usuario debe cambiarla.
+   *  - `false` (default) → el usuario eligió la pwd (self-pwd, reset por
+   *    email); no se le pide rotarla de nuevo.
+   */
+  async changePassword(
+    id: string,
+    dto: ChangePasswordDto,
+    opts: { forceChange?: boolean } = {},
+  ) {
     await this.findOne(id); // Verifica existencia
 
     this.ensureSecurePassword(dto.password);
@@ -247,7 +281,7 @@ export class UsuariosService {
       where: { id },
       data: {
         password: hashedPassword,
-        mustChangePassword: false,
+        mustChangePassword: opts.forceChange ?? false,
         sessionVersion: { increment: 1 },
       },
     });

@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { RolUsuario } from '@erp/shared';
@@ -90,6 +94,32 @@ describe('UsuariosService', () => {
       await expect(service.create(createDto)).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('should default mustChangePassword to true when admin creates', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue(null);
+      mockPrismaService.usuario.create.mockResolvedValue({
+        id: 'uuid-new',
+        email: createDto.email,
+      });
+
+      await service.create(createDto);
+
+      const createCall = mockPrismaService.usuario.create.mock.calls[0][0];
+      expect(createCall.data.mustChangePassword).toBe(true);
+    });
+
+    it('should respect explicit mustChangePassword=false from admin', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue(null);
+      mockPrismaService.usuario.create.mockResolvedValue({
+        id: 'uuid-new',
+        email: createDto.email,
+      });
+
+      await service.create({ ...createDto, mustChangePassword: false });
+
+      const createCall = mockPrismaService.usuario.create.mock.calls[0][0];
+      expect(createCall.data.mustChangePassword).toBe(false);
     });
   });
 
@@ -210,7 +240,7 @@ describe('UsuariosService', () => {
   });
 
   describe('changePassword', () => {
-    it('should hash password and revoke tokens', async () => {
+    it('should default mustChangePassword to false when user picks the pwd', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue({ id: 'uuid-1' });
       mockPrismaService.usuario.update.mockResolvedValue({});
       mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
@@ -226,6 +256,99 @@ describe('UsuariosService', () => {
       expect(mockPrismaService.refreshToken.deleteMany).toHaveBeenCalledWith({
         where: { usuarioId: 'uuid-1' },
       });
+    });
+
+    it('should set mustChangePassword to true when forceChange=true (admin reset)', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue({ id: 'uuid-1' });
+      mockPrismaService.usuario.update.mockResolvedValue({});
+      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
+
+      await service.changePassword(
+        'uuid-1',
+        { password: 'NewPass123!' },
+        { forceChange: true },
+      );
+
+      const updateCall = mockPrismaService.usuario.update.mock.calls[0][0];
+      expect(updateCall.data.mustChangePassword).toBe(true);
+      expect(updateCall.data.sessionVersion).toEqual({ increment: 1 });
+    });
+  });
+
+  describe('activar', () => {
+    const baseUser = {
+      id: 'uuid-1',
+      email: 'pending@erp.local',
+      nombre: 'Pending',
+      rol: RolUsuario.TECNICO,
+      activo: false,
+      emailVerificado: true,
+    };
+
+    it('should activate with the rol provided by admin', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue(baseUser);
+      mockPrismaService.usuario.update.mockResolvedValue({});
+
+      await service.activar('uuid-1', { rol: RolUsuario.ENCARGADO });
+
+      const updateCall = mockPrismaService.usuario.update.mock.calls[0][0];
+      expect(updateCall.where).toEqual({ id: 'uuid-1' });
+      expect(updateCall.data.activo).toBe(true);
+      expect(updateCall.data.rol).toBe(RolUsuario.ENCARGADO);
+      expect(updateCall.data.mustChangePassword).toBe(false);
+      expect(updateCall.data.sessionVersion).toEqual({ increment: 1 });
+      expect(mockEmailService.send).toHaveBeenCalled();
+    });
+
+    it('should throw BadRequest if email is not verified', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue({
+        ...baseUser,
+        emailVerificado: false,
+      });
+
+      await expect(
+        service.activar('uuid-1', { rol: RolUsuario.TECNICO }),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.usuario.update).not.toHaveBeenCalled();
+    });
+
+    it('should throw NotFound if user does not exist', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.activar('uuid-1', { rol: RolUsuario.TECNICO }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should be idempotent when already active with same rol', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue({
+        ...baseUser,
+        activo: true,
+        rol: RolUsuario.ENCARGADO,
+      });
+
+      const result = await service.activar('uuid-1', {
+        rol: RolUsuario.ENCARGADO,
+      });
+
+      expect(result.message).toContain('ya estaba activa');
+      expect(mockPrismaService.usuario.update).not.toHaveBeenCalled();
+      expect(mockEmailService.send).not.toHaveBeenCalled();
+    });
+
+    it('should update rol and send email if already active but rol changed', async () => {
+      mockPrismaService.usuario.findFirst.mockResolvedValue({
+        ...baseUser,
+        activo: true,
+        rol: RolUsuario.TECNICO,
+      });
+      mockPrismaService.usuario.update.mockResolvedValue({});
+
+      await service.activar('uuid-1', { rol: RolUsuario.ADMIN });
+
+      const updateCall = mockPrismaService.usuario.update.mock.calls[0][0];
+      expect(updateCall.data.rol).toBe(RolUsuario.ADMIN);
+      expect(mockEmailService.send).toHaveBeenCalled();
     });
   });
 });

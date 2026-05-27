@@ -3119,6 +3119,11 @@ function UsuariosContent({
   const createMutation = useCreateUsuario();
   const activarMutation = useActivarUsuario();
   const desactivarMutation = useDesactivarUsuario();
+  const [activarTarget, setActivarTarget] =
+    React.useState<UsuarioItem | null>(null);
+  const [activarRol, setActivarRol] = React.useState<RolUsuario>(
+    RolUsuario.TECNICO,
+  );
 
   const handleToggleActive = React.useCallback(
     (usuario: UsuarioItem) => {
@@ -3129,15 +3134,28 @@ function UsuariosContent({
             toast.error(err.message || "Error al desactivar"),
         });
       } else {
-        activarMutation.mutate(usuario.id, {
-          onSuccess: () => toast.success(`${usuario.nombre} activado`),
-          onError: (err: Error) =>
-            toast.error(err.message || "Error al activar"),
-        });
+        // Activar requiere que el admin elija rol explicito.
+        setActivarRol(usuario.rol);
+        setActivarTarget(usuario);
       }
     },
-    [activarMutation, desactivarMutation],
+    [desactivarMutation],
   );
+
+  const handleConfirmActivar = React.useCallback(() => {
+    if (!activarTarget) return;
+    activarMutation.mutate(
+      { id: activarTarget.id, rol: activarRol },
+      {
+        onSuccess: () => {
+          toast.success(`${activarTarget.nombre} activado`);
+          setActivarTarget(null);
+        },
+        onError: (err: Error) =>
+          toast.error(err.message || "Error al activar"),
+      },
+    );
+  }, [activarMutation, activarRol, activarTarget]);
 
   const usuarios = res?.data ?? [];
   const meta = res?.meta;
@@ -3597,6 +3615,60 @@ function UsuariosContent({
               onToggleActive={() => handleToggleActive(activeViewingItem)}
             />
           ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Activar dialog: requiere rol explicito */}
+      <Dialog
+        open={!!activarTarget}
+        onOpenChange={(open) => {
+          if (!open) setActivarTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Activar y asignar rol</DialogTitle>
+            <DialogDescription>
+              {activarTarget
+                ? `Elige el rol con el que se activará ${activarTarget.nombre} ${activarTarget.apellido}.`
+                : "Elige el rol con el que se activará el usuario."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Field>
+              <FieldLabel htmlFor="activar-rol">Rol</FieldLabel>
+              <Select
+                value={activarRol}
+                onValueChange={(val) => setActivarRol(val as RolUsuario)}
+              >
+                <SelectTrigger id="activar-rol">
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(RolUsuario).map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROL_LABELS[r] ?? r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setActivarTarget(null)}
+              disabled={activarMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmActivar}
+              disabled={activarMutation.isPending}
+            >
+              {activarMutation.isPending ? "Activando..." : "Activar"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </>
