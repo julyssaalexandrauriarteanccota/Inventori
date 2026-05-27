@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { JwtPayload } from '../common/types';
+import { PrismaService } from '../database/prisma.service';
 
 type AuthenticatedSocketData = {
   userId?: string;
@@ -50,6 +51,7 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async handleConnection(client: Socket) {
@@ -65,6 +67,17 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify<JwtPayload>(token, {
         secret: this.configService.getOrThrow<string>('JWT_SECRET'),
       });
+
+      const usuario = await this.prisma.usuario.findFirst({
+        where: { id: payload.sub, deletedAt: null },
+        select: { sessionVersion: true },
+      });
+
+      if (!usuario || usuario.sessionVersion !== payload.sv) {
+        this.logger.warn(`Client ${client.id} rejected: session mismatch`);
+        client.disconnect();
+        return;
+      }
 
       const data = client.data as AuthenticatedSocketData;
       data.userId = payload.sub;

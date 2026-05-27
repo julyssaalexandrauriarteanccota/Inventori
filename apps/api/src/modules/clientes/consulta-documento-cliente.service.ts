@@ -353,11 +353,7 @@ export class ConsultaDocumentoClienteService {
       nombres: data.nombres,
       apellidoPaterno: data.apellidoPaterno,
       apellidoMaterno: data.apellidoMaterno,
-      nombreCompleto: [
-        data.apellidoPaterno,
-        data.apellidoMaterno,
-        data.nombres,
-      ]
+      nombreCompleto: [data.apellidoPaterno, data.apellidoMaterno, data.nombres]
         .filter(Boolean)
         .join(' '),
       codVerifica: data.codVerifica,

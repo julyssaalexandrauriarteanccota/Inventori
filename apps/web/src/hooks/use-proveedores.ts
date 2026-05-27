@@ -5,6 +5,8 @@ import type {
   ProveedoresPaginatedResponse,
   ProveedorFilters,
   ProveedorFormPayload,
+  ConsultaDocumentoClientePayload,
+  ConsultaDocumentoClienteResult,
 } from '@erp/shared'
 
 import { api } from '@/lib/api'
@@ -71,5 +73,17 @@ export function useDeleteProveedor() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [PROVEEDORES_KEY] })
     },
+  })
+}
+
+export function useConsultarDocumentoProveedor() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: ConsultaDocumentoClientePayload) =>
+      api.post<{
+        data: ConsultaDocumentoClienteResult
+        meta: { timestamp: string }
+      }>('/proveedores/consulta-documento', data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [PROVEEDORES_KEY] }) },
   })
 }

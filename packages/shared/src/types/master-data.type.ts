@@ -61,12 +61,12 @@ export interface ConsultaDocumentoClienteResult {
   capital?: string;
 }
 
-export interface ProveedorFormPayload {
+export interface ProveedorFormPayload extends LocationPayload {
   razonSocial: string;
   ruc: string;
   email?: string;
   telefono?: string;
-  direccion?: string;
+  celular?: string;
   contactoNombre?: string;
   contactoTelefono?: string;
   notas?: string;
@@ -91,6 +91,7 @@ export interface ProductoFormPayload {
   categoriaId: string;
   marcaId?: string | null;
   modeloId?: string | null;
+  modeloIds?: string[];
   unidadMedidaId: string;
   modelo?: string;
   codigoBarras?: string;
@@ -205,11 +206,20 @@ export interface ProveedorListItem {
   ruc: string;
   email: string | null;
   telefono: string | null;
+  celular: string | null;
   direccion: string | null;
+  distrito: string | null;
+  provincia: string | null;
+  departamento: string | null;
+  referencia: string | null;
+  latitud: number | null;
+  longitud: number | null;
   contactoNombre: string | null;
   contactoTelefono: string | null;
   notas: string | null;
   activo: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ProductoListItem {
@@ -219,6 +229,7 @@ export interface ProductoListItem {
   descripcion: string | null;
   tipo: TipoProducto;
   modeloId: string | null;
+  modeloIds?: string[];
   modelo: string | null;
   codigoBarras: string | null;
   codigoQr: string | null;
@@ -264,6 +275,17 @@ export interface ProductoListItem {
       nombre: string;
     } | null;
   } | null;
+  modelosCompatibles?: {
+    modeloCatalogo: {
+      id: string;
+      nombre: string;
+      tipo: TipoProducto;
+      marca: {
+        id: string;
+        nombre: string;
+      } | null;
+    };
+  }[];
   createdAt?: string;
   updatedAt?: string;
 }

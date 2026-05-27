@@ -20,7 +20,11 @@ async function main() {
   await prisma.$connect();
 
   const existing = await prisma.comprobante.findFirst({
-    where: { tipo: TipoDocumento.FACTURA, serie: 'F001', correlativo: CORRELATIVO },
+    where: {
+      tipo: TipoDocumento.FACTURA,
+      serie: 'F001',
+      correlativo: CORRELATIVO,
+    },
   });
   if (existing) {
     console.log('Factura de prueba ya existe:', existing.id, existing.numero);

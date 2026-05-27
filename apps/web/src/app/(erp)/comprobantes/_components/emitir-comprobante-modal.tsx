@@ -18,6 +18,7 @@ import {
   useValidarPreEmision,
 } from "@/hooks/use-facturacion";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ValidacionPreEmisionModal } from "@/components/modals/validacion-pre-emision-modal";
 import {
   Dialog,
@@ -85,10 +86,6 @@ export function EmitirComprobanteModal({
 }: EmitirComprobanteModalProps) {
   const router = useRouter();
   const emitir = useEmitirComprobante();
-  const [tipoOverride, setTipoOverride] = useState<{
-    ventaId: string;
-    tipo: TipoDocumento;
-  } | null>(null);
   const [serieOverride, setSerieOverride] = useState<{
     ventaId: string;
     tipo: TipoDocumento;
@@ -102,12 +99,15 @@ export function EmitirComprobanteModal({
   const [validationModalResult, setValidationModalResult] =
     useState<ResultadoValidacion | null>(null);
 
-  const tipo =
-    venta && tipoOverride?.ventaId === venta.id
-      ? tipoOverride.tipo
-      : venta
-        ? inferDefaultTipo(venta)
-        : TipoDocumento.BOLETA;
+  const tipo = venta ? inferDefaultTipo(venta) : TipoDocumento.BOLETA;
+  const tipoLabel =
+    tipo === TipoDocumento.FACTURA ? "Factura" : "Boleta";
+  const tipoReason =
+    tipo === TipoDocumento.FACTURA
+      ? "Cliente con RUC"
+      : venta?.cliente.dni
+        ? "Cliente con DNI"
+        : "Consumidor final";
 
   const seriesQuery = useSeriesDocumento({
     tipo,
@@ -182,7 +182,6 @@ export function EmitirComprobanteModal({
       onSuccess?.();
       onClose();
       if (comprobante.id) router.push(`/comprobantes/${comprobante.id}`);
-      setTipoOverride(null);
       setSerieOverride(null);
       setObservacionesDraft(null);
       setValidationModalOpen(false);
@@ -236,28 +235,10 @@ export function EmitirComprobanteModal({
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label className="text-sm font-medium">Tipo de comprobante</Label>
-            <Select
-              value={tipo}
-              onValueChange={(value) => {
-                if (!venta) return;
-                setTipoOverride({
-                  ventaId: venta.id,
-                  tipo: value as TipoDocumento,
-                });
-                setSerieOverride(null);
-              }}
-              disabled={emitir.isPending}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TipoDocumento.FACTURA}>
-                  Factura (RUC requerido)
-                </SelectItem>
-                <SelectItem value={TipoDocumento.BOLETA}>Boleta</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+              <span className="font-medium">{tipoLabel}</span>
+              <Badge variant="secondary">{tipoReason}</Badge>
+            </div>
           </div>
 
           <div className="grid gap-2">

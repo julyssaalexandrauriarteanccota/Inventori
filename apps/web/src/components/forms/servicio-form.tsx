@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Loader2, RefreshCcw } from "lucide-react";
+import { Clock, DollarSign, Loader2, RefreshCcw, Tag, Wrench } from "lucide-react";
 import { z } from "zod";
 import { toast } from "sonner";
 
@@ -231,6 +231,7 @@ export function ServicioForm({
           <FieldLabel>Nombre *</FieldLabel>
           <Input
             placeholder="Servicio de mantenimiento preventivo"
+            startIcon={Wrench}
             {...register("nombre")}
           />
           <FieldError>{errors.nombre?.message}</FieldError>
@@ -242,6 +243,7 @@ export function ServicioForm({
             <Input
               className="font-mono"
               placeholder="Se generara automaticamente"
+              startIcon={Tag}
               {...register("sku", {
                 onChange: () => setSkuManuallyEdited(true),
               })}
@@ -334,6 +336,7 @@ export function ServicioForm({
               type="number"
               min="0"
               step="0.01"
+              startIcon={DollarSign}
               {...register("precioCompra")}
             />
             <FieldError>{errors.precioCompra?.message}</FieldError>
@@ -346,6 +349,7 @@ export function ServicioForm({
             type="number"
             min="0"
             step="0.01"
+            startIcon={DollarSign}
             {...register("precioVenta")}
           />
           <FieldError>{errors.precioVenta?.message}</FieldError>
@@ -357,6 +361,7 @@ export function ServicioForm({
             type="number"
             min="0"
             step="1"
+            startIcon={Clock}
             {...register("tiempoEstimadoMin")}
           />
           <FieldError>{errors.tiempoEstimadoMin?.message}</FieldError>
@@ -370,9 +375,9 @@ export function ServicioForm({
           render={({ field }) => (
             <div className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-3 bg-muted/5 transition-all duration-300 hover:border-border-strong/60">
               <div>
-                <FieldLabel>Requiere repuestos</FieldLabel>
+                <FieldLabel>Permitir repuestos en tickets</FieldLabel>
                 <FieldDescription>
-                  Marca si normalmente consume repuestos aparte.
+                  Si está activo, al agregar este servicio en soporte se habilita la sección de repuestos.
                 </FieldDescription>
               </div>
               <Switch checked={field.value} onCheckedChange={field.onChange} />

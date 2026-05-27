@@ -3,6 +3,7 @@ import {
   Logger,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import {
@@ -17,7 +18,18 @@ export class ProveedoresService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  private validateCoordinates(dto: { latitud?: number; longitud?: number }) {
+    const hasLatitud = dto.latitud !== undefined;
+    const hasLongitud = dto.longitud !== undefined;
+
+    if (hasLatitud !== hasLongitud) {
+      throw new BadRequestException('Latitud y longitud deben enviarse juntas');
+    }
+  }
+
   async create(dto: CreateProveedorDto) {
+    this.validateCoordinates(dto);
+
     const existing = await this.prisma.proveedor.findFirst({
       where: { ruc: dto.ruc, deletedAt: null },
     });
@@ -43,6 +55,8 @@ export class ProveedoresService {
         { razonSocial: { contains: search, mode: 'insensitive' } },
         { ruc: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
+        { contactoNombre: { contains: search, mode: 'insensitive' } },
+        { direccion: { contains: search, mode: 'insensitive' } },
       ];
     }
 
@@ -73,6 +87,7 @@ export class ProveedoresService {
   }
 
   async update(id: string, dto: UpdateProveedorDto) {
+    this.validateCoordinates(dto);
     await this.findOne(id);
 
     if (dto.ruc) {

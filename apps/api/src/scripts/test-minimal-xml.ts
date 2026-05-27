@@ -49,7 +49,11 @@ function buildZip(xmlFileName: string, xmlContent: string): Buffer {
   return zip.toBuffer();
 }
 
-async function sendAndPrint(label: string, xmlContent: string, xmlFileName: string) {
+async function sendAndPrint(
+  label: string,
+  xmlContent: string,
+  xmlFileName: string,
+) {
   console.log(`\n\n===== ${label} =====`);
   console.log(`XML first 300 chars:\n${xmlContent.slice(0, 300)}`);
 
@@ -78,8 +82,12 @@ async function sendAndPrint(label: string, xmlContent: string, xmlFileName: stri
 
     // Extract fault code and message
     const faultCode = responseText.match(/<faultcode>(.*?)<\/faultcode>/)?.[1];
-    const faultString = responseText.match(/<faultstring>(.*?)<\/faultstring>/)?.[1];
-    const appResponse = responseText.match(/<applicationResponse>(.*?)<\/applicationResponse>/)?.[1];
+    const faultString = responseText.match(
+      /<faultstring>(.*?)<\/faultstring>/,
+    )?.[1];
+    const appResponse = responseText.match(
+      /<applicationResponse>(.*?)<\/applicationResponse>/,
+    )?.[1];
 
     if (faultCode) {
       console.log(`FAULT: ${faultCode}`);
@@ -100,7 +108,10 @@ async function main() {
   console.log(`Username: ${BETA_USER}`);
 
   const today = new Date().toISOString().split('T')[0];
-  const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Lima', hour12: false });
+  const time = new Date().toLocaleTimeString('en-GB', {
+    timeZone: 'America/Lima',
+    hour12: false,
+  });
 
   // Test 1: UBL 2.1 (current - should fail per recent results)
   const xml21 = `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
@@ -253,13 +264,15 @@ async function main() {
   );
 
   // Test 5: Factura (01) instead of Boleta (03) to see if it's type-specific
-  const xmlFactura = xml21.replace(
-    '<cbc:InvoiceTypeCode listID="0101">03</cbc:InvoiceTypeCode>',
-    '<cbc:InvoiceTypeCode listID="0101">01</cbc:InvoiceTypeCode>',
-  ).replace(
-    '<cbc:ID>B001-00000099</cbc:ID>',
-    '<cbc:ID>F001-00000099</cbc:ID>',
-  );
+  const xmlFactura = xml21
+    .replace(
+      '<cbc:InvoiceTypeCode listID="0101">03</cbc:InvoiceTypeCode>',
+      '<cbc:InvoiceTypeCode listID="0101">01</cbc:InvoiceTypeCode>',
+    )
+    .replace(
+      '<cbc:ID>B001-00000099</cbc:ID>',
+      '<cbc:ID>F001-00000099</cbc:ID>',
+    );
   await sendAndPrint(
     'Test 5: Factura (01) with UBL 2.1',
     xmlFactura,

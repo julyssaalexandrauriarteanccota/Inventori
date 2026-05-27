@@ -31,7 +31,7 @@ export class MarcasController {
   }
 
   @Post()
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Crear marca' })
   create(@Body() dto: CreateMarcaDto) {
     return this.marcasService.create(dto);

@@ -128,7 +128,7 @@ export function AppCommand() {
         open={open}
         onOpenChange={setOpen}
       >
-        <CommandInput placeholder="Buscar rutas o acciones del ERP..." />
+        <CommandInput placeholder="Buscar en el ERP..." />
         <CommandList>
           <CommandEmpty>
             <div className="flex flex-col items-center gap-1.5 py-2">

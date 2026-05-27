@@ -9,6 +9,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 import type { ConfigEmpresaPayload } from "@erp/shared";
+import { getApiAssetUrl } from "@/lib/api";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 export interface CotizacionPdfDetalle {
@@ -28,6 +29,7 @@ export interface CotizacionPdfDetalle {
     garantiaMaxCopias?: number | null;
     marca?: { nombre: string } | null;
     modeloCatalogo?: { nombre: string } | null;
+    atributos?: any | null;
   } | null;
 }
 
@@ -91,6 +93,28 @@ function fmtDate(value?: string | null) {
   });
 }
 
+function stripHtml(html: string | null | undefined): string {
+  if (!html) return "";
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseAtributos(atributos: any): Array<{ clave: string; valor: string }> {
+  if (!atributos) return [];
+  if (Array.isArray(atributos)) return atributos;
+  if (typeof atributos === "string") {
+    try {
+      const parsed = JSON.parse(atributos);
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 function getClienteNombre(c: CotizacionPdfData["cliente"]) {
   if (c.razonSocial) return c.razonSocial;
   return [c.nombre, c.apellido].filter(Boolean).join(" ") || "—";
@@ -110,6 +134,18 @@ function getClienteUbicacion(c: CotizacionPdfData["cliente"]) {
     c.direccion ||
     null
   );
+}
+
+function uniqueText(values: Array<string | null | undefined>) {
+  const seen = new Set<string>();
+  return values.filter((value): value is string => {
+    const cleaned = value?.trim();
+    if (!cleaned) return false;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function isUsableImageUrl(value: string | null | undefined): value is string {
@@ -250,21 +286,173 @@ function buildStyles(primary: string, secondary: string) {
       paddingHorizontal: 6,
       alignItems: "center",
     },
-    cIdx: { width: "5%", textAlign: "center" },
-    cImg: { width: "12%", paddingRight: 4 },
-    cDesc: { width: "43%", paddingRight: 4 },
-    cQty: { width: "8%", textAlign: "right" },
-    cPrice: { width: "16%", textAlign: "right" },
-    cSub: { width: "16%", textAlign: "right", fontWeight: "bold" },
-    productImage: {
-      width: 44,
-      height: 44,
-      borderRadius: 4,
+    productSection: {
+      marginTop: 14,
+      marginBottom: 14,
+    },
+    equipmentMainCard: {
+      flexDirection: "row",
+      gap: 16,
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+      borderRadius: 8,
+      padding: 14,
+      backgroundColor: "#FAFAFA",
+      marginBottom: 14,
+    },
+    equipmentImgBox: {
+      width: 100,
+      height: 100,
+      backgroundColor: "#FFFFFF",
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 6,
+    },
+    equipmentImg: {
+      width: "100%",
+      height: "100%",
       objectFit: "contain",
-      backgroundColor: "#F8FAFC",
+    },
+    equipmentInfo: {
+      flex: 1,
+      justifyContent: "center",
+    },
+    equipmentName: {
+      fontSize: 12,
+      fontWeight: "bold",
+      color: secondary,
+      marginBottom: 6,
+    },
+    equipmentMetaRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 8,
+    },
+    equipmentBadge: {
+      backgroundColor: "#F1F5F9",
+      color: "#475569",
+      fontSize: 7.5,
+      fontWeight: "bold",
+      paddingHorizontal: 6,
+      paddingVertical: 3,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+    },
+    equipmentPriceRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+      fontSize: 8.5,
+    },
+    equipmentPriceLabel: {
+      color: "#475569",
+      marginRight: 4,
+    },
+    equipmentPriceValue: {
+      fontWeight: "bold",
+      color: primary,
+    },
+    descBlock: {
+      marginTop: 10,
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+      borderRadius: 8,
+      padding: 12,
+      backgroundColor: "#FFFFFF",
+    },
+    descTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 6,
+    },
+    descTitle: {
+      fontSize: 9.5,
+      fontWeight: "bold",
+      color: primary,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    descText: {
+      fontSize: 8.5,
+      color: "#334155",
+      lineHeight: 1.4,
+    },
+    specsBlock: {
+      marginTop: 12,
+    },
+    specsTitleRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 8,
+    },
+    specsTitle: {
+      fontSize: 9.5,
+      fontWeight: "bold",
+      color: primary,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+    },
+    specsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+    },
+    specCard: {
+      width: "48%",
+      marginBottom: 8,
+    },
+    specLabel: {
+      fontSize: 8,
+      fontWeight: "bold",
+      color: "#475569",
+      marginBottom: 3,
+    },
+    specValueBox: {
+      borderWidth: 1,
+      borderColor: "#E2E8F0",
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+      backgroundColor: "#FFFFFF",
+      fontSize: 8.5,
+      color: "#0F172A",
     },
     productName: { fontWeight: "bold", color: secondary, fontSize: 9.5 },
     productMeta: { fontSize: 8, color: "#64748B", marginTop: 1 },
+    productDesc: {
+      fontSize: 8.5,
+      color: "#334155",
+      marginTop: 4,
+      lineHeight: 1.4,
+    },
+    attributesContainer: {
+      marginTop: 6,
+      borderLeftWidth: 1.5,
+      borderLeftColor: primary,
+      paddingLeft: 6,
+      gap: 2,
+    },
+    attributeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      fontSize: 7.5,
+      color: "#475569",
+    },
+    attributeKey: {
+      fontWeight: "bold",
+      color: secondary,
+      marginRight: 3,
+    },
+    attributeValue: {
+      color: "#475569",
+    },
     totalsWrap: {
       flexDirection: "row",
       justifyContent: "flex-end",
@@ -358,10 +546,12 @@ export function CotizacionPDF({
   const secondary = empresa.colorSecundario || FALLBACK_SECONDARY;
   const styles = buildStyles(primary, secondary);
 
-  const logo = resolveImage(empresa.logo);
-  const empresaContacto = [empresa.telefonoVentas, empresa.telefono]
-    .filter(Boolean)
-    .join(" · ");
+  const logo = empresa.logo ? getApiAssetUrl(empresa.logo) : null;
+  const empresaContacto = uniqueText([
+    empresa.telefonoVentas,
+    empresa.whatsapp,
+    empresa.telefono,
+  ]).join(" · ");
   const empresaEmail = empresa.emailVentas || empresa.email;
   const empresaWeb = empresa.website;
 
@@ -369,9 +559,10 @@ export function CotizacionPDF({
   const clienteNombre = getClienteNombre(data.cliente);
   const clienteDoc = getClienteDocumento(data.cliente);
   const clienteUbicacion = getClienteUbicacion(data.cliente);
-  const clienteContacto = [data.cliente.celular, data.cliente.telefono]
-    .filter(Boolean)
-    .join(" · ");
+  const clienteContacto = uniqueText([
+    data.cliente.celular,
+    data.cliente.telefono,
+  ]).join(" · ");
 
   const vendedor = data.usuario
     ? `${data.usuario.nombre} ${data.usuario.apellido ?? ""}`.trim()
@@ -430,9 +621,11 @@ export function CotizacionPDF({
             <Text style={styles.docLine}>
               Emitida: {fmtDate(data.createdAt)}
             </Text>
-            <Text style={styles.docLine}>
-              Válida hasta: {fmtDate(data.validoHasta)}
-            </Text>
+            {data.validoHasta ? (
+              <Text style={styles.docLine}>
+                Válida hasta: {fmtDate(data.validoHasta)}
+              </Text>
+            ) : null}
             {vendedor && (
               <Text style={styles.docLine}>Atendido por: {vendedor}</Text>
             )}
@@ -467,68 +660,90 @@ export function CotizacionPDF({
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Detalle de productos / equipos</Text>
-        <View style={styles.table}>
-          <View style={styles.tableHeader}>
-            <Text style={styles.cIdx}>#</Text>
-            <Text style={styles.cImg}>Imagen</Text>
-            <Text style={styles.cDesc}>Descripción</Text>
-            <Text style={styles.cQty}>Cant.</Text>
-            <Text style={styles.cPrice}>P. Unit.</Text>
-            <Text style={styles.cSub}>Subtotal</Text>
-          </View>
+        {(() => {
+          const item = data.detalles[0];
+          if (!item) return null;
+          
+          const productoImg = item.producto?.imagen ? getApiAssetUrl(item.producto.imagen) : PLACEHOLDER_PRODUCT;
+          const meta: string[] = [];
+          if (item.producto?.sku) meta.push(`SKU ${item.producto.sku}`);
+          if (item.producto?.marca?.nombre) meta.push(item.producto.marca.nombre);
+          if (item.producto?.modeloCatalogo?.nombre) meta.push(item.producto.modeloCatalogo.nombre);
+          if (item.equipoSerie) meta.push(`Serie ${item.equipoSerie}`);
+          if (item.producto?.mesesGarantia) meta.push(`Garantía ${item.producto.mesesGarantia} m.`);
+          if (item.producto?.garantiaMaxCopias) {
+            meta.push(`${item.producto.garantiaMaxCopias.toLocaleString("es-PE")} copias`);
+          }
 
-          {data.detalles.map((item, idx) => {
-            const productoImg =
-              resolveImage(item.producto?.imagen) ?? PLACEHOLDER_PRODUCT;
-            const meta: string[] = [];
-            if (item.producto?.sku) meta.push(`SKU ${item.producto.sku}`);
-            if (item.producto?.marca?.nombre)
-              meta.push(item.producto.marca.nombre);
-            if (item.producto?.modeloCatalogo?.nombre)
-              meta.push(item.producto.modeloCatalogo.nombre);
-            if (item.equipoSerie) meta.push(`Serie ${item.equipoSerie}`);
-            if (item.producto?.mesesGarantia)
-              meta.push(`Garantía ${item.producto.mesesGarantia} m.`);
-            if (item.producto?.garantiaMaxCopias)
-              meta.push(
-                `${item.producto.garantiaMaxCopias.toLocaleString("es-PE")} copias`,
-              );
+          const attrs = parseAtributos(item.producto?.atributos);
 
-            return (
-              <View key={item.id} style={styles.tableRow} wrap={false}>
-                <Text style={styles.cIdx}>{idx + 1}</Text>
-                <View style={styles.cImg}>
-                  {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                  <Image src={productoImg} style={styles.productImage} />
-                </View>
-                <View style={styles.cDesc}>
-                  <Text style={styles.productName}>
-                    {item.producto?.nombre || "Producto"}
+          return (
+            <View style={styles.productSection}>
+              <Text style={styles.sectionTitle}>Equipo Cotizado</Text>
+
+              <View style={styles.equipmentMainCard}>
+                {productoImg && (
+                  <View style={styles.equipmentImgBox}>
+                    <Image src={productoImg} style={styles.equipmentImg} />
+                  </View>
+                )}
+                <View style={styles.equipmentInfo}>
+                  <Text style={styles.equipmentName}>
+                    {item.producto?.nombre || "Producto Cotizado"}
                   </Text>
+                  
                   {meta.length > 0 && (
-                    <Text style={styles.productMeta}>{meta.join(" · ")}</Text>
+                    <View style={styles.equipmentMetaRow}>
+                      {meta.map((m, mIdx) => (
+                        <Text key={mIdx} style={styles.equipmentBadge}>{m}</Text>
+                      ))}
+                    </View>
                   )}
-                  {item.producto?.descripcion ? (
-                    <Text style={styles.productMeta}>
-                      {item.producto.descripcion}
-                    </Text>
-                  ) : null}
+
+                  <View style={styles.equipmentPriceRow}>
+                    <Text style={styles.equipmentPriceLabel}>Precio Unitario:</Text>
+                    <Text style={styles.equipmentPriceValue}>{fmtMoney(item.precioUnitario)}</Text>
+                  </View>
                   {item.descuento > 0 && (
-                    <Text style={styles.productMeta}>
-                      Descuento: {fmtMoney(item.descuento)}
-                    </Text>
+                    <View style={styles.equipmentPriceRow}>
+                      <Text style={styles.equipmentPriceLabel}>Descuento Aplicado:</Text>
+                      <Text style={[styles.equipmentPriceValue, { color: "#DC2626" }]}>-{fmtMoney(item.descuento)}</Text>
+                    </View>
                   )}
                 </View>
-                <Text style={styles.cQty}>{item.cantidad}</Text>
-                <Text style={styles.cPrice}>
-                  {fmtMoney(item.precioUnitario)}
-                </Text>
-                <Text style={styles.cSub}>{fmtMoney(item.subtotal)}</Text>
               </View>
-            );
-          })}
-        </View>
+
+              {item.producto?.descripcion && (
+                <View style={styles.descBlock}>
+                  <View style={styles.descTitleRow}>
+                    <Text style={styles.descTitle}>Descripción Comercial</Text>
+                  </View>
+                  <Text style={styles.descText}>
+                    {stripHtml(item.producto.descripcion)}
+                  </Text>
+                </View>
+              )}
+
+              {attrs.length > 0 && (
+                <View style={styles.specsBlock}>
+                  <View style={styles.specsTitleRow}>
+                    <Text style={styles.specsTitle}>Ficha Técnica</Text>
+                  </View>
+                  <View style={styles.specsGrid}>
+                    {attrs.map((attr, aIdx) => (
+                      <View key={aIdx} style={styles.specCard}>
+                        <Text style={styles.specLabel}>{attr.clave}</Text>
+                        <View style={styles.specValueBox}>
+                          <Text style={{ fontSize: 8.5 }}>{attr.valor}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          );
+        })()}
 
         <View style={styles.totalsWrap}>
           <View style={styles.totalsBox}>
@@ -565,8 +780,9 @@ export function CotizacionPDF({
           • Precios expresados en soles (S/), incluyen IGV ({igvPercent}%).
         </Text>
         <Text style={styles.conditionItem}>
-          • Cotización válida hasta {fmtDate(data.validoHasta)}; sujeta a
-          disponibilidad de stock.
+          {data.validoHasta
+            ? `• Cotización válida hasta ${fmtDate(data.validoHasta)}; sujeta a disponibilidad de stock.`
+            : "• Cotización sujeta a disponibilidad de stock al momento de la compra."}
         </Text>
         <Text style={styles.conditionItem}>
           • La garantía aplica desde la entrega del equipo, por los meses o

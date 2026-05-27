@@ -7,11 +7,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import * as FormData from 'form-data';
-import type {
-  OcrInvoiceResult,
-  OcrSerialResult,
-  TicketClassificationResult,
-} from '@erp/shared';
+import type { OcrSerialResult, TicketClassificationResult } from '@erp/shared';
 import { ClasificarTicketDto } from './dto/clasificar-ticket.dto';
 
 @Injectable()
@@ -58,28 +54,6 @@ export class AiService {
       );
     }
     throw new ServiceUnavailableException('Servicio AI no disponible');
-  }
-
-  async extractInvoiceData(
-    fileBuffer: Buffer,
-    originalName: string,
-    mimeType: string,
-  ): Promise<OcrInvoiceResult> {
-    const form = new FormData();
-    form.append('file', fileBuffer, {
-      filename: originalName,
-      contentType: mimeType,
-    });
-    try {
-      const { data } = await firstValueFrom(
-        this.http.post<OcrInvoiceResult>(`${this.baseUrl}/ocr/invoice`, form, {
-          headers: { ...form.getHeaders(), ...this.headers },
-        }),
-      );
-      return data;
-    } catch (err) {
-      this.handleError(err);
-    }
   }
 
   async extractSerialNumbers(

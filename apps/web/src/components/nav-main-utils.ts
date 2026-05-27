@@ -12,6 +12,7 @@ const SECTION_BY_URL: Record<string, string> = {
   "/inventario": "Operacion",
   "/equipos": "Operacion",
   "/soporte": "Operacion",
+  "/soporte/equipos-externos": "Operacion",
   "/garantias": "Operacion",
   "/reportes": "Analisis",
   "/auditoria": "Administracion",

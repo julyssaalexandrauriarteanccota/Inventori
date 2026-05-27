@@ -20,18 +20,27 @@ vi.mock('@/hooks/use-equipos', () => ({
     data: {
       data: [
         {
-          id: 'e1',
-          numeroSerie: 'SN-001',
-          producto: { nombre: 'Equipo demo' },
+          id: 'ep1',
+          numeroSerie: 'OWN-001',
+          producto: { nombre: 'Equipo propio vendido' },
         },
       ],
     },
   }),
-  useCreateEquipo: () => ({
-    mutate: vi.fn(),
-    isPending: false,
+  useClienteEquipos: () => ({
+    data: {
+      data: [
+        {
+          id: 'e1',
+          numeroSerie: 'SN-001',
+          nombre: 'Equipo demo',
+          marca: 'Demo',
+          modelo: 'A1',
+        },
+      ],
+    },
   }),
-  useAsignarEquipoCliente: () => ({
+  useCreateClienteEquipo: () => ({
     mutate: vi.fn(),
     isPending: false,
   }),
@@ -132,19 +141,23 @@ describe('CerrarTicketForm', () => {
       screen.getByPlaceholderText('Describe la solución aplicada'),
     ).toBeInTheDocument()
     expect(screen.getByText(/se calculan automáticamente/i)).toBeInTheDocument()
-    expect(screen.getByText(/Firma del cliente/i)).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Cerrar ticket/i }),
+    ).toBeInTheDocument()
   })
 
-  it('muestra el canvas para la firma', () => {
+  it('no muestra firma del cliente en el cierre interno', () => {
     const { container } = render(
       <CerrarTicketForm ticketId="t-123" onSuccess={vi.fn()} />,
     )
-    const canvas = container.querySelector('canvas')
-    expect(canvas).toBeInTheDocument()
+    expect(screen.queryByText(/Firma del cliente/i)).not.toBeInTheDocument()
+    expect(container.querySelector('canvas')).not.toBeInTheDocument()
   })
 
-  it('tiene boton de limpiar firma', () => {
+  it('no muestra boton de limpiar firma', () => {
     render(<CerrarTicketForm ticketId="t-123" onSuccess={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /Limpiar/i })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Limpiar/i }),
+    ).not.toBeInTheDocument()
   })
 })

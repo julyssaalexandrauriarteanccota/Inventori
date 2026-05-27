@@ -23,7 +23,14 @@ export class CreateTicketDto {
   @ApiPropertyOptional({ description: 'ID del equipo (si aplica)' })
   @IsOptional()
   @IsUUID()
-  equipoId?: string;
+  equipoId?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'ID del equipo externo del cliente (si aplica)',
+  })
+  @IsOptional()
+  @IsUUID()
+  clienteEquipoId?: string | null;
 
   @ApiPropertyOptional({ description: 'ID del técnico asignado' })
   @IsOptional()

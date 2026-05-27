@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   EstadoComercialEquipo,
+  EstadoEquipo,
   TipoMovimiento,
   TipoProducto,
 } from '@erp/shared';
@@ -18,6 +19,7 @@ import {
   AsignarClienteDto,
   CreateLecturaSNMPDto,
   QueryLecturaSNMPDto,
+  ReactivarEquipoDto,
 } from './dto';
 import { SnmpService } from './snmp.service';
 
@@ -72,6 +74,85 @@ export class EquiposService {
       this.isAsignadoFueraDeAlmacen(estadoComercial) ||
       estadoComercial === EstadoComercialEquipo.BAJA
     );
+  }
+
+  private async cambiarFlujoEquipoPropio(
+    numeroSerie: string,
+    nextEstadoComercial: EstadoComercialEquipo,
+    userId: string,
+    allowedCurrentStates: EstadoComercialEquipo[],
+  ) {
+    const equipo = await this.prisma.equipo.findUnique({
+      where: { numeroSerie },
+      include: {
+        producto: { select: { manejaInventario: true } },
+      },
+    });
+    if (!equipo || equipo.deletedAt) {
+      throw new NotFoundException(
+        `Equipo con serie ${numeroSerie} no encontrado`,
+      );
+    }
+
+    const currentEstadoComercial = equipo.estadoComercial as
+      | EstadoComercialEquipo
+      | undefined;
+
+    if (
+      currentEstadoComercial === EstadoComercialEquipo.VENDIDO ||
+      currentEstadoComercial === EstadoComercialEquipo.ALQUILADO
+    ) {
+      throw new BadRequestException(
+        'Los equipos vendidos o alquilados se modifican desde su venta o alquiler',
+      );
+    }
+
+    if (
+      currentEstadoComercial &&
+      !allowedCurrentStates.includes(currentEstadoComercial)
+    ) {
+      throw new BadRequestException(
+        `No se puede cambiar de ${currentEstadoComercial} a ${nextEstadoComercial}`,
+      );
+    }
+
+    const isBaja = nextEstadoComercial === EstadoComercialEquipo.BAJA;
+    const nextAlmacenId = isBaja ? null : equipo.almacenId;
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.equipo.update({
+        where: { id: equipo.id },
+        data: {
+          estadoComercial: nextEstadoComercial,
+          estado: isBaja ? EstadoEquipo.BAJA : equipo.estado,
+          almacenId: nextAlmacenId,
+        },
+        include: {
+          producto: { select: PRODUCTO_EQUIPO_SELECT },
+          almacen: { select: { id: true, nombre: true } },
+        },
+      });
+
+      await this.syncInventoryForEquipoChange(
+        tx as unknown as PrismaService,
+        {
+          productoId: equipo.productoId,
+          almacenId: equipo.almacenId,
+          estadoComercial: equipo.estadoComercial,
+          manejaInventario: equipo.producto.manejaInventario,
+        },
+        {
+          productoId: updated.productoId,
+          almacenId: updated.almacenId,
+          estadoComercial: updated.estadoComercial,
+          manejaInventario: equipo.producto.manejaInventario,
+        },
+        userId,
+        updated.numeroSerie,
+      );
+
+      return updated;
+    });
   }
 
   private cuentaEnInventario(target: InventorySyncTarget | null | undefined) {
@@ -307,6 +388,16 @@ export class EquiposService {
   // ═══════════════════════════════════════════
 
   async create(dto: CreateEquipoDto, userId: string) {
+    const estadoInicial = dto.estado ?? EstadoEquipo.ACTIVO;
+    const estadoComercialInicial =
+      dto.estadoComercial ?? EstadoComercialEquipo.DISPONIBLE;
+
+    if (estadoInicial !== EstadoEquipo.ACTIVO) {
+      throw new BadRequestException(
+        'El alta de equipos propios siempre inicia como activo',
+      );
+    }
+
     const producto = await this.prisma.producto.findFirst({
       where: { id: dto.productoId, deletedAt: null },
       select: {
@@ -337,6 +428,24 @@ export class EquiposService {
       );
     }
 
+    if (
+      estadoComercialInicial === EstadoComercialEquipo.VENDIDO ||
+      estadoComercialInicial === EstadoComercialEquipo.ALQUILADO ||
+      estadoComercialInicial === EstadoComercialEquipo.RESERVADO ||
+      estadoComercialInicial === EstadoComercialEquipo.EN_REPARACION ||
+      estadoComercialInicial === EstadoComercialEquipo.BAJA
+    ) {
+      throw new BadRequestException(
+        'El alta de equipos propios solo permite disponible o uso interno',
+      );
+    }
+
+    if (!dto.almacenId) {
+      throw new BadRequestException(
+        'Selecciona un almacén interno para ingresar el equipo propio',
+      );
+    }
+
     await this.validateAlmacen(dto.almacenId);
 
     const nextAlmacenId = this.isAsignadoFueraDeAlmacen(dto.estadoComercial)
@@ -348,7 +457,12 @@ export class EquiposService {
         data: {
           ...dto,
           numeroSerie: dto.numeroSerie.trim(),
+          estado: EstadoEquipo.ACTIVO,
+          estadoComercial: estadoComercialInicial,
           codigoQr: dto.codigoQr?.trim() || `EQP:${dto.numeroSerie.trim()}`,
+          fechaIngreso: dto.fechaIngreso
+            ? new Date(dto.fechaIngreso)
+            : new Date(),
           almacenId: nextAlmacenId,
         },
         include: {
@@ -395,7 +509,7 @@ export class EquiposService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = { deletedAt: null };
 
     if (estado) where.estado = estado;
     if (estadoComercial) where.estadoComercial = estadoComercial;
@@ -510,7 +624,7 @@ export class EquiposService {
         },
       },
     });
-    if (!equipo) {
+    if (!equipo || equipo.deletedAt) {
       throw new NotFoundException(
         `Equipo con serie ${numeroSerie} no encontrado`,
       );
@@ -530,9 +644,50 @@ export class EquiposService {
         },
       },
     });
-    if (!current) {
+    if (!current || current.deletedAt) {
       throw new NotFoundException(
         `Equipo con serie ${numeroSerie} no encontrado`,
+      );
+    }
+
+    const currentEstadoComercial =
+      current.estadoComercial as EstadoComercialEquipo;
+    const equipoAsignadoCliente =
+      currentEstadoComercial === EstadoComercialEquipo.VENDIDO ||
+      currentEstadoComercial === EstadoComercialEquipo.ALQUILADO;
+    if (
+      equipoAsignadoCliente &&
+      ((dto.estado !== undefined && dto.estado !== current.estado) ||
+        (dto.estadoComercial !== undefined &&
+          dto.estadoComercial !== current.estadoComercial) ||
+        (dto.almacenId !== undefined &&
+          (dto.almacenId ?? null) !== (current.almacenId ?? null)) ||
+        (dto.ubicacion !== undefined &&
+          (dto.ubicacion ?? null) !== (current.ubicacion ?? null)))
+    ) {
+      throw new BadRequestException(
+        'Los equipos vendidos o alquilados no permiten cambiar estado, almacén o instalación desde edición manual',
+      );
+    }
+
+    if (
+      dto.estado !== undefined &&
+      dto.estado !== current.estado &&
+      dto.estado !== EstadoEquipo.ACTIVO
+    ) {
+      throw new BadRequestException(
+        'El estado operativo en reparación o baja se gestiona desde soporte o acciones del equipo',
+      );
+    }
+
+    if (
+      dto.estadoComercial !== undefined &&
+      dto.estadoComercial !== currentEstadoComercial &&
+      dto.estadoComercial !== EstadoComercialEquipo.DISPONIBLE &&
+      dto.estadoComercial !== EstadoComercialEquipo.USO_INTERNO
+    ) {
+      throw new BadRequestException(
+        'Venta, alquiler, reserva, reparación y baja se gestionan desde acciones del equipo',
       );
     }
 
@@ -627,6 +782,162 @@ export class EquiposService {
     });
   }
 
+  async reservar(numeroSerie: string, userId: string) {
+    return this.cambiarFlujoEquipoPropio(
+      numeroSerie,
+      EstadoComercialEquipo.RESERVADO,
+      userId,
+      [EstadoComercialEquipo.DISPONIBLE],
+    );
+  }
+
+  async marcarUsoInterno(numeroSerie: string, userId: string) {
+    return this.cambiarFlujoEquipoPropio(
+      numeroSerie,
+      EstadoComercialEquipo.USO_INTERNO,
+      userId,
+      [EstadoComercialEquipo.DISPONIBLE, EstadoComercialEquipo.RESERVADO],
+    );
+  }
+
+  async liberar(numeroSerie: string, userId: string) {
+    return this.cambiarFlujoEquipoPropio(
+      numeroSerie,
+      EstadoComercialEquipo.DISPONIBLE,
+      userId,
+      [EstadoComercialEquipo.RESERVADO, EstadoComercialEquipo.USO_INTERNO],
+    );
+  }
+
+  async darBaja(numeroSerie: string, userId: string) {
+    return this.cambiarFlujoEquipoPropio(
+      numeroSerie,
+      EstadoComercialEquipo.BAJA,
+      userId,
+      [
+        EstadoComercialEquipo.DISPONIBLE,
+        EstadoComercialEquipo.RESERVADO,
+        EstadoComercialEquipo.USO_INTERNO,
+        EstadoComercialEquipo.EN_REPARACION,
+      ],
+    );
+  }
+
+  async reactivar(
+    numeroSerie: string,
+    dto: ReactivarEquipoDto,
+    userId: string,
+  ) {
+    const equipo = await this.prisma.equipo.findUnique({
+      where: { numeroSerie },
+      include: {
+        producto: { select: { manejaInventario: true } },
+      },
+    });
+    if (!equipo || equipo.deletedAt) {
+      throw new NotFoundException(
+        `Equipo con serie ${numeroSerie} no encontrado`,
+      );
+    }
+
+    if (
+      (equipo.estadoComercial as EstadoComercialEquipo) !==
+        EstadoComercialEquipo.BAJA ||
+      (equipo.estado as EstadoEquipo) !== EstadoEquipo.BAJA
+    ) {
+      throw new BadRequestException(
+        'Solo se pueden reactivar equipos dados de baja',
+      );
+    }
+
+    await this.validateAlmacen(dto.almacenId);
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.equipo.update({
+        where: { id: equipo.id },
+        data: {
+          estado: EstadoEquipo.ACTIVO,
+          estadoComercial: EstadoComercialEquipo.DISPONIBLE,
+          almacenId: dto.almacenId,
+        },
+        include: {
+          producto: { select: PRODUCTO_EQUIPO_SELECT },
+          almacen: { select: { id: true, nombre: true } },
+        },
+      });
+
+      await this.syncInventoryForEquipoChange(
+        tx as unknown as PrismaService,
+        {
+          productoId: equipo.productoId,
+          almacenId: equipo.almacenId,
+          estadoComercial: equipo.estadoComercial,
+          manejaInventario: equipo.producto.manejaInventario,
+        },
+        {
+          productoId: updated.productoId,
+          almacenId: updated.almacenId,
+          estadoComercial: updated.estadoComercial,
+          manejaInventario: equipo.producto.manejaInventario,
+        },
+        userId,
+        updated.numeroSerie,
+      );
+
+      return updated;
+    });
+  }
+
+  async remove(numeroSerie: string, userId: string) {
+    const equipo = await this.prisma.equipo.findUnique({
+      where: { numeroSerie },
+      include: {
+        producto: { select: { manejaInventario: true } },
+      },
+    });
+    if (!equipo || equipo.deletedAt) {
+      throw new NotFoundException(
+        `Equipo con serie ${numeroSerie} no encontrado`,
+      );
+    }
+
+    if (
+      equipo.estadoComercial === EstadoComercialEquipo.VENDIDO ||
+      equipo.estadoComercial === EstadoComercialEquipo.ALQUILADO
+    ) {
+      throw new BadRequestException(
+        'No se puede eliminar un equipo vendido o alquilado; usa la venta o el alquiler asociado',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const deleted = await tx.equipo.update({
+        where: { id: equipo.id },
+        data: {
+          deletedAt: new Date(),
+          estado: EstadoEquipo.BAJA,
+          estadoComercial: EstadoComercialEquipo.BAJA,
+          almacenId: null,
+        },
+      });
+
+      await this.syncInventoryForEquipoChange(
+        tx as unknown as PrismaService,
+        {
+          productoId: equipo.productoId,
+          almacenId: equipo.almacenId,
+          estadoComercial: equipo.estadoComercial,
+          manejaInventario: equipo.producto.manejaInventario,
+        },
+        null,
+        userId,
+        equipo.numeroSerie,
+      );
+
+      return deleted;
+    });
+  }
+
   // ═══════════════════════════════════════════
   //  ASIGNACIÓN EQUIPO ↔ CLIENTE
   // ═══════════════════════════════════════════
@@ -647,7 +958,7 @@ export class EquiposService {
         },
       },
     });
-    if (!equipo) {
+    if (!equipo || equipo.deletedAt) {
       throw new NotFoundException(
         `Equipo con serie ${numeroSerie} no encontrado`,
       );
@@ -658,6 +969,15 @@ export class EquiposService {
     });
     if (!cliente) {
       throw new NotFoundException(`Cliente ${dto.clienteId} no encontrado`);
+    }
+
+    if (
+      equipo.estadoComercial !== EstadoComercialEquipo.DISPONIBLE &&
+      equipo.estadoComercial !== EstadoComercialEquipo.RESERVADO
+    ) {
+      throw new BadRequestException(
+        'Solo equipos disponibles o reservados pueden alquilarse/asignarse a cliente',
+      );
     }
 
     const nuevaAsignacion = await this.prisma.$transaction(async (tx) => {

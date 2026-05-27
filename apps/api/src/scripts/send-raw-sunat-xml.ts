@@ -30,7 +30,10 @@ function inferFromFileName(filePath: string) {
 }
 
 async function main() {
-  if (!xmlPath) throw new Error('Uso: tsx send-raw-sunat-xml.ts <xml> [configured|moddatos]');
+  if (!xmlPath)
+    throw new Error(
+      'Uso: tsx send-raw-sunat-xml.ts <xml> [configured|moddatos]',
+    );
   if (!fs.existsSync(xmlPath)) throw new Error(`XML no encontrado: ${xmlPath}`);
 
   const inferred = inferFromFileName(xmlPath);
@@ -82,16 +85,16 @@ async function main() {
       const templateXml = originalXml
         .replace(/\r?\n\s*<cbc:DueDate>.*?<\/cbc:DueDate>/, '')
         .replace(
-          variant === 'resign-template-keep-note-clean'
-          || variant === 'resign-template-note-no-attr-clean'
-          || variant === 'resign-template-preserve-name'
+          variant === 'resign-template-keep-note-clean' ||
+            variant === 'resign-template-note-no-attr-clean' ||
+            variant === 'resign-template-preserve-name'
             ? /$a/
             : /\r?\n\s*<cbc:Note\b[^>]*>.*?<\/cbc:Note>/,
           '',
         )
         .replace(
-          variant === 'resign-template-note-no-attr-clean'
-          || variant === 'resign-template-preserve-name'
+          variant === 'resign-template-note-no-attr-clean' ||
+            variant === 'resign-template-preserve-name'
             ? /\s+languageLocaleID="[^"]*"/g
             : /$a/,
           '',

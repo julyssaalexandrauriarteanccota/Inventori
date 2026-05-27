@@ -132,8 +132,8 @@ export function ServicioFormModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-3xl rounded-3xl border border-border/60 shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
-        <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
+      <DialogContent className="flex h-[88vh] max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl md:max-w-4xl lg:max-w-5xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12">
           <div className="flex items-center gap-3">
             <div
               className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ${
@@ -163,7 +163,7 @@ export function ServicioFormModal({
           </div>
         </DialogHeader>
 
-        <div className="px-5 py-4">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-5">
           {isEdit && loadingDetail ? (
             <div className="grid gap-3">
               {Array.from({ length: 6 }).map((_, i) => (

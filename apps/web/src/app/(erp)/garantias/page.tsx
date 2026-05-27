@@ -15,6 +15,8 @@ import {
   Download,
   Eye,
   Filter,
+  LayoutGrid,
+  List,
   MessageSquarePlus,
   MoreHorizontal,
   Pencil,
@@ -24,6 +26,7 @@ import {
   RefreshCcw,
   Search,
   ShieldCheck,
+  ClipboardCheck,
   Trash2,
   X,
 } from "lucide-react";
@@ -69,6 +72,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
@@ -78,32 +82,47 @@ import {
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
 import { useDebounce } from "@/hooks/use-debounce";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   useCreateGarantia,
   useDeleteGarantia,
+  useEliminarCasoGarantia,
   useGarantia,
   useGarantias,
   useUpdateGarantia,
 } from "@/hooks/use-garantias";
 import { cn } from "@/lib/utils";
 import { StatCard } from "@/components/layout/stat-card";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
+import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
+import { ErpBadge, type ErpBadgeTone } from "@/components/erp-badges";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-
-const GARANTIAS_REFRESH_TOAST_ID = "garantias-refresh";
+const VIEW_MODE_STORAGE_KEY = "erp:garantias:view-mode";
 
 const ESTADO_LABELS: Record<EstadoGarantia, string> = {
+  [EstadoGarantia.PENDIENTE_COMPLETAR]: "Pendiente",
   [EstadoGarantia.ACTIVA]: "Activa",
   [EstadoGarantia.VENCIDA]: "Vencida",
   [EstadoGarantia.ANULADA]: "Anulada",
 };
 
 const ESTADO_VARIANTS: Record<EstadoGarantia, string> = {
+  [EstadoGarantia.PENDIENTE_COMPLETAR]:
+    "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-400",
   [EstadoGarantia.ACTIVA]:
     "border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400",
   [EstadoGarantia.VENCIDA]:
@@ -114,6 +133,7 @@ const ESTADO_VARIANTS: Record<EstadoGarantia, string> = {
 
 type EstadoFilter =
   | "all"
+  | EstadoGarantia.PENDIENTE_COMPLETAR
   | EstadoGarantia.ACTIVA
   | EstadoGarantia.VENCIDA
   | EstadoGarantia.ANULADA;
@@ -121,6 +141,12 @@ type EstadoFilter =
 function hasNuevoParam() {
   if (typeof window === "undefined") return false;
   return new URLSearchParams(window.location.search).get("nuevo") === "1";
+}
+
+function getInitialViewMode() {
+  if (typeof window === "undefined") return "list" as const;
+  const stored = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+  return stored === "grid" ? "grid" : "list";
 }
 
 function formatDate(value: string | null | undefined) {
@@ -153,6 +179,42 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
+// ── Highlighted Text helper ──────────────────────────────────────────────────
+
+interface HighlightedTextProps {
+  text: string;
+  search: string;
+}
+
+function HighlightedText({ text, search }: HighlightedTextProps) {
+  if (!search || !search.trim()) {
+    return <>{text}</>;
+  }
+
+  const escapedSearch = search.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const regex = new RegExp(`(${escapedSearch})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark
+            key={i}
+            className="rounded bg-[var(--accent)]/18 px-0.5 font-semibold text-foreground dark:bg-[var(--accent)]/24"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+// ── Grid card ──────────────────────────────────────────────────────────────
+
 interface GarantiaCardProps {
   garantia: GarantiaListItem;
   canEdit: boolean;
@@ -165,6 +227,7 @@ interface GarantiaCardProps {
   onCreateCaso: () => void;
   onDelete: () => void;
   animationDelay?: number;
+  search?: string;
 }
 
 function GarantiaCard({
@@ -179,16 +242,39 @@ function GarantiaCard({
   onCreateCaso,
   onDelete,
   animationDelay,
+  search = "",
 }: GarantiaCardProps) {
-  const productName = getGarantiaProductName(garantia);
+  const productName = garantia.equipo.producto.nombre;
+  const productModel = garantia.equipo.producto.modelo;
+
+  const statusTones: Record<EstadoGarantia, ErpBadgeTone> = {
+    [EstadoGarantia.PENDIENTE_COMPLETAR]: "warning",
+    [EstadoGarantia.ACTIVA]: "success",
+    [EstadoGarantia.VENCIDA]: "warning",
+    [EstadoGarantia.ANULADA]: "danger",
+  };
+
+  const accentBar =
+    garantia.estado === EstadoGarantia.ACTIVA
+      ? "from-emerald-400 via-emerald-500 to-emerald-600"
+      : garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+        ? "from-sky-400 via-sky-500 to-sky-600"
+        : "from-slate-400 via-slate-500 to-slate-600";
+
+  const avatarCls =
+    garantia.estado === EstadoGarantia.ACTIVA
+      ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:shadow-emerald-500/40"
+      : garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+        ? "bg-sky-500 text-white shadow-sm shadow-sky-500/30 dark:shadow-sky-500/40"
+        : "bg-slate-500 text-white shadow-sm shadow-slate-500/30 dark:shadow-slate-500/40";
 
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3.5 rounded-xl border bg-card p-4 shadow-sm transition-all duration-150 animate-fade-up",
+        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card/85 backdrop-blur-sm p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up overflow-hidden",
         isSelected
-          ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/20"
-          : "border-border hover:border-ring/50 hover:shadow-md",
+          ? "border-emerald-400 bg-emerald-50/70 dark:bg-emerald-500/10 dark:border-emerald-500/50 shadow-md ring-2 ring-emerald-400/20 dark:ring-emerald-500/20"
+          : "border-border/70 hover:border-emerald-300 dark:hover:border-emerald-500/40 hover:shadow-md hover:shadow-emerald-500/5",
         onToggleSelect && "cursor-pointer",
       )}
       style={
@@ -198,6 +284,15 @@ function GarantiaCard({
       }
       onClick={onToggleSelect}
     >
+      {/* Tinted accent bar (left edge) */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute left-0 top-0 h-full w-1 bg-gradient-to-b opacity-70 group-hover:opacity-100 transition-opacity",
+          accentBar,
+        )}
+      />
+
       {onToggleSelect ? (
         <div
           className={cn(
@@ -222,7 +317,7 @@ function GarantiaCard({
             onDelete();
           }}
           className={cn(
-            "absolute right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full text-muted-foreground/40 transition-opacity hover:bg-destructive/10 hover:text-destructive",
+            "absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/20 dark:hover:text-red-400 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 active:scale-95 active:duration-150",
             isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
           title="Eliminar"
@@ -233,32 +328,44 @@ function GarantiaCard({
 
       <div
         className={cn(
-          "flex items-center gap-3",
-          onToggleSelect ? "pl-6 pr-7" : "pr-7",
+          "flex items-center gap-3 relative",
+          onToggleSelect ? "pl-6 pr-7" : "pl-2 pr-7",
         )}
       >
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-emerald-500 to-teal-700 text-white shadow-sm dark:from-emerald-700 dark:to-teal-900">
+        <div
+          className={cn(
+            "flex size-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm",
+            avatarCls,
+          )}
+        >
           <ShieldCheck className="size-5" />
         </div>
         <div className="min-w-0 flex-1">
           <p
-            className="truncate text-sm font-semibold leading-tight"
-            title={productName}
+            className="break-words whitespace-normal font-semibold text-sm leading-snug"
+            title={getGarantiaProductName(garantia)}
           >
-            {productName}
+            <HighlightedText text={productName} search={search} />
+            {productModel ? (
+              <span className="ml-1 text-xs text-muted-foreground font-normal">
+                · <HighlightedText text={productModel} search={search} />
+              </span>
+            ) : null}
           </p>
-          <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">
-            QR {garantia.codigoQR}
+          <p className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+            QR <HighlightedText text={garantia.codigoQR} search={search} />
           </p>
         </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge
-          variant="outline"
-          className={cn("gap-1.5 text-xs", ESTADO_VARIANTS[garantia.estado])}
+        <ErpBadge
+          tone={statusTones[garantia.estado]}
+          className="gap-1 text-xs"
         >
-          {garantia.estado === EstadoGarantia.ACTIVA ? (
+          {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+            <ClipboardCheck className="size-3" />
+          ) : garantia.estado === EstadoGarantia.ACTIVA ? (
             <span className="relative flex size-1.5 shrink-0">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
               <span className="relative inline-flex size-1.5 rounded-full bg-green-500" />
@@ -269,16 +376,11 @@ function GarantiaCard({
             <Ban className="size-3" />
           )}
           {ESTADO_LABELS[garantia.estado]}
-        </Badge>
+        </ErpBadge>
 
-        <Badge
-          variant={garantia.vigente ? "default" : "outline"}
-          className={cn(
-            "gap-1.5 text-xs",
-            garantia.vigente
-              ? "border-primary/20 bg-primary/10 text-primary"
-              : "text-muted-foreground",
-          )}
+        <ErpBadge
+          tone={garantia.vigente ? "success" : "neutral"}
+          className="gap-1 text-xs"
         >
           {garantia.vigente ? (
             <CheckCircle2 className="size-3" />
@@ -286,13 +388,15 @@ function GarantiaCard({
             <Clock3 className="size-3" />
           )}
           {garantia.vigente ? "Vigente" : "No vigente"}
-        </Badge>
+        </ErpBadge>
       </div>
 
       <div className="flex flex-col gap-1 border-t border-border/40 pt-3 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
           <QrCode className="size-3 shrink-0 text-muted-foreground/60" />
-          <span className="font-mono">{garantia.equipo.numeroSerie}</span>
+          <span className="font-mono">
+            <HighlightedText text={garantia.equipo.numeroSerie} search={search} />
+          </span>
           <span className="ml-auto text-[10px] text-muted-foreground/50">
             serie
           </span>
@@ -301,7 +405,11 @@ function GarantiaCard({
         <div className="flex min-w-0 items-center gap-2">
           <ShieldCheck className="size-3 shrink-0 text-muted-foreground/60" />
           <span className="truncate">
-            {garantia.clienteNombre || "Sin cliente visible"}
+            {garantia.clienteNombre ? (
+              <HighlightedText text={garantia.clienteNombre} search={search} />
+            ) : (
+              <span className="italic text-muted-foreground/50">Sin cliente visible</span>
+            )}
           </span>
         </div>
 
@@ -315,7 +423,7 @@ function GarantiaCard({
         <Button
           variant="outline"
           size="sm"
-          className="h-8 flex-1 gap-1.5 rounded-lg text-xs font-medium transition-colors hover:border-primary hover:bg-primary hover:text-primary-foreground"
+          className="h-8 flex-1 gap-1.5 rounded-lg text-xs font-medium border-border/80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150 hover:bg-emerald-500 hover:text-white hover:border-emerald-500 dark:hover:bg-emerald-500 dark:hover:border-emerald-500"
           onClick={(event) => {
             event.stopPropagation();
             onView();
@@ -329,14 +437,20 @@ function GarantiaCard({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 flex-1 gap-1.5 rounded-lg text-xs"
+            className="h-8 flex-1 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(event) => {
               event.stopPropagation();
               onEdit();
             }}
           >
-            <Pencil className="size-3.5" />
-            Editar
+            {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+              <ClipboardCheck className="size-3.5" />
+            ) : (
+              <Pencil className="size-3.5" />
+            )}
+            {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+              ? "Completar"
+              : "Editar"}
           </Button>
         ) : null}
 
@@ -344,7 +458,7 @@ function GarantiaCard({
           <Button
             variant="ghost"
             size="icon"
-            className="size-8 rounded-lg"
+            className="size-8 rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-105 active:scale-95 active:duration-150"
             onClick={(event) => {
               event.stopPropagation();
               onCreateCaso();
@@ -375,46 +489,50 @@ function FloatingSelectionBar({
   onClear,
 }: FloatingBarProps) {
   return (
-    <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border/60 bg-background/95 px-2 py-1.5 shadow-2xl ring-1 ring-black/5 backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200">
-      <div className="flex items-center gap-2 px-2 py-0.5">
-        <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-300 ease-[cubic-bezier(0.25,1.5,0.5,1)] max-w-[calc(100vw-2rem)]">
+      <div className="flex items-center gap-1.5 px-1 sm:px-2 py-0.5">
+        <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] text-xs font-bold">
           {count}
         </div>
-        <span className="whitespace-nowrap text-sm font-medium">
+        <span className="text-sm font-medium whitespace-nowrap hidden sm:inline">
           seleccionada{count !== 1 ? "s" : ""}
         </span>
       </div>
-      <div className="mx-0.5 h-5 w-px bg-border" />
+      <div className="h-5 w-px bg-border mx-0.5" />
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 rounded-xl text-xs"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Exportar"
         onClick={onExport}
       >
-        <Download className="size-3.5" /> Exportar
+        <Download className="size-3.5" />
+        <span className="hidden sm:inline">Exportar</span>
       </Button>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 rounded-xl text-xs"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Imprimir"
         onClick={onPrint}
       >
-        <Printer className="size-3.5" /> Imprimir
+        <Printer className="size-3.5" />
+        <span className="hidden sm:inline">Imprimir</span>
       </Button>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 rounded-xl text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Eliminar"
         onClick={onDelete}
       >
-        <Trash2 className="size-3.5" /> Eliminar
+        <Trash2 className="size-3.5" />
+        <span className="hidden sm:inline">Eliminar</span>
       </Button>
-      <div className="mx-0.5 h-5 w-px bg-border" />
+      <div className="h-5 w-px bg-border mx-0.5" />
       <Button
         variant="ghost"
         size="icon"
-        className="size-8 rounded-xl text-muted-foreground hover:text-foreground"
+        className="size-8 rounded-xl text-muted-foreground hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-105 active:scale-95 active:duration-150"
         onClick={onClear}
+        aria-label="Limpiar selección"
       >
         <X className="size-4" />
       </Button>
@@ -423,6 +541,7 @@ function FloatingSelectionBar({
 }
 
 export default function GarantiasPage() {
+  const isMobile = useIsMobile();
   const { hasRole } = useAuth();
   const canEdit = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
   const canDelete = hasRole(RolUsuario.ADMIN);
@@ -438,7 +557,7 @@ export default function GarantiasPage() {
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [draftEstadoFilter, setDraftEstadoFilter] =
     useState<EstadoFilter>("all");
-  const [viewMode] = useState<"list" | "grid">("list");
+  const [viewMode, setViewMode] = useState<"list" | "grid">(getInitialViewMode);
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
@@ -448,11 +567,16 @@ export default function GarantiasPage() {
     () => canCreateManual && hasNuevoParam(),
   );
   const [editGarantiaId, setEditGarantiaId] = useState<string | null>(null);
+  const [editIntent, setEditIntent] = useState<"edit" | "complete">("edit");
   const [viewDetailId, setViewDetailId] = useState<string | null>(null);
   const [createCasoGarantiaId, setCreateCasoGarantiaId] = useState<
     string | null
   >(null);
   const [updateCasoData, setUpdateCasoData] = useState<{
+    garantiaId: string;
+    caso: GarantiaCasoItem;
+  } | null>(null);
+  const [deleteCasoData, setDeleteCasoData] = useState<{
     garantiaId: string;
     caso: GarantiaCasoItem;
   } | null>(null);
@@ -463,6 +587,7 @@ export default function GarantiasPage() {
       limit,
       search: debouncedSearch || undefined,
       estado: estadoFilter !== "all" ? estadoFilter : undefined,
+      soloOperativas: estadoFilter === "all" ? true : undefined,
     }),
     [page, limit, debouncedSearch, estadoFilter],
   );
@@ -478,6 +603,10 @@ export default function GarantiasPage() {
 
   const { data, isLoading, isError, refetch } = useGarantias(filters);
   const { data: statsTotal } = useGarantias(statsBaseFilters);
+  const { data: statsPendientes } = useGarantias({
+    ...statsBaseFilters,
+    estado: EstadoGarantia.PENDIENTE_COMPLETAR,
+  });
   const { data: statsActivas } = useGarantias({
     ...statsBaseFilters,
     estado: EstadoGarantia.ACTIVA,
@@ -494,6 +623,7 @@ export default function GarantiasPage() {
   const createMutation = useCreateGarantia();
   const updateMutation = useUpdateGarantia(editGarantiaId ?? "");
   const deleteMutation = useDeleteGarantia();
+  const deleteCasoMutation = useEliminarCasoGarantia();
   const {
     data: editGarantiaResponse,
     isLoading: isEditLoading,
@@ -515,14 +645,7 @@ export default function GarantiasPage() {
     () => rows.filter((item) => selectedCards.has(item.id)),
     [rows, selectedCards],
   );
-
-  const autoRefresh = usePageAutoRefresh({
-    scope: "garantias",
-    toastLabel: "Garantías",
-    manualToastMessage: "Lista actualizada",
-    toastId: GARANTIAS_REFRESH_TOAST_ID,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+  const pendingCount = statsPendientes?.meta?.total ?? 0;
 
   const handleCreate = useCallback(
     (payload: GarantiaFormPayload) => {
@@ -543,15 +666,29 @@ export default function GarantiasPage() {
     (payload: GarantiaFormPayload) => {
       updateMutation.mutate(payload, {
         onSuccess: () => {
-          toast.success("Garantía actualizada correctamente");
+          toast.success(
+            editIntent === "complete"
+              ? "Garantía completada y activada"
+              : "Garantía actualizada correctamente",
+          );
           setEditGarantiaId(null);
+          setEditIntent("edit");
         },
         onError: (error: Error) => {
           toast.error(error.message || "Error al actualizar la garantía");
         },
       });
     },
-    [updateMutation],
+    [editIntent, updateMutation],
+  );
+
+  const openEditGarantia = useCallback(
+    (garantiaId: string, intent: "edit" | "complete" = "edit") => {
+      setViewDetailId(null);
+      setEditIntent(intent);
+      setEditGarantiaId(garantiaId);
+    },
+    [],
   );
 
   const handleConfirmDelete = useCallback(async () => {
@@ -576,6 +713,7 @@ export default function GarantiasPage() {
 
       if (editGarantiaId && pendingDeleteIds.includes(editGarantiaId)) {
         setEditGarantiaId(null);
+        setEditIntent("edit");
       }
 
       setDeleteId(null);
@@ -602,6 +740,34 @@ export default function GarantiasPage() {
     },
     [],
   );
+
+  const openDeleteCaso = useCallback(
+    (garantiaId: string, caso: GarantiaCasoItem) => {
+      setDeleteCasoData({ garantiaId, caso });
+    },
+    [],
+  );
+
+  const handleConfirmDeleteCaso = useCallback(() => {
+    if (!deleteCasoData) return;
+
+    deleteCasoMutation.mutate(
+      {
+        garantiaId: deleteCasoData.garantiaId,
+        casoId: deleteCasoData.caso.id,
+      },
+      {
+        onSuccess: () => {
+          toast.success("Caso eliminado correctamente");
+          setDeleteCasoData(null);
+          setViewDetailId(deleteCasoData.garantiaId);
+        },
+        onError: (error: Error) => {
+          toast.error(error.message || "Error al eliminar el caso");
+        },
+      },
+    );
+  }, [deleteCasoData, deleteCasoMutation]);
 
   const handlePageChange = useCallback((nextPage: number) => {
     setPage(nextPage);
@@ -639,6 +805,9 @@ export default function GarantiasPage() {
 
   const clearFilterPopover = useCallback(() => {
     setDraftEstadoFilter("all");
+    setEstadoFilter("all");
+    setPage(1);
+    setFilterPopoverOpen(false);
   }, []);
 
   const applyFilterPopover = useCallback(() => {
@@ -650,6 +819,13 @@ export default function GarantiasPage() {
   const handleSelectionModeToggle = useCallback(() => {
     setSelectionMode((previous) => !previous);
     setSelectedCards(new Set<string>());
+  }, []);
+
+  const handleViewModeChange = useCallback((value: string) => {
+    if (value !== "list" && value !== "grid") return;
+    setViewMode(value);
+    setSelectedCards(new Set<string>());
+    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, value);
   }, []);
 
   const exportGarantias = useCallback((items: GarantiaListItem[]) => {
@@ -797,8 +973,11 @@ export default function GarantiasPage() {
         id: "serie",
         header: "N.° serie",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap font-mono text-sm">
-            {row.original.equipo.numeroSerie}
+          <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
+            <HighlightedText
+              text={row.original.equipo.numeroSerie}
+              search={search}
+            />
           </span>
         ),
       },
@@ -806,65 +985,88 @@ export default function GarantiasPage() {
         id: "producto",
         header: "Producto",
         cell: ({ row }) => (
-          <span
-            className="block max-w-55 truncate"
-            title={getGarantiaProductName(row.original)}
-          >
-            {row.original.equipo.producto.nombre}
-            {row.original.equipo.producto.modelo ? (
-              <span className="ml-1 text-xs text-muted-foreground">
-                {row.original.equipo.producto.modelo}
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span
+              className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30 dark:shadow-emerald-500/40"
+              aria-hidden
+            >
+              <ShieldCheck className="size-4" />
+            </span>
+            <div className="flex flex-col min-w-0">
+              <span
+                className="block max-w-64 sm:max-w-xs md:max-w-md break-words whitespace-normal font-semibold text-sm leading-snug text-foreground"
+                title={getGarantiaProductName(row.original)}
+              >
+                <HighlightedText
+                  text={row.original.equipo.producto.nombre}
+                  search={search}
+                />
+                {row.original.equipo.producto.modelo ? (
+                  <span className="ml-1 text-xs text-muted-foreground font-normal">
+                    · <HighlightedText
+                      text={row.original.equipo.producto.modelo}
+                      search={search}
+                    />
+                  </span>
+                ) : null}
               </span>
-            ) : null}
-          </span>
+            </div>
+          </div>
         ),
       },
       {
         accessorKey: "codigoQR",
         header: "Código QR",
         cell: ({ row }) => (
-          <span className="font-mono text-xs">{row.original.codigoQR}</span>
+          <span className="font-mono text-xs text-muted-foreground">
+            <HighlightedText text={row.original.codigoQR} search={search} />
+          </span>
         ),
       },
       {
         accessorKey: "clienteNombre",
         header: "Cliente",
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {row.original.clienteNombre ?? "—"}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const cliente = row.original.clienteNombre;
+          return cliente ? (
+            <span className="whitespace-nowrap text-sm text-foreground font-medium">
+              <HighlightedText text={cliente} search={search} />
+            </span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs">—</span>
+          );
+        },
       },
       {
         accessorKey: "estado",
         header: "Estado",
-        cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className={cn(
-              "whitespace-nowrap",
-              ESTADO_VARIANTS[row.original.estado],
-            )}
-          >
-            {ESTADO_LABELS[row.original.estado]}
-          </Badge>
-        ),
+        cell: ({ row }) => {
+          const statusTones: Record<EstadoGarantia, ErpBadgeTone> = {
+            [EstadoGarantia.PENDIENTE_COMPLETAR]: "warning",
+            [EstadoGarantia.ACTIVA]: "success",
+            [EstadoGarantia.VENCIDA]: "warning",
+            [EstadoGarantia.ANULADA]: "danger",
+          };
+          return (
+            <ErpBadge
+              tone={statusTones[row.original.estado]}
+              className="whitespace-nowrap"
+            >
+              {ESTADO_LABELS[row.original.estado]}
+            </ErpBadge>
+          );
+        },
       },
       {
         id: "vigencia",
         header: "Vigencia",
         cell: ({ row }) => (
-          <Badge
-            variant={row.original.vigente ? "default" : "outline"}
-            className={cn(
-              "whitespace-nowrap",
-              row.original.vigente
-                ? "border-primary/20 bg-primary/10 text-primary"
-                : "text-muted-foreground",
-            )}
+          <ErpBadge
+            tone={row.original.vigente ? "success" : "neutral"}
+            className="whitespace-nowrap"
           >
             {row.original.vigente ? "Vigente" : "No vigente"}
-          </Badge>
+          </ErpBadge>
         ),
       },
       {
@@ -879,201 +1081,267 @@ export default function GarantiasPage() {
       {
         id: "acciones",
         header: "",
+        enableHiding: false,
+        size: 120,
         cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-1.5">
             <Button
-              variant="ghost"
+              type="button"
+              variant="outline"
               size="sm"
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
-              onClick={() => setViewDetailId(row.original.id)}
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setViewDetailId(row.original.id);
+              }}
             >
               <Eye className="size-3.5" />
               Ver
             </Button>
 
+            {canEdit &&
+            row.original.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                onClick={() => openEditGarantia(row.original.id, "complete")}
+              >
+                <ClipboardCheck className="size-3.5" />
+                Completar
+              </Button>
+            ) : null}
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-8 rounded-lg"
+                  className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                 >
                   <MoreHorizontal className="size-4" />
                   <span className="sr-only">Acciones</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => setViewDetailId(row.original.id)}
-                >
-                  <Eye className="size-4" />
-                  Ver detalle
-                </DropdownMenuItem>
-
-                {canManageCasos &&
-                row.original.estado === EstadoGarantia.ACTIVA ? (
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuGroup>
                   <DropdownMenuItem
-                    onClick={() => openCreateCaso(row.original.id)}
+                    onClick={() => setViewDetailId(row.original.id)}
                   >
-                    <MessageSquarePlus className="size-4" />
-                    Nuevo caso
+                    <Eye className="size-4" />
+                    Ver detalle
                   </DropdownMenuItem>
-                ) : null}
 
-                <DropdownMenuSeparator />
+                  {canManageCasos &&
+                  row.original.estado === EstadoGarantia.ACTIVA ? (
+                    <DropdownMenuItem
+                      onClick={() => openCreateCaso(row.original.id)}
+                    >
+                      <MessageSquarePlus className="size-4" />
+                      Nuevo caso
+                    </DropdownMenuItem>
+                  ) : null}
 
-                {canEdit ? (
-                  <DropdownMenuItem
-                    onClick={() => setEditGarantiaId(row.original.id)}
-                  >
-                    <Pencil className="size-4" />
-                    Editar
-                  </DropdownMenuItem>
-                ) : null}
+                  <DropdownMenuSeparator />
 
-                {canDelete ? (
-                  <DropdownMenuItem
-                    variant="destructive"
-                    onClick={() => setDeleteId(row.original.id)}
-                  >
-                    <Trash2 className="size-4" />
-                    Eliminar
-                  </DropdownMenuItem>
-                ) : null}
+                  {canEdit && (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        openEditGarantia(
+                          row.original.id,
+                          row.original.estado ===
+                            EstadoGarantia.PENDIENTE_COMPLETAR
+                            ? "complete"
+                            : "edit",
+                        )
+                      }
+                    >
+                      {row.original.estado ===
+                      EstadoGarantia.PENDIENTE_COMPLETAR ? (
+                        <ClipboardCheck className="size-4" />
+                      ) : (
+                        <Pencil className="size-4" />
+                      )}
+                      {row.original.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+                        ? "Completar garantía"
+                        : "Editar"}
+                    </DropdownMenuItem>
+                  )}
+
+                  {canDelete && (
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => setDeleteId(row.original.id)}
+                    >
+                      <Trash2 className="size-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
         ),
       },
     ],
-    [canEdit, canDelete, canManageCasos, openCreateCaso],
+    [
+      canEdit,
+      canDelete,
+      canManageCasos,
+      openCreateCaso,
+      openEditGarantia,
+      search,
+    ],
   );
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="sr-only text-2xl font-semibold tracking-tight">
-            Garantías
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Controla vigencia, cobertura y el seguimiento de casos de cada
-            equipo.
-          </p>
-        </div>
+    <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative backing glows — coordinated with oklch themes */}
+      <div className="pointer-events-none absolute -z-10 bg-emerald-400/8 dark:bg-emerald-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-teal-400/6 dark:bg-teal-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-cyan-400/5 dark:bg-cyan-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
 
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-          <PageAutoRefreshControl autoRefresh={autoRefresh} />
+      {/* Topbar page action slot */}
+      <TopbarActions>
+        <RealtimeStatus />
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-9 rounded-lg">
-                <MoreHorizontal className="size-4" />
-                <span className="sr-only">Más opciones</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleManualRefresh}>
-                <RefreshCcw className="size-4" /> Actualizar lista
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportGarantias(rows)}>
-                <Download className="size-4" /> Exportar CSV
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {canCreateManual ? (
+          <Button
+            onClick={() => setOpenCreate(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nueva garantía</span>
+            <span className="sm:hidden">Nueva</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
 
-          {canCreateManual ? (
-            <Button
-              onClick={() => setOpenCreate(true)}
-              className="erp-page-primary-cta rounded-xl"
-            >
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Nueva garantía</span>
-              <span className="sm:hidden">Nueva</span>
-            </Button>
-          ) : null}
-        </div>
-      </div>
+      <h1 className="sr-only">Garantías</h1>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* ── Stats row ── */}
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard
           label="Total garantías"
           value={statsTotal?.meta?.total}
           icon={ShieldCheck}
-          index={0}
+          theme="slate"
+          subtitle="Registradas"
+        />
+        <StatCard
+          label="Pendientes"
+          value={statsPendientes?.meta?.total}
+          icon={ClipboardCheck}
+          theme="sky"
+          subtitle="Por completar"
         />
         <StatCard
           label="Activas"
           value={statsActivas?.meta?.total}
           icon={CheckCircle2}
-          color="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-          index={1}
+          theme="emerald"
+          subtitle="En vigencia"
         />
         <StatCard
           label="Vencidas"
           value={statsVencidas?.meta?.total}
           icon={Clock3}
-          color="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-          index={2}
+          theme="amber"
+          subtitle="Plazo expirado"
         />
         <StatCard
           label="Anuladas"
           value={statsAnuladas?.meta?.total}
           icon={Ban}
-          color="bg-destructive/10 text-destructive"
-          index={3}
+          theme="red"
+          subtitle="Sin cobertura"
         />
       </div>
 
+      {pendingCount > 0 ? (
+        <div className="flex flex-col gap-3 rounded-xl border border-border/40 border-l-[3px] border-l-amber-500 bg-amber-50/40 dark:bg-amber-950/10 px-4 py-3.5 text-foreground shadow-xs sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+              <ClipboardCheck className="size-4.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-200">
+                {pendingCount === 1
+                  ? "Hay 1 garantía pendiente de completar"
+                  : `Hay ${pendingCount} garantías pendientes de completar`}
+              </p>
+              <p className="text-xs text-muted-foreground/80 mt-0.5">
+                Completa fecha y lugar de instalación para activarlas antes de
+                abrir casos o validar cobertura.
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 shrink-0 gap-1.5 rounded-lg border-amber-200/80 bg-background text-xs text-amber-800 hover:bg-amber-50 dark:border-amber-900/50 dark:text-amber-300 dark:hover:bg-amber-900/20 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            onClick={() =>
+              handleEstadoChange(EstadoGarantia.PENDIENTE_COMPLETAR)
+            }
+          >
+            <Filter className="size-3.5" />
+            Ver pendientes
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-2.5">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full shrink-0 sm:w-72 lg:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar por QR, serie, producto o cliente..."
-              value={search}
-              onChange={(event) => handleSearchChange(event.target.value)}
-              className="h-9 w-full rounded-lg border-muted bg-muted/40 pl-9 pr-9 text-sm shadow-none transition-colors hover:bg-muted/80 focus-visible:border-ring focus-visible:ring-1"
-            />
-            {search ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-                onClick={() => handleSearchChange("")}
-              >
-                <X className="size-3.5" />
-              </Button>
-            ) : null}
-          </div>
+          {/* Search bar */}
+          <ToolbarSearchInput
+            value={search}
+            onChange={handleSearchChange}
+            placeholder="Buscar por QR, serie, producto o cliente..."
+            className="sm:w-80 lg:w-96"
+            inputClassName="border-border bg-background hover:border-emerald-400/60 dark:hover:border-emerald-500/60 focus-visible:border-emerald-500 dark:focus-visible:border-emerald-400 focus-visible:ring-emerald-400/25 dark:focus-visible:ring-emerald-500/25 shadow-sm"
+          />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end">
-            <Tabs value={estadoFilter} onValueChange={handleEstadoChange}>
-              <TabsList className="h-9 gap-0.5 rounded-lg border border-border/60 bg-muted/60 p-0.5">
+          <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+            <Tabs
+              value={estadoFilter}
+              onValueChange={handleEstadoChange}
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="flex w-full sm:w-auto h-9 gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5">
                 <TabsTrigger
                   value="all"
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-teal-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-teal-500/30 dark:data-[state=active]:bg-teal-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <ShieldCheck className="size-3.5" />
-                  <span className="hidden sm:inline">Todas</span>
+                  <span className="hidden sm:inline">Operativas</span>
+                </TabsTrigger>
+                <TabsTrigger
+                  value={EstadoGarantia.PENDIENTE_COMPLETAR}
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                >
+                  <ClipboardCheck className="size-3.5" />
+                  <span className="hidden sm:inline">Pendientes</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoGarantia.ACTIVA}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <CheckCircle2 className="size-3.5" />
                   <span className="hidden sm:inline">Activas</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoGarantia.VENCIDA}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Clock3 className="size-3.5" />
                   <span className="hidden sm:inline">Vencidas</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoGarantia.ANULADA}
-                  className="h-8 gap-1.5 rounded-md px-3 text-xs data-[state=active]:bg-background data-[state=active]:shadow-sm"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-red-500/30 dark:data-[state=active]:bg-red-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Ban className="size-3.5" />
                   <span className="hidden sm:inline">Anuladas</span>
@@ -1081,122 +1349,147 @@ export default function GarantiasPage() {
               </TabsList>
             </Tabs>
 
-            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant={filterPopoverOpen ? "secondary" : "outline"}
-                  size="sm"
-                  className="h-9 gap-1.5 rounded-lg text-xs"
-                >
-                  <Filter className="size-3.5" />
-                  <span className="hidden sm:inline">Filtros</span>
-                  {activeFilterCount > 0 ? (
-                    <span className="flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
-                      {activeFilterCount}
-                    </span>
-                  ) : null}
-                  <ChevronDown
-                    className={cn(
-                      "size-3.5 transition-transform duration-200",
-                      filterPopoverOpen && "rotate-180",
-                    )}
+            <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto">
+              <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+                <PopoverTrigger asChild>
+                  <ToolbarFiltersButton
+                    open={filterPopoverOpen}
+                    activeCount={activeFilterCount}
+                    className="flex-1 sm:flex-initial"
                   />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                align="end"
-                sideOffset={10}
-                className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-              >
-                <div className="border-b border-border/60 px-4 py-3">
-                  <p className="text-sm font-semibold">Filtros</p>
-                  <p className="text-xs text-muted-foreground">
-                    Refina la lista visible
-                  </p>
-                </div>
-
-                <div className="space-y-4 px-4 py-4">
-                  <div className="space-y-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      Estado
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  sideOffset={10}
+                  className="w-[calc(100vw-2rem)] sm:w-[480px] max-w-lg rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+                >
+                  <div className="border-b border-border/60 px-4 py-3">
+                    <p className="text-sm font-semibold">Filtros</p>
+                    <p className="text-xs text-muted-foreground">
+                      Refina la lista visible de garantías
                     </p>
-                    <div className="grid gap-2">
-                      {[
-                        { value: "all", label: "Todas" },
-                        { value: EstadoGarantia.ACTIVA, label: "Activas" },
-                        { value: EstadoGarantia.VENCIDA, label: "Vencidas" },
-                        { value: EstadoGarantia.ANULADA, label: "Anuladas" },
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                            draftEstadoFilter === option.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
-                              : "border-border/60 bg-background hover:bg-muted/40",
-                          )}
-                          onClick={() =>
-                            setDraftEstadoFilter(option.value as EstadoFilter)
-                          }
-                        >
-                          <span
+                  </div>
+
+                  <div className="space-y-4 px-4 py-4">
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                        Estado
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {[
+                          { value: "all", label: "Operativas" },
+                          {
+                            value: EstadoGarantia.PENDIENTE_COMPLETAR,
+                            label: "Pendientes",
+                          },
+                          { value: EstadoGarantia.ACTIVA, label: "Activas" },
+                          { value: EstadoGarantia.VENCIDA, label: "Vencidas" },
+                          { value: EstadoGarantia.ANULADA, label: "Anuladas" },
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
                             className={cn(
-                              "flex size-4 items-center justify-center rounded-full border transition-colors",
+                              "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
                               draftEstadoFilter === option.value
-                                ? "border-primary"
-                                : "border-muted-foreground/40",
+                                ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
+                                : "border-border/60 bg-background hover:bg-muted/40",
                             )}
+                            onClick={() =>
+                              setDraftEstadoFilter(option.value as EstadoFilter)
+                            }
                           >
                             <span
                               className={cn(
-                                "size-2 rounded-full transition-colors",
+                                "flex size-4 items-center justify-center rounded-full border transition-colors",
                                 draftEstadoFilter === option.value
-                                  ? "bg-primary"
-                                  : "bg-transparent",
+                                  ? "border-[var(--accent)]"
+                                  : "border-muted-foreground/40",
                               )}
-                            />
-                          </span>
-                          <span>{option.label}</span>
-                        </button>
-                      ))}
+                            >
+                              <span
+                                className={cn(
+                                  "size-2 rounded-full transition-colors",
+                                  draftEstadoFilter === option.value
+                                    ? "bg-[var(--accent)]"
+                                    : "bg-transparent",
+                                )}
+                              />
+                            </span>
+                            <span>{option.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+                        onClick={clearFilterPopover}
+                      >
+                        Limpiar
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                        onClick={applyFilterPopover}
+                      >
+                        Aplicar filtros
+                      </Button>
                     </div>
                   </div>
+                </PopoverContent>
+              </Popover>
 
-                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground"
-                      onClick={clearFilterPopover}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs"
-                      onClick={applyFilterPopover}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
-                </div>
-              </PopoverContent>
-            </Popover>
+              {canDelete ? (
+                <Button
+                  variant={selectionMode ? "secondary" : "outline"}
+                  size="sm"
+                  className={cn(
+                    "h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150",
+                    selectionMode
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40 dark:hover:bg-emerald-500/30"
+                      : "border-border/80 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300",
+                  )}
+                  onClick={handleSelectionModeToggle}
+                >
+                  <CheckCircle2 className="size-3.5 shrink-0" />
+                  <span className="hidden sm:inline">
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </span>
+                </Button>
+              ) : null}
 
-            {canDelete ? (
-              <Button
-                variant={selectionMode ? "secondary" : "outline"}
+              <ToggleGroup
+                type="single"
+                value={viewMode}
+                onValueChange={handleViewModeChange}
+                variant="outline"
                 size="sm"
-                className="h-9 gap-1.5 rounded-lg text-xs"
-                onClick={handleSelectionModeToggle}
+                className="gap-0 rounded-lg border border-border/70 bg-muted/50 p-0.5 shrink-0"
               >
-                <CheckCircle2 className="size-3.5" />
-                {selectionMode ? "Cancelar selección" : "Seleccionar"}
-              </Button>
-            ) : null}
+                <ToggleGroupItem
+                  value="list"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
+                  aria-label="Vista tabla"
+                  title="Vista tabla"
+                >
+                  <List className="size-3.5" />
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="grid"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
+                  aria-label="Vista tarjetas"
+                  title="Vista tarjetas"
+                >
+                  <LayoutGrid className="size-3.5" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
         </div>
       </div>
@@ -1218,6 +1511,7 @@ export default function GarantiasPage() {
           enableRowSelection={canDelete && selectionMode}
           enableColumnVisibility
           columnVisibilityStorageKey="erp:garantias:table-columns"
+          fillAvailableHeight={!isMobile}
           bulkActionsBar={
             canDelete
               ? (selectedRows, clearSelection) => (
@@ -1265,32 +1559,34 @@ export default function GarantiasPage() {
           }
         />
       ) : (
-        <div className="min-h-0">
+        <div className="flex flex-1 min-h-0 flex-col">
           {isLoading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, index) => (
-                <div
-                  key={index}
-                  className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm"
-                >
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="size-11 rounded-xl" />
-                    <div className="flex-1 space-y-1.5">
-                      <Skeleton className="h-3.5 w-3/4" />
-                      <Skeleton className="h-3 w-1/2" />
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {Array.from({ length: 8 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="size-11 rounded-xl" />
+                      <div className="flex-1 space-y-1.5">
+                        <Skeleton className="h-3.5 w-3/4" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-3 w-2/3" />
+                    <div className="flex gap-2 pt-2">
+                      <Skeleton className="h-8 flex-1 rounded-lg" />
+                      <Skeleton className="h-8 flex-1 rounded-lg" />
                     </div>
                   </div>
-                  <Skeleton className="h-3 w-full" />
-                  <Skeleton className="h-3 w-2/3" />
-                  <div className="flex gap-2 pt-2">
-                    <Skeleton className="h-8 flex-1 rounded-lg" />
-                    <Skeleton className="h-8 flex-1 rounded-lg" />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : !rows.length ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-muted-foreground">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-muted-foreground">
               <ShieldCheck className="size-12 opacity-20" />
               <p className="text-sm font-medium">No se encontraron garantías</p>
               <p className="text-xs opacity-70">
@@ -1299,138 +1595,162 @@ export default function GarantiasPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {rows.map((garantia, index) => (
-                  <GarantiaCard
-                    key={garantia.id}
-                    garantia={garantia}
-                    canEdit={canEdit}
-                    canDelete={canDelete}
-                    canManageCasos={canManageCasos}
-                    isSelected={selectionMode && selectedCards.has(garantia.id)}
-                    animationDelay={Math.min(index * 55, 440)}
-                    onToggleSelect={
-                      selectionMode
-                        ? () => toggleCardSelection(garantia.id)
-                        : undefined
-                    }
-                    onView={() => setViewDetailId(garantia.id)}
-                    onEdit={() => setEditGarantiaId(garantia.id)}
-                    onCreateCaso={() => openCreateCaso(garantia.id)}
-                    onDelete={() => setDeleteId(garantia.id)}
-                  />
-                ))}
-              </div>
-
-              {(data?.meta?.total ?? 0) > limit ? (
-                <div className="mt-5 flex items-center justify-between gap-3">
-                  <p className="text-xs text-muted-foreground">
-                    {(page - 1) * limit + 1}-
-                    {Math.min(page * limit, data?.meta?.total ?? 0)} de{" "}
-                    {data?.meta?.total ?? 0} garantías
-                  </p>
-
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page <= 1}
-                      onClick={() => handlePageChange(1)}
-                      title="Primera"
-                    >
-                      <ChevronsLeft className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page <= 1}
-                      onClick={() => handlePageChange(page - 1)}
-                      title="Anterior"
-                    >
-                      <ChevronLeft className="size-4" />
-                    </Button>
-                    {(() => {
-                      const totalPages = Math.ceil(
-                        (data?.meta?.total ?? 0) / limit,
-                      );
-                      const pages: Array<number | "..."> = [];
-
-                      if (totalPages <= 7) {
-                        for (let index = 1; index <= totalPages; index++)
-                          pages.push(index);
-                      } else {
-                        pages.push(1);
-
-                        if (page > 3) pages.push("...");
-
-                        for (
-                          let index = Math.max(2, page - 1);
-                          index <= Math.min(totalPages - 1, page + 1);
-                          index++
-                        ) {
-                          pages.push(index);
-                        }
-
-                        if (page < totalPages - 2) pages.push("...");
-
-                        pages.push(totalPages);
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {rows.map((garantia, index) => (
+                    <GarantiaCard
+                      key={garantia.id}
+                      garantia={garantia}
+                      canEdit={canEdit}
+                      canDelete={canDelete}
+                      canManageCasos={canManageCasos}
+                      isSelected={selectionMode && selectedCards.has(garantia.id)}
+                      animationDelay={Math.min(index * 55, 440)}
+                      onToggleSelect={
+                        selectionMode
+                          ? () => toggleCardSelection(garantia.id)
+                          : undefined
                       }
-
-                      return pages.map((pageItem, index) =>
-                        pageItem === "..." ? (
-                          <span
-                            key={`ellipsis-${index}`}
-                            className="select-none px-1.5 text-sm text-muted-foreground"
-                          >
-                            ...
-                          </span>
-                        ) : (
-                          <Button
-                            key={pageItem}
-                            variant={pageItem === page ? "default" : "ghost"}
-                            size="icon"
-                            className={cn(
-                              "size-8 rounded-lg text-xs font-medium",
-                              pageItem === page && "pointer-events-none",
-                            )}
-                            onClick={() => handlePageChange(pageItem as number)}
-                          >
-                            {pageItem}
-                          </Button>
-                        ),
-                      );
-                    })()}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page * limit >= (data?.meta?.total ?? 0)}
-                      onClick={() => handlePageChange(page + 1)}
-                      title="Siguiente"
-                    >
-                      <ChevronRight className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-lg"
-                      disabled={page * limit >= (data?.meta?.total ?? 0)}
-                      onClick={() =>
-                        handlePageChange(
-                          Math.ceil((data?.meta?.total ?? 0) / limit),
+                      onView={() => setViewDetailId(garantia.id)}
+                      onEdit={() =>
+                        openEditGarantia(
+                          garantia.id,
+                          garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+                            ? "complete"
+                            : "edit",
                         )
                       }
-                      title="Última"
-                    >
-                      <ChevronsRight className="size-4" />
-                    </Button>
-                  </div>
+                      onCreateCaso={() => openCreateCaso(garantia.id)}
+                      onDelete={() => setDeleteId(garantia.id)}
+                      search={search}
+                    />
+                  ))}
                 </div>
-              ) : null}
+              </div>
 
-              {selectedCards.size > 0 ? (
+              {/* Anchored pagination wrapper matching Clientes */}
+              {(data?.meta?.total ?? 0) > 0 && (
+                <div className="shrink-0 mt-3 flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        Filas por página
+                      </span>
+                      <Select
+                        value={String(limit)}
+                        onValueChange={(value) => handleLimitChange(Number(value))}
+                      >
+                        <SelectTrigger className="h-8 min-w-[5.5rem] rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent align="start">
+                          {PAGE_SIZE_OPTIONS.map((option) => (
+                            <SelectItem key={option} value={String(option)}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground">
+                      {(page - 1) * limit + 1}–
+                      {Math.min(page * limit, data?.meta?.total ?? 0)} de {data?.meta?.total ?? 0}{" "}
+                      garantías
+                    </p>
+                  </div>
+
+                  {(data?.meta?.total ?? 0) > limit && (
+                    <div className="flex flex-wrap items-center gap-1 sm:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => handlePageChange(1)}
+                        title="Primera página"
+                      >
+                        <ChevronsLeft className="size-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page <= 1}
+                        onClick={() => handlePageChange(page - 1)}
+                      >
+                        <ChevronLeft className="size-3.5" />
+                        Anterior
+                      </Button>
+                      {(() => {
+                        const totalPages = Math.ceil((data?.meta?.total ?? 0) / limit);
+                        const pages: (number | "...")[] = [];
+                        if (totalPages <= 7) {
+                          for (let i = 1; i <= totalPages; i++) pages.push(i);
+                        } else {
+                          pages.push(1);
+                          if (page > 3) pages.push("...");
+                          for (
+                            let i = Math.max(2, page - 1);
+                            i <= Math.min(totalPages - 1, page + 1);
+                            i++
+                          )
+                            pages.push(i);
+                          if (page < totalPages - 2) pages.push("...");
+                          pages.push(totalPages);
+                        }
+                        return pages.map((p, i) =>
+                          p === "..." ? (
+                            <span
+                              key={`ellipsis-${i}`}
+                              className="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground select-none"
+                            >
+                              ...
+                            </span>
+                          ) : (
+                            <Button
+                              key={p}
+                              variant="outline"
+                              size="sm"
+                              className={cn(
+                                "h-8 w-8 rounded-md border-border/80 px-0 text-xs shadow-none transition-all duration-150 active:scale-95",
+                                p === page
+                                  ? "border-primary/20 bg-primary/10 text-foreground pointer-events-none"
+                                  : "bg-muted/55 hover:bg-muted/80",
+                              )}
+                              onClick={() => handlePageChange(p as number)}
+                            >
+                              {p}
+                            </Button>
+                          ),
+                        );
+                      })()}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= (data?.meta?.total ?? 0)}
+                        onClick={() => handlePageChange(page + 1)}
+                      >
+                        Siguiente
+                        <ChevronRight className="size-3.5" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95 disabled:opacity-50"
+                        disabled={page * limit >= (data?.meta?.total ?? 0)}
+                        onClick={() => handlePageChange(Math.ceil((data?.meta?.total ?? 0) / limit))}
+                        title="Última página"
+                      >
+                        <ChevronsRight className="size-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {selectedCards.size > 0 && (
                 <FloatingSelectionBar
                   count={selectedCards.size}
                   onExport={handleExportSelectedCards}
@@ -1438,7 +1758,7 @@ export default function GarantiasPage() {
                   onDelete={handleBulkDeleteCards}
                   onClear={() => setSelectedCards(new Set<string>())}
                 />
-              ) : null}
+              )}
             </>
           )}
         </div>
@@ -1507,6 +1827,66 @@ export default function GarantiasPage() {
         </AlertDialogContent>
       </AlertDialog>
 
+      <AlertDialog
+        open={!!deleteCasoData}
+        onOpenChange={(open) => {
+          if (!open) setDeleteCasoData(null);
+        }}
+      >
+        <AlertDialogContent className="w-full rounded-2xl p-6 sm:max-w-md">
+          <AlertDialogCancel
+            variant="ghost"
+            size="icon"
+            onClick={() => setDeleteCasoData(null)}
+            className="absolute right-4 top-4 z-10 mt-0 size-6 border-0 text-muted-foreground hover:bg-muted"
+          >
+            <X className="size-4" />
+          </AlertDialogCancel>
+          <AlertDialogHeader className="relative flex flex-row items-start gap-4 space-y-0">
+            <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-destructive/10">
+              <Trash2 className="size-5 text-destructive" />
+            </div>
+            <div className="flex flex-col gap-1.5 text-left">
+              <AlertDialogTitle className="text-xl">
+                ¿Eliminar caso?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-2">
+                  <p>
+                    Esta acción elimina solo el caso registrado dentro de la
+                    garantía. La garantía y el equipo permanecen intactos.
+                  </p>
+                  {deleteCasoData ? (
+                    <div className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs text-foreground/80">
+                      <div className="line-clamp-3 font-medium">
+                        {deleteCasoData.caso.descripcion}
+                      </div>
+                      <div className="mt-1 text-muted-foreground">
+                        {new Date(deleteCasoData.caso.createdAt).toLocaleString(
+                          "es-PE",
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </AlertDialogDescription>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end sm:space-x-0">
+            <AlertDialogCancel className="mt-0 w-full rounded-xl sm:w-auto">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteCaso}
+              className="w-full rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:w-auto"
+              disabled={deleteCasoMutation.isPending}
+            >
+              {deleteCasoMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="flex max-h-[90vh] w-full flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 py-4 sm:px-6">
@@ -1536,20 +1916,33 @@ export default function GarantiasPage() {
 
       <Dialog
         open={!!editGarantiaId}
-        onOpenChange={(open) => !open && setEditGarantiaId(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditGarantiaId(null);
+            setEditIntent("edit");
+          }
+        }}
       >
         <DialogContent className="flex max-h-[90vh] w-full flex-col overflow-hidden p-0 sm:max-w-2xl md:max-w-4xl lg:max-w-5xl">
           <DialogHeader className="shrink-0 border-b border-border/40 px-4 py-4 sm:px-6">
             <div className="flex items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-orange-100 dark:bg-orange-900/40">
-                <Pencil className="size-4 text-orange-600 dark:text-orange-400" />
+                {editIntent === "complete" ? (
+                  <ClipboardCheck className="size-4 text-orange-600 dark:text-orange-400" />
+                ) : (
+                  <Pencil className="size-4 text-orange-600 dark:text-orange-400" />
+                )}
               </div>
               <div>
                 <DialogTitle className="text-base font-semibold sm:text-lg">
-                  Editar garantía
+                  {editIntent === "complete"
+                    ? "Completar garantía"
+                    : "Editar garantía"}
                 </DialogTitle>
                 <DialogDescription className="mt-0.5 text-xs">
-                  Actualiza los datos operativos de la garantía.
+                  {editIntent === "complete"
+                    ? "Completa instalación y activa la cobertura del equipo vendido."
+                    : "Actualiza los datos operativos de la garantía."}
                 </DialogDescription>
               </div>
             </div>
@@ -1573,12 +1966,45 @@ export default function GarantiasPage() {
                   ventaId: editGarantia.ventaId ?? undefined,
                   fechaInicio: toDateInputValue(editGarantia.fechaInicio),
                   fechaFin: toDateInputValue(editGarantia.fechaFin),
-                  estado: editGarantia.estado,
+                  estado:
+                    editIntent === "complete" &&
+                    editGarantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+                      ? EstadoGarantia.ACTIVA
+                      : editGarantia.estado,
                   cobertura: editGarantia.cobertura,
                   exclusiones: editGarantia.exclusiones ?? undefined,
+                  fechaInstalacion: toDateInputValue(
+                    editGarantia.fechaInstalacion,
+                  ),
+                  direccionInstalacion:
+                    editGarantia.direccionInstalacion ?? undefined,
+                  ubigeoInstalacion:
+                    editGarantia.ubigeoInstalacion ?? undefined,
+                  departamentoInstalacion:
+                    editGarantia.departamentoInstalacion ?? undefined,
+                  provinciaInstalacion:
+                    editGarantia.provinciaInstalacion ?? undefined,
+                  distritoInstalacion:
+                    editGarantia.distritoInstalacion ?? undefined,
+                  latitudInstalacion:
+                    editGarantia.latitudInstalacion ?? undefined,
+                  longitudInstalacion:
+                    editGarantia.longitudInstalacion ?? undefined,
+                  contactoInstalacion:
+                    editGarantia.contactoInstalacion ?? undefined,
+                  telefonoInstalacion:
+                    editGarantia.telefonoInstalacion ?? undefined,
+                  notasInstalacion:
+                    editGarantia.notasInstalacion ?? undefined,
+                  contadorMaxCopias: editGarantia.contadorMaxCopias ?? null,
                 }}
                 onSubmit={handleUpdate}
                 isLoading={updateMutation.isPending}
+                submitLabel={
+                  editIntent === "complete"
+                    ? "Completar y activar garantía"
+                    : undefined
+                }
               />
             )}
           </div>
@@ -1589,11 +2015,16 @@ export default function GarantiasPage() {
         id={viewDetailId}
         onClose={() => setViewDetailId(null)}
         onEdit={(garantia) => {
-          setViewDetailId(null);
-          setEditGarantiaId(garantia.id);
+          openEditGarantia(
+            garantia.id,
+            garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+              ? "complete"
+              : "edit",
+          );
         }}
         onCreateCaso={openCreateCaso}
         onUpdateCaso={openUpdateCaso}
+        onDeleteCaso={openDeleteCaso}
         canEdit={canEdit}
         canManageCasos={canManageCasos}
       />

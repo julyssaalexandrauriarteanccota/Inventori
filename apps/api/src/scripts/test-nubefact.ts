@@ -9,7 +9,8 @@ import * as fs from 'fs';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 import AdmZip = require('adm-zip');
 
-const BETA_ENDPOINT = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
+const BETA_ENDPOINT =
+  'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
 const RUC = '10013415116';
 const BETA_USER = `${RUC}MODDATOS`;
 const BETA_PASS = 'MODDATOS';
@@ -18,13 +19,19 @@ async function main() {
   // Read the real Nubefact XML
   const xmlPath = path.join(__dirname, '../../../../10013415116-03-BBB1-1.xml');
   const xmlContent = fs.readFileSync(xmlPath, 'utf-8');
-  
+
   console.log('=== Real Nubefact XML ===');
   console.log(`Length: ${xmlContent.length}`);
-  console.log(`Encoding declared: ${xmlContent.match(/encoding="([^"]+)"/)?.[1]}`);
-  console.log(`UBLVersionID: ${xmlContent.match(/<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/)?.[1]}`);
+  console.log(
+    `Encoding declared: ${xmlContent.match(/encoding="([^"]+)"/)?.[1]}`,
+  );
+  console.log(
+    `UBLVersionID: ${xmlContent.match(/<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/)?.[1]}`,
+  );
   console.log(`Has ds:Signature: ${xmlContent.includes('<ds:Signature')}`);
-  console.log(`Signature Id: ${xmlContent.match(/<ds:Signature\s+Id="([^"]+)"/)?.[1]}`);
+  console.log(
+    `Signature Id: ${xmlContent.match(/<ds:Signature\s+Id="([^"]+)"/)?.[1]}`,
+  );
   console.log(`Has xsi namespace: ${xmlContent.includes('xmlns:xsi')}`);
   console.log(`Has xsd namespace: ${xmlContent.includes('xmlns:xsd')}`);
   console.log(`Has ccts namespace: ${xmlContent.includes('xmlns:ccts')}`);
@@ -60,7 +67,10 @@ async function main() {
   console.log('\nSending to SUNAT BETA...');
   const response = await fetch(BETA_ENDPOINT, {
     method: 'POST',
-    headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'urn:sendBill' },
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      SOAPAction: 'urn:sendBill',
+    },
     body: envelope,
   });
 
@@ -72,14 +82,20 @@ async function main() {
     console.log(`FAULT: ${faultCode}`);
     console.log(`MSG: ${faultString}`);
   } else {
-    const appResponse = text.match(/<applicationResponse>(.*?)<\/applicationResponse>/s)?.[1];
+    const appResponse = text.match(
+      /<applicationResponse>(.*?)<\/applicationResponse>/s,
+    )?.[1];
     if (appResponse) {
       console.log('SUCCESS! Got CDR!');
       const cdrZip = new AdmZip(Buffer.from(appResponse, 'base64'));
       for (const entry of cdrZip.getEntries()) {
         const cdrXml = entry.getData().toString('utf-8');
-        const responseCode = cdrXml.match(/<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/)?.[1];
-        const description = cdrXml.match(/<cbc:Description>(.*?)<\/cbc:Description>/)?.[1];
+        const responseCode = cdrXml.match(
+          /<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/,
+        )?.[1];
+        const description = cdrXml.match(
+          /<cbc:Description>(.*?)<\/cbc:Description>/,
+        )?.[1];
         console.log(`CDR ResponseCode: ${responseCode}`);
         console.log(`CDR Description: ${description}`);
       }

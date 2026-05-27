@@ -5,7 +5,7 @@ applyTo: "apps/api/prisma/**"
 
 # Prisma Schema Conventions
 
-Ver mapa completo de tablas en [`SPRINTS/00-MAPA-TABLAS.md`](../../SPRINTS/00-MAPA-TABLAS.md).
+Ver mapa completo de tablas en [`otros no uties/00-MAPA-TABLAS.md`](../../otros%20no%20uties/00-MAPA-TABLAS.md).
 
 ## Campos obligatorios en todo modelo
 

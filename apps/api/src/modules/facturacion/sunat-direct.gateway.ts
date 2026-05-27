@@ -548,7 +548,8 @@ export class SunatDirectGateway {
   private tagText(xml: string, tagName: string) {
     const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return (
-      xml.match(new RegExp(`<${escaped}\\b[^>]*>(.*?)</${escaped}>`, 's'))?.[1]
+      xml
+        .match(new RegExp(`<${escaped}\\b[^>]*>(.*?)</${escaped}>`, 's'))?.[1]
         ?.trim() ?? null
     );
   }

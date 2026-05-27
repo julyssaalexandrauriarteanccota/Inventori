@@ -8,7 +8,7 @@ import { calcularDeadlineEnvio, TipoDocumento } from '@erp/shared';
 
 async function main() {
   console.log('Starting direct manual retry script...');
-  
+
   const prisma = new PrismaService();
   await prisma.$connect();
   console.log('Connected to PostgreSQL successfully!');
@@ -73,7 +73,7 @@ async function main() {
   // Directly queue the job in BullMQ
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
   console.log(`Connecting to Redis: ${redisUrl}`);
-  
+
   // Parse redis connection parameters
   const urlObj = new URL(redisUrl);
   const redisConfig = {

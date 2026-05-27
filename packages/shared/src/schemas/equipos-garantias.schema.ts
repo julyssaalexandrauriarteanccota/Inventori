@@ -33,6 +33,17 @@ const dateInputStringSchema = z.string().refine((value) => {
   return !Number.isNaN(Date.parse(value))
 }, 'Fecha inválida')
 
+const optionalDateInputStringSchema = dateInputStringSchema
+  .optional()
+  .or(z.literal('').transform(() => undefined))
+
+const optionalUbigeoSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/u, 'El ubigeo debe tener 6 dígitos')
+  .optional()
+  .or(z.literal('').transform(() => undefined))
+
 export const equipoFormSchema = z.object({
   numeroSerie: z.string().trim().min(1),
   productoId: z.string().uuid(),
@@ -65,6 +76,36 @@ export const asignarEquipoClienteSchema = z.object({
   notas: z.string().optional(),
 })
 
+export const clienteEquipoFormSchema = z.object({
+  clienteId: z.string().uuid(),
+  productoId: z
+    .string()
+    .uuid()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  numeroSerie: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal('').transform(() => undefined)),
+  nombre: z.string().trim().min(1, 'El nombre del equipo es obligatorio'),
+  marca: z.string().trim().optional(),
+  modelo: z.string().trim().optional(),
+  estado: z.nativeEnum(EstadoEquipo).optional(),
+  codigoQr: z.string().trim().optional(),
+  ubicacion: z.string().trim().optional(),
+  notas: z.string().optional(),
+})
+
+export const queryClienteEquipoFiltersSchema = z.object({
+  page: z.number().int().min(1).optional(),
+  limit: z.number().int().min(1).optional(),
+  search: z.string().trim().min(1).optional(),
+  clienteId: z.string().uuid().optional(),
+  productoId: z.string().uuid().optional(),
+  estado: z.nativeEnum(EstadoEquipo).optional(),
+})
+
 export const lecturaSNMPSchema = z.object({
   nivelTonerNegro: z.number().int().min(0).optional(),
   nivelTonerCian: z.number().int().min(0).optional(),
@@ -95,30 +136,105 @@ export const queryLecturaSNMPFiltersSchema = z.object({
   hasta: z.string().datetime().optional(),
 })
 
-export const garantiaFormSchema = z.object({
-  equipoId: z.string().uuid(),
-  ventaId: z
-    .string()
-    .uuid()
-    .optional()
-    .or(z.literal('').transform(() => undefined)),
-  clienteDocTipo: z.string().optional(),
-  clienteDocNumero: z.string().optional(),
-  clienteNombre: z.string().optional(),
-  fechaInicio: dateInputStringSchema,
-  fechaFin: dateInputStringSchema,
-  cobertura: z.string().trim().min(1),
-  exclusiones: z.string().optional(),
-  estado: z.nativeEnum(EstadoGarantia).optional(),
-  usarContadorActual: z.boolean().optional(),
-  contadorMaxCopias: z.number().int().min(0).nullable().optional(),
-})
+export const garantiaFormSchema = z
+  .object({
+    equipoId: z.string().uuid(),
+    ventaId: z
+      .string()
+      .uuid()
+      .optional()
+      .or(z.literal('').transform(() => undefined)),
+    clienteDocTipo: z.string().optional(),
+    clienteDocNumero: z.string().optional(),
+    clienteNombre: z.string().optional(),
+    fechaInicio: dateInputStringSchema,
+    fechaFin: dateInputStringSchema,
+    cobertura: z.string().trim().min(1),
+    exclusiones: z.string().optional(),
+    fechaInstalacion: optionalDateInputStringSchema,
+    direccionInstalacion: z.string().trim().optional(),
+    ubigeoInstalacion: optionalUbigeoSchema,
+    departamentoInstalacion: z.string().trim().optional(),
+    provinciaInstalacion: z.string().trim().optional(),
+    distritoInstalacion: z.string().trim().optional(),
+    latitudInstalacion: z.number().min(-90).max(90).nullable().optional(),
+    longitudInstalacion: z.number().min(-180).max(180).nullable().optional(),
+    contactoInstalacion: z.string().trim().optional(),
+    telefonoInstalacion: z.string().trim().optional(),
+    notasInstalacion: z.string().optional(),
+    estado: z.nativeEnum(EstadoGarantia).optional(),
+    usarContadorActual: z.boolean().optional(),
+    contadorMaxCopias: z.number().int().min(0).nullable().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.estado !== EstadoGarantia.ACTIVA) return
+
+    if (!value.fechaInstalacion) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['fechaInstalacion'],
+        message: 'La fecha de instalación es obligatoria para activar',
+      })
+    }
+
+    if (!value.direccionInstalacion?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['direccionInstalacion'],
+        message: 'El lugar de instalación es obligatorio para activar',
+      })
+    }
+
+    if (!value.departamentoInstalacion?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['departamentoInstalacion'],
+        message: 'El departamento de instalación es obligatorio para activar',
+      })
+    }
+
+    if (!value.provinciaInstalacion?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['provinciaInstalacion'],
+        message: 'La provincia de instalación es obligatoria para activar',
+      })
+    }
+
+    if (!value.distritoInstalacion?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['distritoInstalacion'],
+        message: 'El distrito de instalación es obligatorio para activar',
+      })
+    }
+
+    if (!value.ubigeoInstalacion?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ubigeoInstalacion'],
+        message: 'El ubigeo de instalación es obligatorio para activar',
+      })
+    }
+
+    if (
+      value.latitudInstalacion == null ||
+      value.longitudInstalacion == null
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['latitudInstalacion'],
+        message: 'Selecciona el punto de instalación en el mapa',
+      })
+    }
+  })
 
 export const queryGarantiaFiltersSchema = z.object({
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).optional(),
   estado: z.nativeEnum(EstadoGarantia).optional(),
   equipoId: z.string().uuid().optional(),
+  soloOperativas: z.boolean().optional(),
 })
 
 export const crearCasoGarantiaSchema = z.object({
@@ -146,6 +262,17 @@ export const garantiaPublicResponseSchema = z.object({
     fechaFin: z.string().datetime(),
     cobertura: z.string(),
     exclusiones: z.string().nullable(),
+    fechaInstalacion: z.string().datetime().nullable().optional(),
+    direccionInstalacion: z.string().nullable().optional(),
+    ubigeoInstalacion: z.string().nullable().optional(),
+    departamentoInstalacion: z.string().nullable().optional(),
+    provinciaInstalacion: z.string().nullable().optional(),
+    distritoInstalacion: z.string().nullable().optional(),
+    latitudInstalacion: z.number().nullable().optional(),
+    longitudInstalacion: z.number().nullable().optional(),
+    contactoInstalacion: z.string().nullable().optional(),
+    telefonoInstalacion: z.string().nullable().optional(),
+    notasInstalacion: z.string().nullable().optional(),
     clienteNombre: z.string().nullable(),
     codigoQR: z.string().uuid(),
     vigente: z.boolean(),
@@ -242,6 +369,50 @@ export const equiposPaginatedResponseSchema = z.object({
               id: z.string().uuid(),
               numero: z.string(),
               estado: z.string(),
+            })
+            .nullable()
+            .optional(),
+        })
+        .nullable()
+        .optional(),
+    }),
+  ),
+  meta: paginatedMetaSchema,
+})
+
+export const clienteEquiposPaginatedResponseSchema = z.object({
+  data: z.array(
+    z.object({
+      id: z.string().uuid(),
+      clienteId: z.string().uuid(),
+      productoId: z.string().uuid().nullable(),
+      numeroSerie: z.string(),
+      nombre: z.string().nullable(),
+      marca: z.string().nullable(),
+      modelo: z.string().nullable(),
+      estado: z.nativeEnum(EstadoEquipo),
+      codigoQr: z.string().nullable(),
+      ubicacion: z.string().nullable(),
+      notas: z.string().nullable(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+      cliente: z
+        .object({
+          id: z.string().uuid(),
+          nombre: z.string().nullable(),
+          apellido: z.string().nullable(),
+          razonSocial: z.string().nullable(),
+        })
+        .optional(),
+      producto: z
+        .object({
+          id: z.string().uuid(),
+          sku: z.string(),
+          nombre: z.string(),
+          modelo: z.string().nullable(),
+          marca: z
+            .object({
+              nombre: z.string(),
             })
             .nullable()
             .optional(),

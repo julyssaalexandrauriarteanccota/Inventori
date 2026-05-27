@@ -277,8 +277,10 @@ export class GreenterGateway {
   }
 
   private async buildSunatPayload(ruc: string, ambiente: AmbienteSunat) {
-    const credentials = await this.sunatCredentialsService.resolveCredentials(ruc);
-    const certificate = await this.certificadoDigitalService.getActiveKeyMaterial();
+    const credentials =
+      await this.sunatCredentialsService.resolveCredentials(ruc);
+    const certificate =
+      await this.certificadoDigitalService.getActiveKeyMaterial();
     const endpoint =
       ambiente === AmbienteSunat.PRODUCCION
         ? this.configService.get<string>('SUNAT_PRODUCCION_URL')
@@ -315,7 +317,10 @@ export class GreenterGateway {
     return this.postGreenter<GreenterTicketResponse>('/ticket', payload);
   }
 
-  private async postGreenter<T>(path: string, payload: Record<string, unknown>) {
+  private async postGreenter<T>(
+    path: string,
+    payload: Record<string, unknown>,
+  ) {
     const baseUrl = this.configService.get<string>(
       'GREENTER_SERVICE_URL',
       'http://localhost:8081',
@@ -461,7 +466,9 @@ export class GreenterGateway {
   private detalles(comprobante: Record<string, unknown>) {
     const detalles = comprobante.detallesFiscales;
     if (!Array.isArray(detalles) || detalles.length === 0) {
-      throw new BadRequestException('El comprobante no tiene detalles fiscales.');
+      throw new BadRequestException(
+        'El comprobante no tiene detalles fiscales.',
+      );
     }
 
     return detalles.map((detalle) => this.record(detalle));
@@ -497,7 +504,8 @@ export class GreenterGateway {
 
   private decodeXml(response: { xmlText?: string; xml?: string }) {
     if (response.xmlText) return response.xmlText;
-    if (response.xml) return Buffer.from(response.xml, 'base64').toString('utf8');
+    if (response.xml)
+      return Buffer.from(response.xml, 'base64').toString('utf8');
     return '';
   }
 
@@ -530,7 +538,9 @@ export class GreenterGateway {
 
   private date(value: unknown) {
     const date = value instanceof Date ? value : new Date(String(value));
-    return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+    return Number.isNaN(date.getTime())
+      ? new Date().toISOString()
+      : date.toISOString();
   }
 
   private required(value: unknown, field: string) {
@@ -545,7 +555,9 @@ export class GreenterGateway {
 
   private num(value: unknown) {
     if (typeof value === 'object' && value !== null && 'toNumber' in value) {
-      return Number((value as { toNumber: () => number }).toNumber().toFixed(2));
+      return Number(
+        (value as { toNumber: () => number }).toNumber().toFixed(2),
+      );
     }
     return Number(Number(value ?? 0).toFixed(2));
   }

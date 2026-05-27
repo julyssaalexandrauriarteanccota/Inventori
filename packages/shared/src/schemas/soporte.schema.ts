@@ -20,9 +20,10 @@ export const ticketDetalleSchema = z.object({
   notas: z.string().optional(),
 })
 
-export const ticketFormSchema = z.object({
+const ticketFormBaseSchema = z.object({
   clienteId: z.string().uuid(),
-  equipoId: z.string().uuid().optional(),
+  equipoId: z.string().uuid().nullable().optional(),
+  clienteEquipoId: z.string().uuid().nullable().optional(),
   tecnicoId: z.string().uuid().optional(),
   titulo: z.string().trim().min(1).max(200),
   descripcion: z.string().trim().min(1),
@@ -35,11 +36,31 @@ export const ticketFormSchema = z.object({
   detalles: z.array(ticketDetalleSchema).optional(),
 })
 
-export const ticketUpdateSchema = ticketFormSchema.partial().extend({
-  estado: z.nativeEnum(EstadoTicket).optional(),
-  diagnostico: z.string().optional(),
-  solucion: z.string().optional(),
-})
+function validateSingleEquipoReference(
+  value: { equipoId?: string | null; clienteEquipoId?: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (value.equipoId && value.clienteEquipoId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['clienteEquipoId'],
+      message: 'Selecciona un equipo propio o un equipo del cliente, no ambos',
+    })
+  }
+}
+
+export const ticketFormSchema = ticketFormBaseSchema.superRefine(
+  validateSingleEquipoReference,
+)
+
+export const ticketUpdateSchema = ticketFormBaseSchema
+  .partial()
+  .extend({
+    estado: z.nativeEnum(EstadoTicket).optional(),
+    diagnostico: z.string().optional(),
+    solucion: z.string().optional(),
+  })
+  .superRefine(validateSingleEquipoReference)
 
 export const ticketRepuestoSchema = ticketDetalleSchema
 

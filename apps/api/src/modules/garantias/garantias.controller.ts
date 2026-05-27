@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Param,
   Body,
   Query,
@@ -14,6 +15,7 @@ import { Public } from '../../common/decorators/public.decorator';
 import { GarantiasService } from './garantias.service';
 import {
   CreateGarantiaDto,
+  UpdateGarantiaDto,
   CreateCasoGarantiaDto,
   UpdateCasoGarantiaDto,
   QueryGarantiaDto,
@@ -57,6 +59,20 @@ export class GarantiasController {
     return this.garantiasService.findOne(id);
   }
 
+  @Patch(':id')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Actualizar y completar una garantía' })
+  update(@Param('id') id: string, @Body() dto: UpdateGarantiaDto) {
+    return this.garantiasService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @Roles(RolUsuario.ADMIN)
+  @ApiOperation({ summary: 'Anular garantía' })
+  remove(@Param('id') id: string) {
+    return this.garantiasService.remove(id);
+  }
+
   // ── CASOS DE GARANTÍA ─────────────────────
 
   @Post(':id/casos')
@@ -77,5 +93,12 @@ export class GarantiasController {
     @Body() dto: UpdateCasoGarantiaDto,
   ) {
     return this.garantiasService.updateCaso(id, casoId, dto);
+  }
+
+  @Delete(':id/casos/:casoId')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Eliminar un caso de garantía' })
+  deleteCaso(@Param('id') id: string, @Param('casoId') casoId: string) {
+    return this.garantiasService.deleteCaso(id, casoId);
   }
 }

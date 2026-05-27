@@ -14,6 +14,7 @@ import {
   PrioridadTicket,
   TipoServicio,
   EstadoGarantia,
+  TipoProducto,
 } from '@erp/shared';
 import type {
   TicketUpdateInput,
@@ -21,6 +22,7 @@ import type {
 } from '../../../generated/prisma/models/Ticket';
 import { PrismaService } from '../../database/prisma.service';
 import { EventsService } from '../../websockets/events.service';
+import { InventarioService } from '../inventario/inventario.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -42,6 +44,25 @@ type TicketTrackedField = 'estado' | 'prioridad' | 'tecnicoId' | 'tipoServicio';
 
 type TicketTrackedValues = Partial<Record<TicketTrackedField, string | null>>;
 
+type ReversibleDetalleTicket = {
+  productoId: string | null;
+  cantidad: number;
+  producto?: { tipo?: string | null } | null;
+};
+
+type SoporteStockTx = {
+  movimientoStock: Pick<
+    PrismaService['movimientoStock'],
+    'findMany' | 'create'
+  >;
+  almacenStock: Pick<PrismaService['almacenStock'], 'update' | 'findUnique'>;
+};
+
+type SoporteEstadoTx = {
+  ticket: Pick<PrismaService['ticket'], 'update'>;
+  historialTicket: Pick<PrismaService['historialTicket'], 'create'>;
+};
+
 @Injectable()
 export class SoporteService {
   private readonly logger = new Logger(SoporteService.name);
@@ -49,7 +70,33 @@ export class SoporteService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventsService,
+    private readonly inventarioService: InventarioService,
   ) {}
+
+  private async validateEquipoPropioAsignadoCliente(
+    equipoId: string,
+    clienteId: string,
+  ) {
+    const equipo = await this.prisma.equipo.findFirst({
+      where: {
+        id: equipoId,
+        deletedAt: null,
+        equipoClientes: {
+          some: {
+            clienteId,
+            fechaFin: null,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (!equipo) {
+      throw new NotFoundException(
+        `Equipo ${equipoId} no encontrado o no está asignado al cliente ${clienteId}`,
+      );
+    }
+  }
 
   // ═══════════════════════════════════════════
   //  CREAR TICKET
@@ -64,13 +111,32 @@ export class SoporteService {
       throw new NotFoundException(`Cliente ${dto.clienteId} no encontrado`);
     }
 
+    if (dto.equipoId && dto.clienteEquipoId) {
+      throw new BadRequestException(
+        'Selecciona un equipo propio o un equipo del cliente, no ambos',
+      );
+    }
+
     // Validar equipo si se proporciona
     if (dto.equipoId) {
-      const equipo = await this.prisma.equipo.findUnique({
-        where: { id: dto.equipoId },
+      await this.validateEquipoPropioAsignadoCliente(
+        dto.equipoId,
+        dto.clienteId,
+      );
+    }
+
+    if (dto.clienteEquipoId) {
+      const equipoCliente = await this.prisma.equipoClienteActivo.findFirst({
+        where: {
+          id: dto.clienteEquipoId,
+          clienteId: dto.clienteId,
+          deletedAt: null,
+        },
       });
-      if (!equipo) {
-        throw new NotFoundException(`Equipo ${dto.equipoId} no encontrado`);
+      if (!equipoCliente) {
+        throw new NotFoundException(
+          `Equipo de cliente ${dto.clienteEquipoId} no encontrado para este cliente`,
+        );
       }
     }
 
@@ -120,8 +186,26 @@ export class SoporteService {
         fechaPromesa: fechaPromesa ? new Date(fechaPromesa) : undefined,
       },
       include: {
-        cliente: { select: { id: true, nombre: true, dni: true, ruc: true } },
+        cliente: {
+          select: {
+            id: true,
+            nombre: true,
+            apellido: true,
+            razonSocial: true,
+            dni: true,
+            ruc: true,
+          },
+        },
         equipo: { select: { id: true, numeroSerie: true, productoId: true } },
+        clienteEquipo: {
+          select: {
+            id: true,
+            numeroSerie: true,
+            nombre: true,
+            marca: true,
+            modelo: true,
+          },
+        },
         tecnico: { select: { id: true, nombre: true, email: true } },
       },
     });
@@ -273,6 +357,8 @@ export class SoporteService {
         { codigo: { contains: search, mode: 'insensitive' } },
         { titulo: { contains: search, mode: 'insensitive' } },
         { cliente: { nombre: { contains: search, mode: 'insensitive' } } },
+        { cliente: { apellido: { contains: search, mode: 'insensitive' } } },
+        { cliente: { razonSocial: { contains: search, mode: 'insensitive' } } },
       ];
     }
 
@@ -283,9 +369,25 @@ export class SoporteService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          cliente: { select: { id: true, nombre: true } },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              razonSocial: true,
+            },
+          },
           tecnico: { select: { id: true, nombre: true } },
           equipo: { select: { id: true, numeroSerie: true } },
+          clienteEquipo: {
+            select: {
+              id: true,
+              numeroSerie: true,
+              nombre: true,
+              marca: true,
+              modelo: true,
+            },
+          },
           _count: { select: { detalles: true, adjuntos: true } },
         },
       }),
@@ -310,6 +412,8 @@ export class SoporteService {
           select: {
             id: true,
             nombre: true,
+            apellido: true,
+            razonSocial: true,
             dni: true,
             ruc: true,
             telefono: true,
@@ -320,7 +424,24 @@ export class SoporteService {
           select: {
             id: true,
             numeroSerie: true,
-            producto: { select: { id: true, nombre: true, modelo: true } },
+            producto: {
+              select: {
+                id: true,
+                nombre: true,
+                modelo: true,
+                modeloCatalogoId: true,
+                modeloCatalogo: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+        },
+        clienteEquipo: {
+          select: {
+            id: true,
+            numeroSerie: true,
+            nombre: true,
+            marca: true,
+            modelo: true,
           },
         },
         tecnico: { select: { id: true, nombre: true, email: true } },
@@ -334,6 +455,7 @@ export class SoporteService {
                 sku: true,
                 tipo: true,
                 requiereRepuestos: true,
+                precioVenta: true,
               },
             },
           },
@@ -372,10 +494,54 @@ export class SoporteService {
       throw new ForbiddenException('No tiene permiso para ver este ticket');
     }
 
+    const garantiasActuales = ticket.equipoId
+      ? await this.prisma.garantia.findMany({
+          where: {
+            equipoId: ticket.equipoId,
+            estado: {
+              in: [EstadoGarantia.ACTIVA, EstadoGarantia.PENDIENTE_COMPLETAR],
+            },
+          },
+          orderBy: { fechaFin: 'desc' },
+          select: {
+            id: true,
+            codigoQR: true,
+            fechaInicio: true,
+            fechaFin: true,
+            cobertura: true,
+            exclusiones: true,
+            estado: true,
+          },
+        })
+      : [];
+    const now = new Date();
+    const garantiaActual =
+      garantiasActuales.find(
+        (garantia) =>
+          garantia.estado === EstadoGarantia.ACTIVA && garantia.fechaFin >= now,
+      ) ??
+      garantiasActuales.find(
+        (garantia) => garantia.estado === EstadoGarantia.ACTIVA,
+      ) ??
+      garantiasActuales[0] ??
+      null;
+    const garantiaActualConVigencia = garantiaActual
+      ? {
+          ...garantiaActual,
+          vigente:
+            garantiaActual.estado === EstadoGarantia.ACTIVA &&
+            garantiaActual.fechaFin >= now,
+        }
+      : null;
+
     // Renombrar relación Prisma `casosGarantia` -> `casos` para el contrato API
     const { casosGarantia, ...rest } = ticket;
     return {
-      data: { ...rest, casos: casosGarantia },
+      data: {
+        ...rest,
+        casos: casosGarantia,
+        garantiaActual: garantiaActualConVigencia,
+      },
       meta: { timestamp: new Date().toISOString() },
     };
   }
@@ -392,6 +558,13 @@ export class SoporteService {
   ) {
     const ticket = await this.prisma.ticket.findFirst({
       where: { id, deletedAt: null },
+      include: {
+        detalles: {
+          include: {
+            producto: { select: { id: true, tipo: true } },
+          },
+        },
+      },
     });
     if (!ticket) {
       throw new NotFoundException(`Ticket ${id} no encontrado`);
@@ -412,6 +585,53 @@ export class SoporteService {
       throw new ForbiddenException(
         'No tiene permiso para modificar este ticket',
       );
+    }
+
+    const nextClienteId = dto.clienteId ?? ticket.clienteId;
+    const nextEquipoId =
+      dto.equipoId !== undefined ? dto.equipoId : ticket.equipoId;
+    const nextClienteEquipoId =
+      dto.clienteEquipoId !== undefined
+        ? dto.clienteEquipoId
+        : ticket.clienteEquipoId;
+
+    if (nextEquipoId && nextClienteEquipoId) {
+      throw new BadRequestException(
+        'Selecciona un equipo propio o un equipo del cliente, no ambos',
+      );
+    }
+
+    if (dto.clienteId) {
+      const cliente = await this.prisma.cliente.findFirst({
+        where: { id: dto.clienteId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!cliente) {
+        throw new NotFoundException(`Cliente ${dto.clienteId} no encontrado`);
+      }
+    }
+
+    if (nextEquipoId) {
+      await this.validateEquipoPropioAsignadoCliente(
+        nextEquipoId,
+        nextClienteId,
+      );
+    }
+
+    if (nextClienteEquipoId) {
+      const equipoCliente = await this.prisma.equipoClienteActivo.findFirst({
+        where: {
+          id: nextClienteEquipoId,
+          clienteId: nextClienteId,
+          deletedAt: null,
+        },
+        select: { id: true },
+      });
+      if (!equipoCliente) {
+        throw new NotFoundException(
+          `Equipo de cliente ${nextClienteEquipoId} no encontrado para este cliente`,
+        );
+      }
     }
 
     // Registrar cambios en historial
@@ -451,17 +671,44 @@ export class SoporteService {
     if (fechaPromesa !== undefined) {
       updateData.fechaPromesa = fechaPromesa ? new Date(fechaPromesa) : null;
     }
+    const debeRevertirStock = dto.estado === EstadoTicket.CANCELADO;
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.ticket.update({
         where: { id },
         data: updateData,
         include: {
-          cliente: { select: { id: true, nombre: true } },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              razonSocial: true,
+            },
+          },
           tecnico: { select: { id: true, nombre: true } },
           equipo: { select: { id: true, numeroSerie: true } },
+          clienteEquipo: {
+            select: {
+              id: true,
+              numeroSerie: true,
+              nombre: true,
+              marca: true,
+              modelo: true,
+            },
+          },
         },
       });
+
+      if (debeRevertirStock) {
+        await this.revertirConsumosTicket(
+          tx,
+          ticket,
+          ticket.detalles,
+          userId,
+          `Anulación ticket ${ticket.codigo}`,
+        );
+      }
 
       if (historialEntries.length > 0) {
         await tx.historialTicket.createMany({ data: historialEntries });
@@ -515,7 +762,23 @@ export class SoporteService {
     const ticket = await this.prisma.ticket.findFirst({
       where: { id: ticketId, deletedAt: null },
       include: {
-        equipo: { select: { productoId: true } },
+        equipo: {
+          select: {
+            productoId: true,
+            producto: { select: { modeloCatalogoId: true } },
+          },
+        },
+        clienteEquipo: {
+          select: {
+            productoId: true,
+            producto: { select: { modeloCatalogoId: true } },
+          },
+        },
+        casosGarantia: {
+          where: { aceptada: true },
+          select: { id: true },
+          take: 1,
+        },
         detalles: {
           include: {
             producto: { select: { tipo: true, requiereRepuestos: true } },
@@ -544,6 +807,9 @@ export class SoporteService {
     // Validar que el producto existe
     const producto = await this.prisma.producto.findFirst({
       where: { id: dto.productoId, deletedAt: null, activo: true },
+      include: {
+        modelosCompatibles: { select: { modeloCatalogoId: true } },
+      },
     });
     if (!producto) {
       throw new NotFoundException(`Producto ${dto.productoId} no encontrado`);
@@ -566,16 +832,31 @@ export class SoporteService {
     }
 
     // Validar compatibilidad si el ticket tiene equipo (solo para repuestos físicos)
-    if (!esServicio && ticket.equipo?.productoId) {
-      const compatible = await this.prisma.compatibilidad.findUnique({
+    const equipoModeloCatalogoId =
+      ticket.equipo?.producto?.modeloCatalogoId ??
+      ticket.clienteEquipo?.producto?.modeloCatalogoId ??
+      null;
+    const productoEquipoId =
+      ticket.equipo?.productoId ?? ticket.clienteEquipo?.productoId ?? null;
+    if (!esServicio && equipoModeloCatalogoId) {
+      const compatible = producto.modelosCompatibles.some(
+        (item) => item.modeloCatalogoId === equipoModeloCatalogoId,
+      );
+      if (!compatible) {
+        throw new BadRequestException(
+          'El repuesto no es compatible con el modelo del equipo asociado al ticket',
+        );
+      }
+    } else if (!esServicio && productoEquipoId) {
+      const compatibleLegacy = await this.prisma.compatibilidad.findUnique({
         where: {
           repuestoId_modeloId: {
             repuestoId: dto.productoId,
-            modeloId: ticket.equipo.productoId,
+            modeloId: productoEquipoId,
           },
         },
       });
-      if (!compatible) {
+      if (!compatibleLegacy) {
         throw new BadRequestException(
           'El repuesto no es compatible con el modelo del equipo asociado al ticket',
         );
@@ -583,6 +864,8 @@ export class SoporteService {
     }
 
     const precioUnitario = dto.precioUnitario ?? +(producto.precioVenta ?? 0);
+    const cubiertoGarantia =
+      dto.cubiertoGarantia ?? (ticket.casosGarantia?.length ?? 0) > 0;
 
     // Branch SERVICIO: no toca stock, solo crea detalle e historial
     if (esServicio) {
@@ -593,7 +876,7 @@ export class SoporteService {
             productoId: dto.productoId,
             cantidad: dto.cantidad,
             precioUnitario,
-            cubiertoGarantia: dto.cubiertoGarantia ?? false,
+            cubiertoGarantia,
             notas: dto.notas,
           },
           include: {
@@ -604,6 +887,7 @@ export class SoporteService {
                 sku: true,
                 tipo: true,
                 requiereRepuestos: true,
+                precioVenta: true,
               },
             },
           },
@@ -620,6 +904,13 @@ export class SoporteService {
           },
         });
 
+        await this.marcarTicketEnProcesoPorActividad(
+          tx,
+          ticket,
+          userId,
+          `Ticket marcado en proceso por registro de servicio`,
+        );
+
         return created;
       });
 
@@ -632,14 +923,8 @@ export class SoporteService {
     // Determinar almacén: usar el proporcionado o el principal
     let almacenId = dto.almacenId;
     if (!almacenId) {
-      const almacenPrincipal = await this.prisma.almacen.findFirst({
-        where: { esPrincipal: true, deletedAt: null },
-      });
-      if (!almacenPrincipal) {
-        throw new BadRequestException(
-          'No se encontró almacén principal. Especifique un almacén.',
-        );
-      }
+      const almacenPrincipal =
+        await this.inventarioService.ensurePrincipalAlmacen();
       almacenId = almacenPrincipal.id;
     }
 
@@ -681,14 +966,13 @@ export class SoporteService {
       const cantidadPosterior = stockActualizado?.cantidad ?? 0;
       const cantidadAnterior = cantidadPosterior + dto.cantidad;
 
-      // Crear detalle del ticket
       const detalle = await tx.detalleTicket.create({
         data: {
           ticketId,
           productoId: dto.productoId,
           cantidad: dto.cantidad,
           precioUnitario,
-          cubiertoGarantia: dto.cubiertoGarantia ?? false,
+          cubiertoGarantia,
           notas: dto.notas,
         },
         include: {
@@ -699,6 +983,7 @@ export class SoporteService {
               sku: true,
               tipo: true,
               requiereRepuestos: true,
+              precioVenta: true,
             },
           },
         },
@@ -717,6 +1002,7 @@ export class SoporteService {
           referenciaId: ticketId,
           referenciaTipo: 'TICKET',
           usuarioId: userId,
+          justificacion: `Consumo soporte ${ticket.codigo}: ${dto.cantidad}x ${detalle.producto.nombre}`,
         },
       });
 
@@ -731,6 +1017,13 @@ export class SoporteService {
           notas: dto.notas ?? null,
         },
       });
+
+      await this.marcarTicketEnProcesoPorActividad(
+        tx,
+        ticket,
+        userId,
+        `Ticket marcado en proceso por consumo de repuesto`,
+      );
 
       return detalle;
     });
@@ -870,9 +1163,22 @@ export class SoporteService {
 
     const detalle = await this.prisma.detalleTicket.findFirst({
       where: { id: detalleId, ticketId },
+      include: {
+        producto: { select: { id: true, tipo: true } },
+      },
     });
     if (!detalle) {
       throw new NotFoundException(`Detalle ${detalleId} no encontrado`);
+    }
+
+    if (
+      dto.cantidad !== undefined &&
+      dto.cantidad !== detalle.cantidad &&
+      detalle.producto?.tipo !== TipoProducto.SERVICIO
+    ) {
+      throw new BadRequestException(
+        'Para cambiar la cantidad de un repuesto, elimina la línea y agrégala nuevamente para recalcular inventario',
+      );
     }
 
     const updated = await this.prisma.detalleTicket.update({
@@ -885,7 +1191,14 @@ export class SoporteService {
       },
       include: {
         producto: {
-          select: { id: true, nombre: true, sku: true, tipo: true },
+          select: {
+            id: true,
+            nombre: true,
+            sku: true,
+            tipo: true,
+            requiereRepuestos: true,
+            precioVenta: true,
+          },
         },
       },
     });
@@ -937,58 +1250,14 @@ export class SoporteService {
     const esServicio = detalle.producto?.tipo === 'SERVICIO';
 
     await this.prisma.$transaction(async (tx) => {
-      // Si era repuesto físico, devolver stock al almacén origen del consumo
       if (!esServicio) {
-        const movimientoOriginal = await tx.movimientoStock.findFirst({
-          where: {
-            referenciaId: ticketId,
-            referenciaTipo: 'TICKET',
-            productoId: detalle.productoId,
-            tipo: TipoMovimiento.CONSUMO_SOPORTE,
-          },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        if (movimientoOriginal?.almacenOrigenId) {
-          const almacenId = movimientoOriginal.almacenOrigenId;
-          await tx.almacenStock.update({
-            where: {
-              almacenId_productoId: {
-                almacenId,
-                productoId: detalle.productoId,
-              },
-            },
-            data: { cantidad: { increment: detalle.cantidad } },
-          });
-
-          const stockActualizado = await tx.almacenStock.findUnique({
-            where: {
-              almacenId_productoId: {
-                almacenId,
-                productoId: detalle.productoId,
-              },
-            },
-            select: { cantidad: true },
-          });
-          const cantidadPosterior = stockActualizado?.cantidad ?? 0;
-          const cantidadAnterior = cantidadPosterior - detalle.cantidad;
-
-          await tx.movimientoStock.create({
-            data: {
-              tipo: TipoMovimiento.AJUSTE_POSITIVO,
-              productoId: detalle.productoId,
-              almacenDestinoId: almacenId,
-              cantidad: detalle.cantidad,
-              cantidadAnterior,
-              cantidadPosterior,
-              costoUnitario: detalle.precioUnitario,
-              referenciaId: ticketId,
-              referenciaTipo: 'TICKET',
-              usuarioId: userId,
-              justificacion: 'Reverso por eliminación de detalle de ticket',
-            },
-          });
-        }
+        await this.revertirConsumosTicket(
+          tx,
+          ticket,
+          [detalle],
+          userId,
+          `Reverso por eliminación de línea en ticket ${ticket.codigo}`,
+        );
       }
 
       await tx.detalleTicket.delete({ where: { id: detalleId } });
@@ -1172,24 +1441,40 @@ export class SoporteService {
   }
 
   // ═══════════════════════════════════════════
-  //  SOFT DELETE
+  //  ELIMINAR TICKET
   // ═══════════════════════════════════════════
 
-  async remove(id: string) {
+  async remove(id: string, userId: string, userRol: RolUsuario) {
     const ticket = await this.prisma.ticket.findFirst({
       where: { id, deletedAt: null },
+      include: {
+        detalles: {
+          include: {
+            producto: { select: { id: true, tipo: true } },
+          },
+        },
+      },
     });
     if (!ticket) {
       throw new NotFoundException(`Ticket ${id} no encontrado`);
     }
 
-    await this.prisma.ticket.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    if (userRol === RolUsuario.TECNICO && ticket.tecnicoId !== userId) {
+      throw new ForbiddenException(
+        'No tiene permiso para eliminar este ticket',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.adjuntoTicket.deleteMany({ where: { ticketId: id } });
+      await tx.casoGarantia.deleteMany({ where: { ticketId: id } });
+      await tx.historialTicket.deleteMany({ where: { ticketId: id } });
+      await tx.detalleTicket.deleteMany({ where: { ticketId: id } });
+      await tx.ticket.delete({ where: { id } });
     });
 
     return {
-      data: { message: `Ticket ${ticket.codigo} eliminado` },
+      data: { message: `Ticket ${ticket.codigo} eliminado definitivamente` },
       meta: { timestamp: new Date().toISOString() },
     };
   }
@@ -1197,6 +1482,161 @@ export class SoporteService {
   // ═══════════════════════════════════════════
   //  HELPERS PRIVADOS
   // ═══════════════════════════════════════════
+
+  private async marcarTicketEnProcesoPorActividad(
+    tx: SoporteEstadoTx,
+    ticket: { id: string; estado: string | null },
+    userId: string,
+    notas: string,
+  ) {
+    if (ticket.estado === EstadoTicket.EN_PROCESO) return;
+
+    await tx.ticket.update({
+      where: { id: ticket.id },
+      data: { estado: EstadoTicket.EN_PROCESO },
+    });
+
+    await tx.historialTicket.create({
+      data: {
+        ticketId: ticket.id,
+        usuarioId: userId,
+        campo: 'estado',
+        valorAntes: ticket.estado,
+        valorDespues: EstadoTicket.EN_PROCESO,
+        notas,
+      },
+    });
+  }
+
+  private async revertirConsumosTicket(
+    tx: SoporteStockTx,
+    ticket: { id: string; codigo: string },
+    detalles: ReversibleDetalleTicket[],
+    userId: string,
+    justificacion: string,
+  ) {
+    const cantidadesPorProducto = new Map<string, number>();
+
+    for (const detalle of detalles) {
+      if (
+        !detalle.productoId ||
+        detalle.producto?.tipo === TipoProducto.SERVICIO
+      ) {
+        continue;
+      }
+
+      const cantidad = Number(detalle.cantidad);
+      if (cantidad <= 0) continue;
+
+      cantidadesPorProducto.set(
+        detalle.productoId,
+        (cantidadesPorProducto.get(detalle.productoId) ?? 0) + cantidad,
+      );
+    }
+
+    for (const [productoId, cantidadTotal] of cantidadesPorProducto) {
+      let cantidadPendiente = cantidadTotal;
+      const movimientosConsumo = await tx.movimientoStock.findMany({
+        where: {
+          referenciaId: ticket.id,
+          referenciaTipo: 'TICKET',
+          productoId,
+          tipo: TipoMovimiento.CONSUMO_SOPORTE,
+          almacenOrigenId: { not: null },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      const movimientosReverso = await tx.movimientoStock.findMany({
+        where: {
+          referenciaId: ticket.id,
+          referenciaTipo: 'TICKET',
+          productoId,
+          tipo: TipoMovimiento.AJUSTE_POSITIVO,
+          almacenDestinoId: { not: null },
+        },
+        orderBy: { createdAt: 'asc' },
+      });
+      const reversadoPorAlmacen = new Map<string, number>();
+
+      for (const movimiento of movimientosReverso) {
+        if (!movimiento.almacenDestinoId) continue;
+        const key = `${productoId}:${movimiento.almacenDestinoId}`;
+        reversadoPorAlmacen.set(
+          key,
+          (reversadoPorAlmacen.get(key) ?? 0) + Number(movimiento.cantidad),
+        );
+      }
+
+      for (const movimiento of movimientosConsumo) {
+        if (cantidadPendiente <= 0) break;
+        if (!movimiento.almacenOrigenId) continue;
+
+        const cantidadMovimiento = Number(movimiento.cantidad);
+        const key = `${productoId}:${movimiento.almacenOrigenId}`;
+        const cantidadYaReversada = reversadoPorAlmacen.get(key) ?? 0;
+        const cantidadDisponibleMovimiento = Math.max(
+          0,
+          cantidadMovimiento - cantidadYaReversada,
+        );
+        reversadoPorAlmacen.set(
+          key,
+          Math.max(0, cantidadYaReversada - cantidadMovimiento),
+        );
+
+        const cantidadReversa = Math.min(
+          cantidadPendiente,
+          cantidadDisponibleMovimiento,
+        );
+        if (cantidadReversa <= 0) continue;
+
+        await tx.almacenStock.update({
+          where: {
+            almacenId_productoId: {
+              almacenId: movimiento.almacenOrigenId,
+              productoId,
+            },
+          },
+          data: { cantidad: { increment: cantidadReversa } },
+        });
+
+        const stockActualizado = await tx.almacenStock.findUnique({
+          where: {
+            almacenId_productoId: {
+              almacenId: movimiento.almacenOrigenId,
+              productoId,
+            },
+          },
+          select: { cantidad: true },
+        });
+        const cantidadPosterior = stockActualizado?.cantidad ?? 0;
+        const cantidadAnterior = cantidadPosterior - cantidadReversa;
+
+        await tx.movimientoStock.create({
+          data: {
+            tipo: TipoMovimiento.AJUSTE_POSITIVO,
+            productoId,
+            almacenDestinoId: movimiento.almacenOrigenId,
+            cantidad: cantidadReversa,
+            cantidadAnterior,
+            cantidadPosterior,
+            costoUnitario: movimiento.costoUnitario,
+            referenciaId: ticket.id,
+            referenciaTipo: 'TICKET',
+            usuarioId: userId,
+            justificacion,
+          },
+        });
+
+        cantidadPendiente -= cantidadReversa;
+      }
+
+      if (cantidadPendiente > 0) {
+        this.logger.warn(
+          `No se pudo revertir todo el consumo de ${productoId} en ticket ${ticket.codigo}. Pendiente: ${cantidadPendiente}`,
+        );
+      }
+    }
+  }
 
   private async generarCodigo(): Promise<string> {
     const year = new Date().getFullYear();

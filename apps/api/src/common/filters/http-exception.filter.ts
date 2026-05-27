@@ -43,6 +43,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
               ? resp.error
               : code;
       }
+
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        message = 'Demasiados intentos. Espera un minuto y vuelve a probar.';
+        code = 'TOO_MANY_REQUESTS';
+      }
     } else {
       this.logger.error(
         'Unhandled exception',

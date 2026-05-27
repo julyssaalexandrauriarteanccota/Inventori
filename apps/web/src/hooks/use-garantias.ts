@@ -20,6 +20,7 @@ function buildParams(filters: QueryGarantiaFilters) {
   if (filters.search) params.set('search', filters.search)
   if (filters.estado) params.set('estado', filters.estado)
   if (filters.equipoId) params.set('equipoId', filters.equipoId)
+  if (filters.soloOperativas) params.set('soloOperativas', 'true')
   return params.toString()
 }
 
@@ -93,6 +94,23 @@ export function useActualizarCasoGarantia(garantiaId: string, casoId: string) {
   return useMutation({
     mutationFn: (data: ActualizarCasoGarantiaPayload) =>
       api.patch(`/garantias/${garantiaId}/casos/${casoId}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [GARANTIAS_KEY] })
+      qc.invalidateQueries({ queryKey: ['tickets'] })
+    },
+  })
+}
+
+export function useEliminarCasoGarantia() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      garantiaId,
+      casoId,
+    }: {
+      garantiaId: string
+      casoId: string
+    }) => api.delete(`/garantias/${garantiaId}/casos/${casoId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [GARANTIAS_KEY] })
       qc.invalidateQueries({ queryKey: ['tickets'] })

@@ -24,6 +24,15 @@ export class ReportesController {
     return this.reportesService.getDashboard();
   }
 
+  @Get('dashboard/ventas-semana')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({
+    summary: 'Ventas y movimientos de stock por día (últimos 7 días)',
+  })
+  getVentasSemana() {
+    return this.reportesService.getVentasSemana();
+  }
+
   @Get('ventas')
   @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
   @ApiOperation({ summary: 'Reporte de ventas con filtros' })

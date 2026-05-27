@@ -323,12 +323,12 @@ export function ServerDataTable<TData, TValue>({
       )}
     >
       {enableRowSelection && selectedRows.length > 0 && bulkActionsBar && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border/60 bg-card/94 px-2 py-1.5 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.52)] ring-1 ring-black/5 backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200">
-          <div className="flex items-center gap-2 px-2 py-0.5">
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-border/60 bg-card/94 px-2 py-1.5 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.52)] ring-1 ring-black/5 backdrop-blur-md animate-in slide-in-from-bottom-3 duration-200 max-w-[calc(100vw-2rem)]">
+          <div className="flex items-center gap-1.5 px-1 sm:px-2 py-0.5">
             <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
               {selectedRows.length}
             </div>
-            <span className="whitespace-nowrap text-sm font-medium">
+            <span className="whitespace-nowrap text-sm font-medium hidden sm:inline">
               seleccionado{selectedRows.length !== 1 ? "s" : ""}
             </span>
           </div>
@@ -348,13 +348,13 @@ export function ServerDataTable<TData, TValue>({
       )}
       <div
         className={cn(
-          "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_14px_34px_-34px_rgba(15,23,42,0.42)]",
+          "flex min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_14px_34px_-34px_rgba(15,23,42,0.42)]",
           fillAvailableHeight && "flex-1",
         )}
       >
         <div
           className={cn(
-            "overflow-x-auto",
+            "w-full min-w-0 overflow-x-auto",
             fillAvailableHeight && "flex-1 overflow-y-auto",
           )}
         >

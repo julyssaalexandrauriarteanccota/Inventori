@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import {
+  Check,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -11,6 +12,7 @@ import {
   getDefaultClassNames,
   type DayButton,
 } from "react-day-picker"
+import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -170,6 +172,65 @@ function Calendar({
                 {children}
               </div>
             </td>
+          )
+        },
+        Dropdown: ({
+          value,
+          onChange,
+          options,
+          className,
+          "aria-label": ariaLabel,
+        }) => {
+          const selectedValue = value?.toString()
+
+          const handleValueChange = (val: string) => {
+            const event = {
+              target: {
+                value: val,
+              },
+            } as React.ChangeEvent<HTMLSelectElement>
+            onChange?.(event)
+          }
+
+          return (
+            <SelectPrimitive.Root value={selectedValue} onValueChange={handleValueChange}>
+              <SelectPrimitive.Trigger
+                className={cn(
+                  "flex h-7 w-fit min-w-[75px] items-center justify-between gap-1 rounded-lg border border-border/50 bg-background px-2.5 py-0.5 text-xs font-semibold text-foreground outline-none shadow-xs transition-colors hover:bg-muted/50 focus:border-ring focus:ring-1 focus:ring-ring cursor-pointer *:data-[slot=select-value]:line-clamp-1 dark:bg-zinc-900/40 dark:border-border/60",
+                  className
+                )}
+                aria-label={ariaLabel}
+              >
+                <SelectPrimitive.Value />
+                <SelectPrimitive.Icon asChild>
+                  <ChevronDownIcon className="size-3 opacity-50 ml-1 shrink-0" />
+                </SelectPrimitive.Icon>
+              </SelectPrimitive.Trigger>
+
+              {/* NOTA: No usamos SelectPrimitive.Portal para evitar conflictos de focus trap en el Popover de Radix */}
+              <SelectPrimitive.Content
+                position="popper"
+                className="relative z-50 max-h-48 min-w-[85px] overflow-y-auto rounded-lg border bg-popover text-popover-foreground shadow-md animate-in fade-in-80 duration-100 dark:bg-zinc-900 dark:border-border/60"
+              >
+                <SelectPrimitive.Viewport className="p-1">
+                  {options?.map((opt) => (
+                    <SelectPrimitive.Item
+                      key={opt.value}
+                      value={opt.value.toString()}
+                      disabled={opt.disabled}
+                      className="relative flex w-full cursor-default items-center rounded-md py-1 pr-6 pl-2 text-xs outline-none select-none focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50"
+                    >
+                      <SelectPrimitive.ItemText>{opt.label}</SelectPrimitive.ItemText>
+                      <span className="absolute right-1 flex size-3.5 items-center justify-center">
+                        <SelectPrimitive.ItemIndicator>
+                          <Check className="size-3" />
+                        </SelectPrimitive.ItemIndicator>
+                      </span>
+                    </SelectPrimitive.Item>
+                  ))}
+                </SelectPrimitive.Viewport>
+              </SelectPrimitive.Content>
+            </SelectPrimitive.Root>
           )
         },
         ...components,

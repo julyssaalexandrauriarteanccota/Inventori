@@ -194,7 +194,9 @@ export class ComprobanteSnapshotService {
         this.cleanText(configFiscal?.direccionFiscal) ??
         this.cleanText(config.direccion),
       emisorUbigeoFiscal: this.cleanText(configFiscal?.ubigeoFiscal),
-      emisorDepartamentoFiscal: this.cleanText(configFiscal?.departamentoFiscal),
+      emisorDepartamentoFiscal: this.cleanText(
+        configFiscal?.departamentoFiscal,
+      ),
       emisorProvinciaFiscal: this.cleanText(configFiscal?.provinciaFiscal),
       emisorDistritoFiscal: this.cleanText(configFiscal?.distritoFiscal),
       emisorCodigoEstablecimiento: this.cleanText(

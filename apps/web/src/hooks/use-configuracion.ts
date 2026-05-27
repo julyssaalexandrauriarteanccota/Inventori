@@ -122,6 +122,28 @@ export function useDeleteUsuario() {
   });
 }
 
+export function useActivarUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.patch<{ id: string; message: string }>(`/usuarios/${id}/activar`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [USUARIOS_KEY] });
+    },
+  });
+}
+
+export function useDesactivarUsuario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.patch<{ id: string; message: string }>(`/usuarios/${id}/desactivar`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [USUARIOS_KEY] });
+    },
+  });
+}
+
 export function useConfigEmpresa() {
   return useQuery({
     queryKey: [CONFIG_KEY, "empresa"],

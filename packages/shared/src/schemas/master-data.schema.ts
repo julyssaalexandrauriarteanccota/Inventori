@@ -124,12 +124,12 @@ export const proveedorFormSchema = z.object({
     ),
   email: optionalEmailField(),
   telefono: z.string().optional(),
-  direccion: z.string().optional(),
+  celular: z.string().optional(),
   contactoNombre: z.string().optional(),
   contactoTelefono: z.string().optional(),
   notas: z.string().optional(),
   activo: z.boolean().optional(),
-});
+}).merge(locationPayloadSchema);
 
 export const productoImagenInputSchema = z.object({
   id: z.string().uuid().optional(),
@@ -164,6 +164,11 @@ export const productoFormSchema = z
     categoriaId: z.string().uuid("Selecciona una categoria valida"),
     marcaId: z.string().uuid().nullable().optional(),
     modeloId: z.string().uuid().nullable().optional(),
+    modeloIds: z
+      .array(z.string().uuid("Selecciona un modelo valido"))
+      .max(50, "Puedes seleccionar hasta 50 modelos compatibles")
+      .optional()
+      .default([]),
     unidadMedidaId: z.string().uuid("Selecciona una unidad de medida valida"),
     modelo: z.string().optional(),
     codigoBarras: z.string().optional(),
@@ -435,11 +440,20 @@ export const proveedorListItemSchema = z.object({
   ruc: z.string(),
   email: z.string().nullable(),
   telefono: z.string().nullable(),
+  celular: z.string().nullable(),
   direccion: z.string().nullable(),
+  distrito: z.string().nullable(),
+  provincia: z.string().nullable(),
+  departamento: z.string().nullable(),
+  referencia: z.string().nullable(),
+  latitud: z.number().nullable(),
+  longitud: z.number().nullable(),
   contactoNombre: z.string().nullable(),
   contactoTelefono: z.string().nullable(),
   notas: z.string().nullable(),
   activo: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export const productoListItemSchema = z.object({
@@ -449,6 +463,7 @@ export const productoListItemSchema = z.object({
   descripcion: z.string().nullable(),
   tipo: z.nativeEnum(TipoProducto),
   modeloId: z.string().uuid().nullable(),
+  modeloIds: z.array(z.string().uuid()).optional(),
   modelo: z.string().nullable(),
   codigoBarras: z.string().nullable(),
   codigoQr: z.string().nullable(),
@@ -510,6 +525,23 @@ export const productoListItemSchema = z.object({
         .nullable(),
     })
     .nullable(),
+  modelosCompatibles: z
+    .array(
+      z.object({
+        modeloCatalogo: z.object({
+          id: z.string().uuid(),
+          nombre: z.string(),
+          tipo: z.nativeEnum(TipoProducto),
+          marca: z
+            .object({
+              id: z.string().uuid(),
+              nombre: z.string(),
+            })
+            .nullable(),
+        }),
+      }),
+    )
+    .optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
 });

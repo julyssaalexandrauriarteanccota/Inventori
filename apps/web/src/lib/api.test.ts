@@ -87,6 +87,18 @@ describe('api refresh flow', () => {
 
     window.removeEventListener('auth:expired', expiredHandler)
   })
+
+  it('reporta caida de conexion sin limpiar sesion', async () => {
+    authMocks.getToken.mockReturnValue('token-vigente')
+    fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'))
+
+    await expect(api.get('/auth/me')).rejects.toMatchObject({
+      code: 'API_CONNECTION_ERROR',
+      statusCode: 0,
+    })
+
+    expect(authMocks.clearTokens).not.toHaveBeenCalled()
+  })
 })
 
 describe('getApiAssetUrl', () => {

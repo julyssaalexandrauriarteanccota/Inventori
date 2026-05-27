@@ -9,10 +9,43 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { buildSwaggerConfig } from './swagger/swagger.config';
 
+function stringifyUnknownError(error: unknown) {
+  if (error instanceof Error) return error.stack ?? error.message;
+  return String(error);
+}
+
+function registerProcessDiagnostics() {
+  const logger = new Logger('Process');
+
+  process.on('unhandledRejection', (reason) => {
+    logger.error('Unhandled promise rejection', stringifyUnknownError(reason));
+  });
+
+  process.on('uncaughtException', (error) => {
+    logger.error('Uncaught exception; API process will exit', error.stack);
+    process.exit(1);
+  });
+
+  process.once('SIGINT', () => {
+    logger.warn('Received SIGINT; shutting down API process');
+  });
+
+  process.once('SIGTERM', () => {
+    logger.warn('Received SIGTERM; shutting down API process');
+  });
+
+  process.on('exit', (code) => {
+    logger.warn(`API process exiting with code ${code}`);
+  });
+}
+
+registerProcessDiagnostics();
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger('Bootstrap');
   const httpAdapter = app.getHttpAdapter().getInstance() as Express;
+  app.enableShutdownHooks();
 
   // Make the API root browser-friendly by sending users to the docs instead of a 404.
   httpAdapter.get('/', (_req: Request, res: Response) => {

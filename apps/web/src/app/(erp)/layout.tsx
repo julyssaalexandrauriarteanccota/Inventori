@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { AuthProvider } from '@/components/auth-context'
 import { ErpShell } from '@/components/layout/erp-shell'
 import { NavBadgesProvider } from '@/components/nav-badges'
+import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
 import { SocketProvider } from '@/hooks/use-socket'
 import { canAccessErpPath } from '@/lib/erp-navigation'
@@ -21,8 +22,33 @@ function AuthLoadingScreen({ label }: { label: string }) {
   )
 }
 
+function AuthUnavailableScreen({
+  label,
+  onRetry,
+}: {
+  label: string
+  onRetry: () => void
+}) {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-background px-4">
+      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
+        <div className="size-8 rounded-full border border-destructive/30 bg-destructive/10" />
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-foreground">
+            Servidor no disponible
+          </p>
+          <p className="text-sm text-muted-foreground">{label}</p>
+        </div>
+        <Button variant="outline" onClick={onRetry}>
+          Reintentar
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth()
+  const { authError, isAuthenticated, isLoading, retryAuth, user } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
 
@@ -46,6 +72,15 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return <AuthLoadingScreen label="Cargando sesion..." />
+  }
+
+  if (authError && !isAuthenticated) {
+    return (
+      <AuthUnavailableScreen
+        label={authError}
+        onRetry={() => void retryAuth()}
+      />
+    )
   }
 
   // Mientras el `router.replace` viaja al destino, mostramos un loader

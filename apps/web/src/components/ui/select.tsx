@@ -105,6 +105,14 @@ function SelectItem({
   children,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item>) {
+  const normalizedChildren = React.useMemo(() => {
+    const flat = React.Children.toArray(children);
+    if (flat.every((c) => typeof c === "string" || typeof c === "number")) {
+      return flat.join("");
+    }
+    return flat;
+  }, [children]);
+
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -122,7 +130,7 @@ function SelectItem({
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      <SelectPrimitive.ItemText>{normalizedChildren}</SelectPrimitive.ItemText>
     </SelectPrimitive.Item>
   );
 }

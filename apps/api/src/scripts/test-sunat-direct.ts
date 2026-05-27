@@ -85,11 +85,17 @@ async function main() {
   }
 
   console.log(`\nXML length: ${signedXml.length}`);
-  console.log(`XML SHA256: ${createHash('sha256').update(Buffer.from(signedXml, 'latin1')).digest('hex')}`);
+  console.log(
+    `XML SHA256: ${createHash('sha256').update(Buffer.from(signedXml, 'latin1')).digest('hex')}`,
+  );
 
   // Extract key tags for diagnostics
-  const ublVer = signedXml.match(/<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/)?.[1];
-  const custId = signedXml.match(/<cbc:CustomizationID[^>]*>(.*?)<\/cbc:CustomizationID>/)?.[1];
+  const ublVer = signedXml.match(
+    /<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/,
+  )?.[1];
+  const custId = signedXml.match(
+    /<cbc:CustomizationID[^>]*>(.*?)<\/cbc:CustomizationID>/,
+  )?.[1];
   const encoding = signedXml.match(/<\?xml[^?]*encoding="([^"]+)"/)?.[1];
   const rootTag = signedXml.match(/<([A-Za-z]+)\s/)?.[1];
   console.log(`Encoding: ${encoding}`);
@@ -135,19 +141,20 @@ async function main() {
   console.log('\n\n--- Now checking what credentials the system uses ---');
   try {
     // Import dynamically to avoid import issues
-    const { SunatCredentialsService } = await import(
-      '../modules/facturacion/sunat-credentials.service'
-    );
-    const { FiscalSecretsService } = await import(
-      '../modules/facturacion/fiscal-secrets.service'
-    );
-    
+    const { SunatCredentialsService } =
+      await import('../modules/facturacion/sunat-credentials.service');
+    const { FiscalSecretsService } =
+      await import('../modules/facturacion/fiscal-secrets.service');
+
     const fiscalSecrets = new FiscalSecretsService(prisma);
-    const credService = new SunatCredentialsService(fiscalSecrets, configService);
-    
+    const credService = new SunatCredentialsService(
+      fiscalSecrets,
+      configService,
+    );
+
     const status = await credService.getSafeStatus(RUC);
     console.log('Credentials status:', JSON.stringify(status, null, 2));
-    
+
     if (status.configured) {
       const creds = await credService.resolveCredentials(RUC);
       console.log(`Source: ${creds.source}`);

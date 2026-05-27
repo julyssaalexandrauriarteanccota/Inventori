@@ -13,18 +13,34 @@ import AdmZip = require('adm-zip');
 import * as forge from 'node-forge';
 import { SignedXml } from 'xml-crypto';
 import { PrismaService } from '../database/prisma.service';
-import { FiscalSecretsService, EncryptedPayload } from '../modules/facturacion/fiscal-secrets.service';
+import {
+  FiscalSecretsService,
+  EncryptedPayload,
+} from '../modules/facturacion/fiscal-secrets.service';
 
-const BETA_ENDPOINT = 'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
+const BETA_ENDPOINT =
+  'https://e-beta.sunat.gob.pe/ol-ti-itcpfegem-beta/billService';
 const RUC = '10013415116';
 
 async function extractP12(buffer: Buffer, password: string) {
   const der = forge.util.createBuffer(buffer.toString('binary'));
   const asn1 = forge.asn1.fromDer(der);
   const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, false, password);
-  const keyBags = [...(p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[forge.pki.oids.pkcs8ShroudedKeyBag] ?? []), ...(p12.getBags({ bagType: forge.pki.oids.keyBag })[forge.pki.oids.keyBag] ?? [])];
-  const certBags = p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ?? [];
-  return { privateKeyPem: forge.pki.privateKeyToPem(keyBags[0]!.key!), certificatePem: forge.pki.certificateToPem(certBags[0]!.cert!) };
+  const keyBags = [
+    ...(p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag })[
+      forge.pki.oids.pkcs8ShroudedKeyBag
+    ] ?? []),
+    ...(p12.getBags({ bagType: forge.pki.oids.keyBag })[
+      forge.pki.oids.keyBag
+    ] ?? []),
+  ];
+  const certBags =
+    p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ??
+    [];
+  return {
+    privateKeyPem: forge.pki.privateKeyToPem(keyBags[0].key!),
+    certificatePem: forge.pki.certificateToPem(certBags[0].cert!),
+  };
 }
 
 async function sendTest(label: string, signedXml: string, xmlFileName: string) {
@@ -32,44 +48,84 @@ async function sendTest(label: string, signedXml: string, xmlFileName: string) {
   const zip = new AdmZip();
   zip.addFile(xmlFileName, Buffer.from(signedXml, 'utf-8'));
   const zipFileName = xmlFileName.replace('.xml', '.zip');
-  
+
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ser="http://service.sunat.gob.pe" xmlns:wsse="http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-secext-1.0.xsd">
   <soapenv:Header><wsse:Security><wsse:UsernameToken><wsse:Username>${RUC}MODDATOS</wsse:Username><wsse:Password>MODDATOS</wsse:Password></wsse:UsernameToken></wsse:Security></soapenv:Header>
   <soapenv:Body><ser:sendBill><fileName>${zipFileName}</fileName><contentFile>${zip.toBuffer().toString('base64')}</contentFile></ser:sendBill></soapenv:Body>
 </soapenv:Envelope>`;
 
-  const resp = await fetch(BETA_ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/xml; charset=utf-8', SOAPAction: 'urn:sendBill' }, body: envelope });
+  const resp = await fetch(BETA_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'text/xml; charset=utf-8',
+      SOAPAction: 'urn:sendBill',
+    },
+    body: envelope,
+  });
   console.log(`HTTP: ${resp.status}`);
   const text = await resp.text();
   const fc = text.match(/<faultcode>(.*?)<\/faultcode>/)?.[1];
   const fs2 = text.match(/<faultstring>(.*?)<\/faultstring>/)?.[1];
-  if (fc) { console.log(`FAULT: ${fc}`); console.log(`MSG: ${fs2}`); }
-  else {
-    const ar = text.match(/<applicationResponse>(.*?)<\/applicationResponse>/s)?.[1];
+  if (fc) {
+    console.log(`FAULT: ${fc}`);
+    console.log(`MSG: ${fs2}`);
+  } else {
+    const ar = text.match(
+      /<applicationResponse>(.*?)<\/applicationResponse>/s,
+    )?.[1];
     if (ar) {
       console.log('SUCCESS! CDR received!');
       const cz = new AdmZip(Buffer.from(ar, 'base64'));
-      for (const e of cz.getEntries()) { const x = e.getData().toString('utf-8'); console.log(`RC: ${x.match(/<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/)?.[1]}`); console.log(`Desc: ${x.match(/<cbc:Description>(.*?)<\/cbc:Description>/)?.[1]}`); }
-    } else { console.log(text.slice(0, 500)); }
+      for (const e of cz.getEntries()) {
+        const x = e.getData().toString('utf-8');
+        console.log(
+          `RC: ${x.match(/<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/)?.[1]}`,
+        );
+        console.log(
+          `Desc: ${x.match(/<cbc:Description>(.*?)<\/cbc:Description>/)?.[1]}`,
+        );
+      }
+    } else {
+      console.log(text.slice(0, 500));
+    }
   }
 }
 
-function signXml(xml: string, privateKeyPem: string, certificatePem: string): string {
-  const cleanCert = certificatePem.replace(/-----BEGIN CERTIFICATE-----/g, '').replace(/-----END CERTIFICATE-----/g, '').replace(/\s+/g, '');
+function signXml(
+  xml: string,
+  privateKeyPem: string,
+  certificatePem: string,
+): string {
+  const cleanCert = certificatePem
+    .replace(/-----BEGIN CERTIFICATE-----/g, '')
+    .replace(/-----END CERTIFICATE-----/g, '')
+    .replace(/\s+/g, '');
   const signer = new SignedXml({
-    privateKey: privateKeyPem, publicCert: certificatePem,
+    privateKey: privateKeyPem,
+    publicCert: certificatePem,
     signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
     canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
-    getKeyInfoContent: () => `<ds:X509Data><ds:X509Certificate>${cleanCert}</ds:X509Certificate></ds:X509Data>`,
+    getKeyInfoContent: () =>
+      `<ds:X509Data><ds:X509Certificate>${cleanCert}</ds:X509Certificate></ds:X509Data>`,
   });
   signer.addReference({
     xpath: "/*[local-name(.)='Invoice']",
-    transforms: ['http://www.w3.org/2000/09/xmldsig#enveloped-signature', 'http://www.w3.org/2001/10/xml-exc-c14n#'],
+    transforms: [
+      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
+      'http://www.w3.org/2001/10/xml-exc-c14n#',
+    ],
     digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
-    uri: '', isEmptyUri: true,
+    uri: '',
+    isEmptyUri: true,
   });
-  signer.computeSignature(xml, { prefix: 'ds', location: { reference: "//*[local-name(.)='ExtensionContent']", action: 'append' } });
+  signer.computeSignature(xml, {
+    prefix: 'ds',
+    location: {
+      reference: "//*[local-name(.)='ExtensionContent']",
+      action: 'append',
+    },
+  });
   return signer.getSignedXml();
 }
 
@@ -77,16 +133,34 @@ async function main() {
   const prisma = new PrismaService();
   await prisma.$connect();
   const fiscalSecrets = new FiscalSecretsService(prisma);
-  const cert = await prisma.certificadoDigital.findFirst({ where: { activo: true, revokedAt: null, deletedAt: null }, orderBy: { createdAt: 'desc' } });
+  const cert = await prisma.certificadoDigital.findFirst({
+    where: { activo: true, revokedAt: null, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+  });
   if (!cert) throw new Error('No cert');
-  const privateRoot = process.env.FISCAL_PRIVATE_STORAGE_DIR || resolve(process.cwd(), 'private-fiscal-storage');
-  const encrypted = JSON.parse(await fs.readFile(path.join(privateRoot, cert.storageKey), 'utf8')) as EncryptedPayload;
+  const privateRoot =
+    process.env.FISCAL_PRIVATE_STORAGE_DIR ||
+    resolve(process.cwd(), 'private-fiscal-storage');
+  const encrypted = JSON.parse(
+    await fs.readFile(path.join(privateRoot, cert.storageKey), 'utf8'),
+  ) as EncryptedPayload;
   const p12Buffer = fiscalSecrets.decryptBuffer(encrypted);
-  const p12Password = await fiscalSecrets.revealSecret(cert.passwordSecretRef!, 'p12-password');
-  const { privateKeyPem, certificatePem } = await extractP12(p12Buffer, p12Password);
+  const p12Password = await fiscalSecrets.revealSecret(
+    cert.passwordSecretRef!,
+    'p12-password',
+  );
+  const { privateKeyPem, certificatePem } = await extractP12(
+    p12Buffer,
+    p12Password,
+  );
 
-  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
-  const time = new Date().toLocaleTimeString('en-GB', { timeZone: 'America/Lima', hour12: false });
+  const today = new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Lima',
+  });
+  const time = new Date().toLocaleTimeString('en-GB', {
+    timeZone: 'America/Lima',
+    hour12: false,
+  });
 
   // ===== Test A: OUR minimal XML (fails with 2074) =====
   const xmlOurs = `<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>
@@ -128,10 +202,18 @@ async function main() {
 </Invoice>`;
 
   const signedA = signXml(xmlOurs, privateKeyPem, certificatePem);
-  await sendTest('Test A: Our minimal XML (should fail 2074)', signedA, `${RUC}-03-B001-00000080.xml`);
+  await sendTest(
+    'Test A: Our minimal XML (should fail 2074)',
+    signedA,
+    `${RUC}-03-B001-00000080.xml`,
+  );
 
   const signedB = signXml(xmlWithNs, privateKeyPem, certificatePem);
-  await sendTest('Test B: Nubefact-style namespaces + attributes', signedB, `${RUC}-03-B001-00000079.xml`);
+  await sendTest(
+    'Test B: Nubefact-style namespaces + attributes',
+    signedB,
+    `${RUC}-03-B001-00000079.xml`,
+  );
 
   await prisma.$disconnect();
   console.log('\n=== DONE ===');

@@ -205,9 +205,24 @@ export function TicketDetalleModal({
   const clienteNombre = ticket?.cliente ? ticket.cliente.nombre : undefined;
 
   /* equipo nested */
-  const equipoDesc = ticket?.equipo
+  const equipoPropioDesc = ticket?.equipo
     ? `${ticket.equipo.modelo ?? ""} · Serie: ${ticket.equipo.numeroSerie ?? ""}`.trim()
     : undefined;
+  const clienteEquipoNombre =
+    ticket?.clienteEquipo?.nombre ??
+    ([ticket?.clienteEquipo?.marca, ticket?.clienteEquipo?.modelo]
+      .filter(Boolean)
+      .join(" ") ||
+      "Equipo externo");
+  const clienteEquipoDesc = ticket?.clienteEquipo
+    ? `${clienteEquipoNombre} · Serie: ${ticket.clienteEquipo.numeroSerie}`
+    : undefined;
+  const equipoDesc = equipoPropioDesc ?? clienteEquipoDesc;
+  const equipoOrigen = ticket?.equipo
+    ? "Vendido o alquilado"
+    : ticket?.clienteEquipo
+      ? "Externo del cliente"
+      : undefined;
 
   /* tecnico nested */
   const tecnicoNombre = ticket?.tecnico ? ticket.tecnico.nombre : null;
@@ -428,7 +443,7 @@ export function TicketDetalleModal({
                         icon={User}
                       />
                       <InfoItem
-                        label="Equipo"
+                        label={equipoOrigen ?? "Equipo"}
                         value={equipoDesc}
                         icon={Wrench}
                       />

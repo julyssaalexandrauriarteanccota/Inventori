@@ -12,11 +12,16 @@ import {
   Search,
   Wrench,
   X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { TipoProducto } from "@erp/shared";
 import { useCart } from "./cart-context";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -73,12 +78,14 @@ export function PosCatalog({ onPick, className }: Props) {
   const debouncedQuery = useDebounce(query, 250);
   const [tipo, setTipo] = useState<TipoProducto | "TODOS">("TODOS");
   const [categoriaId, setCategoriaId] = useState<string>("TODAS");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(24);
 
   const cart = useCart();
 
   const { data, isLoading, isFetching } = useProductos({
-    page: 1,
-    limit: 60,
+    page,
+    limit,
     activo: true,
     conStock: true,
     search: debouncedQuery || undefined,
@@ -144,7 +151,13 @@ export function PosCatalog({ onPick, className }: Props) {
 
         {/* Dropdown de categorías en la cabecera en pantallas grandes (ahorra espacio vertical) */}
         <div className="hidden sm:block w-[180px]">
-          <Select value={categoriaId} onValueChange={setCategoriaId}>
+          <Select
+            value={categoriaId}
+            onValueChange={(val) => {
+              setCategoriaId(val);
+              setPage(1);
+            }}
+          >
             <SelectTrigger className="h-8.5 rounded-xl text-xs border-border bg-background/50 hover:bg-background hover:border-primary/30 transition-all duration-300 cursor-pointer focus:ring-primary/20 font-sans">
               <SelectValue placeholder="Categorías" />
             </SelectTrigger>
@@ -168,7 +181,10 @@ export function PosCatalog({ onPick, className }: Props) {
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground group-focus-within/search:text-primary group-focus-within/search:scale-110 transition-all duration-300 ease-out" />
           <Input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
             placeholder="Buscar por SKU, código o nombre de producto…"
             className="h-9.5 rounded-xl pl-9 pr-9 text-xs border-border/80 focus-visible:ring-primary/20 bg-background/50 focus:bg-background transition-all duration-300 ease-out font-sans"
             autoFocus
@@ -187,7 +203,13 @@ export function PosCatalog({ onPick, className }: Props) {
 
         {/* Dropdown de categorías en móvil */}
         <div className="block sm:hidden">
-          <Select value={categoriaId} onValueChange={setCategoriaId}>
+          <Select
+            value={categoriaId}
+            onValueChange={(val) => {
+              setCategoriaId(val);
+              setPage(1);
+            }}
+          >
             <SelectTrigger className="h-10 rounded-xl text-xs border-border bg-background/50 hover:bg-background transition-all duration-300 cursor-pointer focus:ring-primary/20 font-sans">
               <SelectValue placeholder="Todas las categorías" />
             </SelectTrigger>
@@ -205,7 +227,6 @@ export function PosCatalog({ onPick, className }: Props) {
         </div>
       </div>
 
-      {/* Segmented Control Premium - Tabs Gigantes y con Iconos */}
       <div className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-5 gap-1.5 bg-muted/20 p-1.5 rounded-2xl border border-border/30">
         <TipoChip
           label="Todos"
@@ -214,6 +235,7 @@ export function PosCatalog({ onPick, className }: Props) {
           onClick={() => {
             setTipo("TODOS");
             setCategoriaId("TODAS");
+            setPage(1);
           }}
         />
         {(
@@ -232,6 +254,7 @@ export function PosCatalog({ onPick, className }: Props) {
             onClick={() => {
               setTipo(t);
               setCategoriaId("TODAS");
+              setPage(1);
             }}
           />
         ))}
@@ -426,6 +449,93 @@ export function PosCatalog({ onPick, className }: Props) {
           Sincronizando existencias en tiempo real…
         </p>
       ) : null}
+
+      {/* Control de paginación del catálogo */}
+      {(() => {
+        const totalItems = data?.meta?.total ?? 0;
+        const totalPages = Math.ceil(totalItems / limit) || 1;
+        const rangeStart = totalItems === 0 ? 0 : (page - 1) * limit + 1;
+        const rangeEnd = totalItems === 0 ? 0 : Math.min(page * limit, totalItems);
+
+        return (
+          <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card px-4 py-2.5 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between shrink-0">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap text-xs text-muted-foreground">
+                  Filas por página
+                </span>
+                <Select
+                  value={String(limit)}
+                  onValueChange={(value) => {
+                    setLimit(Number(value));
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-8 min-w-20 rounded-md border-border/80 bg-muted/55 text-xs shadow-none hover:bg-muted/80">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {[12, 24, 48, 60, 100].map((option) => (
+                      <SelectItem key={option} value={String(option)}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                {rangeStart}-{rangeEnd} de {totalItems} producto{totalItems !== 1 ? "s" : ""}
+              </p>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1 sm:justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(1)}
+                  disabled={page <= 1}
+                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                  title="Primera página"
+                >
+                  <ChevronsLeft className="size-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                >
+                  <ChevronLeft className="size-3.5" />
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="h-8 gap-1 rounded-md border-border/80 bg-muted/55 px-2.5 text-xs hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                >
+                  Siguiente
+                  <ChevronRight className="size-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page >= totalPages}
+                  className="h-8 rounded-md border-border/80 bg-muted/55 px-2 hover:bg-muted/80 transition-all duration-150 active:scale-95"
+                  title="Última página"
+                >
+                  <ChevronsRight className="size-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </section>
   );
 }

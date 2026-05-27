@@ -11,6 +11,7 @@ import {
   Min,
   ValidateNested,
   ArrayMaxSize,
+  ArrayUnique,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -127,6 +128,18 @@ export class CreateProductoDto {
   @IsOptional()
   @IsUUID()
   modeloId?: string | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description:
+      'Modelos de catálogo compatibles. El primer valor se mantiene como modeloId principal para compatibilidad legacy.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  modeloIds?: string[];
 
   @ApiProperty({ description: 'Unidad de medida asociada al producto' })
   @IsUUID()

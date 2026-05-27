@@ -35,7 +35,9 @@ async function main() {
   process.env.SUNAT_ENGINE = 'GREENTER';
   const comprobanteId = process.argv[2];
   if (!comprobanteId) {
-    throw new Error('Uso: tsx src/scripts/run-greenter-baja-once.ts <comprobanteId>');
+    throw new Error(
+      'Uso: tsx src/scripts/run-greenter-baja-once.ts <comprobanteId>',
+    );
   }
 
   const prisma = new PrismaService();
@@ -48,18 +50,19 @@ async function main() {
     throw new Error(`Comprobante ${comprobanteId} no encontrado.`);
   }
   if (comprobante.tipo === 'BOLETA') {
-    throw new Error('Las boletas se anulan con nota de crédito, no con comunicación de baja RA.');
+    throw new Error(
+      'Las boletas se anulan con nota de crédito, no con comunicación de baja RA.',
+    );
   }
   let comunicacion = await prisma.comunicacionBaja.findFirst({
     where: { comprobanteId, estado: { in: ['PENDIENTE', 'EN_PROCESO'] } },
     orderBy: { createdAt: 'desc' },
   });
 
-  if (
-    !comunicacion &&
-    comprobante.estado !== EstadoComprobante.ACEPTADO
-  ) {
-    throw new Error(`El comprobante ${comprobante.numero} debe estar ACEPTADO; estado actual: ${comprobante.estado}.`);
+  if (!comunicacion && comprobante.estado !== EstadoComprobante.ACEPTADO) {
+    throw new Error(
+      `El comprobante ${comprobante.numero} debe estar ACEPTADO; estado actual: ${comprobante.estado}.`,
+    );
   }
 
   if (!comunicacion) {

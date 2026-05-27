@@ -175,6 +175,77 @@ export class ReportesService {
   }
 
   // ═══════════════════════════════════════════
+  //  DASHBOARD — VENTAS SEMANA (últimos 7 días)
+  // ═══════════════════════════════════════════
+
+  async getVentasSemana() {
+    const now = new Date();
+    const hace7Dias = new Date(now);
+    hace7Dias.setDate(hace7Dias.getDate() - 6);
+    hace7Dias.setHours(0, 0, 0, 0);
+
+    // Ventas por día (últimos 7 días) — solo confirmadas/entregadas
+    const ventasPorDia = await this.prisma.$queryRaw<
+      { dia: Date; total: string; cantidad: string }[]
+    >`
+      SELECT
+        date_trunc('day', "createdAt") AS dia,
+        COALESCE(SUM(total), 0)::text  AS total,
+        COUNT(*)::text                 AS cantidad
+      FROM ventas
+      WHERE "createdAt" >= ${hace7Dias}
+        AND "deletedAt" IS NULL
+        AND estado IN ('ORDEN_CONFIRMADA', 'ENTREGADA')
+      GROUP BY dia
+      ORDER BY dia
+    `;
+
+    // Movimientos de stock por día (últimos 7 días)
+    const movimientosPorDia = await this.prisma.$queryRaw<
+      { dia: Date; cantidad: string }[]
+    >`
+      SELECT
+        date_trunc('day', "createdAt") AS dia,
+        COUNT(*)::text                 AS cantidad
+      FROM movimientos_stock
+      WHERE "createdAt" >= ${hace7Dias}
+      GROUP BY dia
+      ORDER BY dia
+    `;
+
+    // Build 7-day array with labels
+    const dias: string[] = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const result: {
+      dia: string;
+      fecha: string;
+      ventas: number;
+      stock: number;
+    }[] = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(hace7Dias);
+      d.setDate(d.getDate() + i);
+      const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
+
+      const ventaDia = ventasPorDia.find(
+        (v) => new Date(v.dia).toISOString().slice(0, 10) === key,
+      );
+      const movDia = movimientosPorDia.find(
+        (m) => new Date(m.dia).toISOString().slice(0, 10) === key,
+      );
+
+      result.push({
+        dia: dias[d.getDay()],
+        fecha: key,
+        ventas: ventaDia ? +ventaDia.total : 0,
+        stock: movDia ? +movDia.cantidad : 0,
+      });
+    }
+
+    return result;
+  }
+
+  // ═══════════════════════════════════════════
   //  REPORTE DE VENTAS
   // ═══════════════════════════════════════════
 

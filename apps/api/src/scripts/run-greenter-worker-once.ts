@@ -21,7 +21,9 @@ async function main() {
   process.env.SUNAT_ENGINE = 'GREENTER';
   const comprobanteId = process.argv[2];
   if (!comprobanteId) {
-    throw new Error('Uso: tsx src/scripts/run-greenter-worker-once.ts <comprobanteId>');
+    throw new Error(
+      'Uso: tsx src/scripts/run-greenter-worker-once.ts <comprobanteId>',
+    );
   }
 
   const prisma = new PrismaService();
@@ -73,13 +75,20 @@ async function main() {
   ).deadline.toISOString();
 
   console.log('=== GREENTER WORKER REAL SEND ===');
-  console.log('Comprobante:', comprobante.numero, comprobante.tipo, comprobante.estado);
-  await (processor as unknown as {
-    enviarComprobante: (payload: {
-      comprobanteId: string;
-      deadline: string;
-    }) => Promise<void>;
-  }).enviarComprobante({ comprobanteId, deadline });
+  console.log(
+    'Comprobante:',
+    comprobante.numero,
+    comprobante.tipo,
+    comprobante.estado,
+  );
+  await (
+    processor as unknown as {
+      enviarComprobante: (payload: {
+        comprobanteId: string;
+        deadline: string;
+      }) => Promise<void>;
+    }
+  ).enviarComprobante({ comprobanteId, deadline });
 
   const after = await prisma.comprobante.findUnique({
     where: { id: comprobanteId },

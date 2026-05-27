@@ -31,6 +31,69 @@ export interface AsignarEquipoClientePayload {
   notas?: string
 }
 
+export interface ClienteEquipoFormPayload {
+  clienteId: string
+  productoId?: string
+  numeroSerie?: string
+  nombre: string
+  marca?: string
+  modelo?: string
+  estado?: EstadoEquipo
+  codigoQr?: string
+  ubicacion?: string
+  notas?: string
+}
+
+export interface QueryClienteEquipoFilters extends QueryParams {
+  clienteId?: string
+  productoId?: string
+  estado?: EstadoEquipo
+}
+
+export interface ClienteEquipoListItem {
+  id: string
+  clienteId: string
+  productoId: string | null
+  numeroSerie: string
+  nombre: string | null
+  marca: string | null
+  modelo: string | null
+  estado: EstadoEquipo
+  codigoQr: string | null
+  ubicacion: string | null
+  notas: string | null
+  createdAt: string
+  updatedAt: string
+  cliente?: {
+    id: string
+    nombre: string | null
+    apellido: string | null
+    razonSocial: string | null
+  }
+  producto?: {
+    id: string
+    sku: string
+    nombre: string
+    modelo: string | null
+    marca?: {
+      nombre: string
+    } | null
+  } | null
+}
+
+export interface ClienteEquipoTicketResumen {
+  id: string
+  codigo: string
+  titulo: string
+  estado: string
+  tipoServicio: string
+  createdAt: string
+}
+
+export interface ClienteEquipoDetalle extends ClienteEquipoListItem {
+  tickets?: ClienteEquipoTicketResumen[]
+}
+
 export interface LecturaSNMPPayload {
   nivelTonerNegro?: number
   nivelTonerCian?: number
@@ -66,6 +129,17 @@ export interface GarantiaFormPayload {
   fechaFin: string
   cobertura: string
   exclusiones?: string
+  fechaInstalacion?: string
+  direccionInstalacion?: string
+  ubigeoInstalacion?: string
+  departamentoInstalacion?: string
+  provinciaInstalacion?: string
+  distritoInstalacion?: string
+  latitudInstalacion?: number | null
+  longitudInstalacion?: number | null
+  contactoInstalacion?: string
+  telefonoInstalacion?: string
+  notasInstalacion?: string
   estado?: EstadoGarantia
   usarContadorActual?: boolean
   contadorMaxCopias?: number | null
@@ -87,6 +161,7 @@ export interface ActualizarCasoGarantiaPayload {
 export interface QueryGarantiaFilters extends QueryParams {
   estado?: EstadoGarantia
   equipoId?: string
+  soloOperativas?: boolean
 }
 
 export interface GarantiaPublicQueryPayload {
@@ -185,6 +260,17 @@ export interface GarantiaPublicResponse {
   fechaFin: string
   cobertura: string
   exclusiones: string | null
+  fechaInstalacion?: string | null
+  direccionInstalacion?: string | null
+  ubigeoInstalacion?: string | null
+  departamentoInstalacion?: string | null
+  provinciaInstalacion?: string | null
+  distritoInstalacion?: string | null
+  latitudInstalacion?: number | null
+  longitudInstalacion?: number | null
+  contactoInstalacion?: string | null
+  telefonoInstalacion?: string | null
+  notasInstalacion?: string | null
   clienteNombre: string | null
   codigoQR: string
   vigente: boolean
@@ -213,6 +299,17 @@ export interface GarantiaListItem {
   vigente: boolean
   codigoQR: string
   clienteNombre: string | null
+  fechaInstalacion?: string | null
+  direccionInstalacion?: string | null
+  ubigeoInstalacion?: string | null
+  departamentoInstalacion?: string | null
+  provinciaInstalacion?: string | null
+  distritoInstalacion?: string | null
+  latitudInstalacion?: number | null
+  longitudInstalacion?: number | null
+  contactoInstalacion?: string | null
+  telefonoInstalacion?: string | null
+  notasInstalacion?: string | null
   contadorInicio?: number | null
   contadorMaxCopias?: number | null
   vigentePorFecha?: boolean
@@ -229,4 +326,5 @@ export interface GarantiaListItem {
 }
 
 export type EquiposPaginatedResponse = PaginatedResponse<EquipoListItem>
+export type ClienteEquiposPaginatedResponse = PaginatedResponse<ClienteEquipoListItem>
 export type GarantiasPaginatedResponse = PaginatedResponse<GarantiaListItem>

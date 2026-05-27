@@ -73,7 +73,9 @@ describe('SunatPayloadBuilder', () => {
     expect(result.fileName).toBe('20123456789-01-F001-00000007');
     expect(result.xml).toMatch(/^<\?xml version="1\.0" encoding="UTF-8"\?>/);
     expect(result.xml).toContain('<cbc:UBLVersionID>2.1</cbc:UBLVersionID>');
-    expect(result.xml).toContain('<cbc:CustomizationID>2.0</cbc:CustomizationID>');
+    expect(result.xml).toContain(
+      '<cbc:CustomizationID>2.0</cbc:CustomizationID>',
+    );
     expect(result.xml).toContain('<cbc:ID>F001-00000007</cbc:ID>');
     expect(result.xml).toContain('<cac:PaymentTerms>');
     expect(result.xml).toContain(
@@ -284,7 +286,9 @@ describe('SunatPayloadBuilder', () => {
     expect(result.xmlFileName).toBe('20123456789-07-FC01-00000003.xml');
     expect(result.fileName).toBe('20123456789-07-FC01-00000003');
     expect(result.xml).toContain('<CreditNote ');
-    expect(result.xml).toContain('<cbc:CustomizationID>2.0</cbc:CustomizationID>');
+    expect(result.xml).toContain(
+      '<cbc:CustomizationID>2.0</cbc:CustomizationID>',
+    );
     expect(result.xml).toContain('<cbc:ID>FC01-00000003</cbc:ID>');
     expect(result.xml).toContain(
       '<cbc:CreditNoteTypeCode>07</cbc:CreditNoteTypeCode>',

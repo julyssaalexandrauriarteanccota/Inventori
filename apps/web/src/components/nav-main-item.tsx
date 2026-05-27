@@ -28,21 +28,18 @@ import { resolveBadgeValue } from "@/components/nav-main-utils"
 
 export function NavMainItem({
   item,
-  pathname,
+  activeUrl,
   badges,
 }: {
   item: NavItem
-  pathname: string
+  activeUrl?: string
   badges: Record<string, NavBadgeValue>
 }) {
-  const isExact = pathname === item.url
+  const isExact = activeUrl === item.url
+  const activeSubItem = item.items?.find((subItem) => activeUrl === subItem.url)
   const isInside =
-    pathname === item.url ||
-    pathname.startsWith(item.url + "/") ||
-    item.items?.some(
-      (subItem) =>
-        pathname === subItem.url || pathname.startsWith(subItem.url + "/"),
-    )
+    activeUrl === item.url ||
+    Boolean(activeSubItem)
 
   const itemBadge = resolveBadgeValue(item.url, badges, item.badge)
   const subBadgesTotal = item.items?.reduce<number>((total, subItem) => {
@@ -101,9 +98,7 @@ export function NavMainItem({
           <CollapsibleContent className="group-data-[collapsible=icon]:hidden">
             <SidebarMenuSub className="ml-[1.45rem] border-l-sidebar-border/70">
               {item.items?.map((subItem) => {
-                const isSubActive =
-                  pathname === subItem.url ||
-                  pathname.startsWith(subItem.url + "/")
+                const isSubActive = activeUrl === subItem.url
                 const subBadge = resolveBadgeValue(
                   subItem.url,
                   badges,

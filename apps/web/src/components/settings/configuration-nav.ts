@@ -25,7 +25,6 @@ export const CONFIGURATION_SECTION_GROUPS: Array<{
     label: "Operación",
     items: [
       "almacenes",
-      "proveedores",
       "metodos-pago",
       "tipos-movimiento",
       "unidades-medida",

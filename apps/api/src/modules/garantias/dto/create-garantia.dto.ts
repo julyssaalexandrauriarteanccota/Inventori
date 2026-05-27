@@ -8,6 +8,9 @@ import {
   IsBoolean,
   IsInt,
   Min,
+  IsNumber,
+  Max,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -59,6 +62,67 @@ export class CreateGarantiaDto {
   @IsOptional()
   @IsString()
   exclusiones?: string;
+
+  @ApiPropertyOptional({ description: 'Fecha real de instalación' })
+  @IsOptional()
+  @IsDateString()
+  fechaInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Dirección/lugar de instalación' })
+  @IsOptional()
+  @IsString()
+  direccionInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Ubigeo del distrito de instalación' })
+  @IsOptional()
+  @Matches(/^\d{6}$/, { message: 'El ubigeo debe tener 6 dígitos' })
+  ubigeoInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Departamento de instalación' })
+  @IsOptional()
+  @IsString()
+  departamentoInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Provincia de instalación' })
+  @IsOptional()
+  @IsString()
+  provinciaInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Distrito de instalación' })
+  @IsOptional()
+  @IsString()
+  distritoInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Latitud exacta de instalación' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitudInstalacion?: number | null;
+
+  @ApiPropertyOptional({ description: 'Longitud exacta de instalación' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitudInstalacion?: number | null;
+
+  @ApiPropertyOptional({ description: 'Contacto en el lugar de instalación' })
+  @IsOptional()
+  @IsString()
+  contactoInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Teléfono del contacto de instalación' })
+  @IsOptional()
+  @IsString()
+  telefonoInstalacion?: string;
+
+  @ApiPropertyOptional({ description: 'Notas de instalación' })
+  @IsOptional()
+  @IsString()
+  notasInstalacion?: string;
 
   @ApiPropertyOptional({ enum: EstadoGarantia })
   @IsOptional()

@@ -9,6 +9,7 @@ import type {
   TicketUpdatePayload,
   CerrarTicketPayload,
   TicketDetallePayload,
+  TicketHistorialEntry,
   UpdateDetalleTicketPayload,
 } from '@erp/shared'
 
@@ -16,6 +17,18 @@ import { api } from '@/lib/api'
 
 const TICKETS_KEY = 'tickets'
 const TICKETS_ENDPOINT = '/soporte/tickets'
+
+type ApiTicketHistorialEntry = Partial<TicketHistorialEntry> & {
+  id: string
+  campo: string
+  valorAntes?: string | null
+  valorDespues?: string | null
+  createdAt?: string
+}
+
+type ApiTicketDetalle = Omit<TicketDetalle, 'historial'> & {
+  historial: ApiTicketHistorialEntry[]
+}
 
 function buildParams(filters: QueryTicketFilters) {
   const params = new URLSearchParams()
@@ -45,7 +58,24 @@ export function useTickets(filters: QueryTicketFilters = {}) {
 export function useTicket(id: string | undefined) {
   return useQuery({
     queryKey: [TICKETS_KEY, id],
-    queryFn: () => api.get<{ data: TicketDetalle; meta: { timestamp: string } }>(`${TICKETS_ENDPOINT}/${id}`),
+    queryFn: async () => {
+      const response = await api.get<{ data: ApiTicketDetalle; meta: { timestamp: string } }>(
+        `${TICKETS_ENDPOINT}/${id}`,
+      )
+
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          historial: response.data.historial.map((entry) => ({
+            ...entry,
+            valorAnterior: entry.valorAnterior ?? entry.valorAntes ?? null,
+            valorNuevo: entry.valorNuevo ?? entry.valorDespues ?? null,
+            creadoEn: entry.creadoEn ?? entry.createdAt ?? '',
+          })),
+        } satisfies TicketDetalle,
+      }
+    },
     enabled: !!id,
   })
 }
@@ -62,6 +92,15 @@ export function useUpdateTicket(id: string) {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: TicketUpdatePayload) => api.patch(`${TICKETS_ENDPOINT}/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: [TICKETS_KEY] }) },
+  })
+}
+
+export function useUpdateTicketStatus() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, estado }: { id: string; estado: TicketUpdatePayload['estado'] }) =>
+      api.patch(`${TICKETS_ENDPOINT}/${id}`, { estado }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: [TICKETS_KEY] }) },
   })
 }

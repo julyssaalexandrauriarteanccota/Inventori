@@ -88,35 +88,40 @@ export function OpenCajaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Wallet className="size-5" /> Abrir caja
-          </DialogTitle>
-          <DialogDescription>
-            Para registrar ventas necesitas un turno de caja abierto.
-          </DialogDescription>
+      <DialogContent className="w-full rounded-2xl p-0 sm:max-w-md overflow-hidden bg-card/95 backdrop-blur-sm border-border/60">
+        <DialogHeader className="border-b border-border/60 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Wallet className="size-5" />
+            </div>
+            <div className="flex flex-col gap-1 text-left">
+              <DialogTitle className="text-base font-semibold leading-none">Abrir caja</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Para registrar ventas necesitas un turno de caja abierto.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="grid gap-3 py-2">
+        <div className="grid gap-4 px-5 py-5">
           <div className="grid gap-1.5">
-            <Label>Caja</Label>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Caja</Label>
             {loadingCajas ? (
               <div className="flex h-9 items-center text-xs text-muted-foreground">
-                <Loader2 className="mr-2 size-3 animate-spin" /> Cargando…
+                <Loader2 className="mr-2 size-3.5 animate-spin" /> Cargando…
               </div>
             ) : cajas.length === 0 ? (
-              <p className="text-xs text-rose-600">
+              <p className="text-xs text-rose-600 font-medium">
                 No hay cajas activas. Crea una en Configuración → Cajas.
               </p>
             ) : (
               <Select value={selectedCajaId} onValueChange={setCajaId}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-xl border-border/80 h-9 text-xs">
                   <SelectValue placeholder="Selecciona una caja" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-xl">
                   {cajas.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem key={c.id} value={c.id} className="text-xs rounded-lg">
                       {c.nombre}
                     </SelectItem>
                   ))}
@@ -126,7 +131,9 @@ export function OpenCajaDialog({
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="monto-inicial">Monto inicial (S/.)</Label>
+            <Label htmlFor="monto-inicial" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Monto inicial (S/.)
+            </Label>
             <Input
               id="monto-inicial"
               type="number"
@@ -135,36 +142,42 @@ export function OpenCajaDialog({
               inputMode="decimal"
               value={montoInicial}
               onChange={(e) => setMontoInicial(e.target.value)}
+              className="rounded-xl border-border/80 h-9 text-xs font-mono"
             />
           </div>
 
           <div className="grid gap-1.5">
-            <Label htmlFor="notas-apertura">Notas (opcional)</Label>
+            <Label htmlFor="notas-apertura" className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              Notas (opcional)
+            </Label>
             <Textarea
               id="notas-apertura"
               rows={2}
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
               placeholder="Observaciones del turno…"
+              className="rounded-xl border-border/80 text-xs resize-none"
             />
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="border-t border-border/60 px-5 py-4 bg-muted/10">
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={abrir.isPending}
+            className="rounded-xl h-9 text-xs font-medium transition-all duration-300 hover:scale-[1.02] active:scale-95"
           >
             Cancelar
           </Button>
           <Button
             onClick={submit}
             disabled={abrir.isPending || cajas.length === 0}
+            className="rounded-xl h-9 text-xs font-medium erp-page-primary-cta transition-all duration-300 hover:scale-[1.02] active:scale-95"
           >
             {abrir.isPending ? (
               <>
-                <Loader2 className="mr-2 size-4 animate-spin" /> Abriendo…
+                <Loader2 className="mr-2 size-3.5 animate-spin" /> Abriendo…
               </>
             ) : (
               "Abrir caja"

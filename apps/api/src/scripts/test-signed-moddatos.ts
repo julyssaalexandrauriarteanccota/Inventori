@@ -78,7 +78,9 @@ async function main() {
   }
 
   console.log(`XML length: ${signedXml.length}`);
-  console.log(`SHA256: ${createHash('sha256').update(Buffer.from(signedXml, 'latin1')).digest('hex')}`);
+  console.log(
+    `SHA256: ${createHash('sha256').update(Buffer.from(signedXml, 'latin1')).digest('hex')}`,
+  );
 
   const xmlFileName = `${RUC}-03-B001-00000007.xml`;
   const zipBuffer = buildZip(xmlFileName, signedXml);
@@ -114,15 +116,21 @@ async function main() {
       console.log(`HTTP Status: ${response.status}`);
       const responseText = await response.text();
 
-      const faultCode = responseText.match(/<faultcode>(.*?)<\/faultcode>/)?.[1];
-      const faultString = responseText.match(/<faultstring>(.*?)<\/faultstring>/)?.[1];
+      const faultCode = responseText.match(
+        /<faultcode>(.*?)<\/faultcode>/,
+      )?.[1];
+      const faultString = responseText.match(
+        /<faultstring>(.*?)<\/faultstring>/,
+      )?.[1];
 
       if (faultCode) {
         console.log(`FAULT: ${faultCode}`);
         console.log(`MSG: ${faultString}`);
       } else {
         // Check for successful response
-        const appResponse = responseText.match(/<applicationResponse>(.*?)<\/applicationResponse>/s)?.[1];
+        const appResponse = responseText.match(
+          /<applicationResponse>(.*?)<\/applicationResponse>/s,
+        )?.[1];
         if (appResponse) {
           console.log('SUCCESS! Got applicationResponse');
           // Try to decode the CDR
@@ -130,11 +138,17 @@ async function main() {
             const cdrBuffer = Buffer.from(appResponse, 'base64');
             const cdrZip = new AdmZip(cdrBuffer);
             const cdrEntries = cdrZip.getEntries();
-            console.log(`CDR entries: ${cdrEntries.map(e => e.entryName).join(', ')}`);
+            console.log(
+              `CDR entries: ${cdrEntries.map((e) => e.entryName).join(', ')}`,
+            );
             for (const entry of cdrEntries) {
               const cdrXml = entry.getData().toString('utf-8');
-              const responseCode = cdrXml.match(/<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/)?.[1];
-              const description = cdrXml.match(/<cbc:Description>(.*?)<\/cbc:Description>/)?.[1];
+              const responseCode = cdrXml.match(
+                /<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/,
+              )?.[1];
+              const description = cdrXml.match(
+                /<cbc:Description>(.*?)<\/cbc:Description>/,
+              )?.[1];
               console.log(`CDR ResponseCode: ${responseCode}`);
               console.log(`CDR Description: ${description}`);
             }
@@ -154,15 +168,16 @@ async function main() {
   // Also test with the WRONG credentials that the system was using
   console.log('\n=== DB Credentials (what system uses) ===');
   try {
-    const { SunatCredentialsService } = await import(
-      '../modules/facturacion/sunat-credentials.service'
-    );
-    const { FiscalSecretsService } = await import(
-      '../modules/facturacion/fiscal-secrets.service'
-    );
-    
+    const { SunatCredentialsService } =
+      await import('../modules/facturacion/sunat-credentials.service');
+    const { FiscalSecretsService } =
+      await import('../modules/facturacion/fiscal-secrets.service');
+
     const fiscalSecrets = new FiscalSecretsService(prisma);
-    const credService = new SunatCredentialsService(fiscalSecrets, configService);
+    const credService = new SunatCredentialsService(
+      fiscalSecrets,
+      configService,
+    );
     const creds = await credService.resolveCredentials(RUC);
 
     console.log(`Username: ${creds.username}`);
@@ -187,7 +202,9 @@ async function main() {
     console.log(`HTTP Status: ${response.status}`);
     const responseText = await response.text();
     const faultCode = responseText.match(/<faultcode>(.*?)<\/faultcode>/)?.[1];
-    const faultString = responseText.match(/<faultstring>(.*?)<\/faultstring>/)?.[1];
+    const faultString = responseText.match(
+      /<faultstring>(.*?)<\/faultstring>/,
+    )?.[1];
     if (faultCode) {
       console.log(`FAULT: ${faultCode}`);
       console.log(`MSG: ${faultString}`);

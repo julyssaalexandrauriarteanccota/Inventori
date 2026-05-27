@@ -385,26 +385,29 @@ export default function ProductoDetallePage() {
             ? `${producto.sku} · ${TIPO_LABELS[producto.tipo]}`
             : "Detalle del catálogo"
         }
+        actionsClassName="w-full sm:w-auto"
         actions={
-          <>
+          <div className="flex items-center justify-end gap-2 w-full sm:w-auto">
             <Button
               type="button"
               variant="outline"
               onClick={() => router.push("/productos")}
+              className="rounded-xl text-xs h-9 px-3 sm:px-4 gap-1.5 border-border/80 hover:bg-muted/50 transition-all duration-300"
             >
               <ArrowLeft className="size-4" />
-              Volver
+              <span className="hidden sm:inline">Volver</span>
             </Button>
             {canEdit && producto ? (
               <Button
                 type="button"
                 onClick={() => router.push(`/productos?editar=${id}`)}
+                className="rounded-xl text-xs h-9 px-3 sm:px-4 gap-1.5 bg-primary text-primary-foreground font-semibold shadow-xs hover:scale-[1.02] transition-all duration-300"
               >
                 <Pencil className="size-4" />
-                Editar
+                <span className="hidden sm:inline">Editar</span>
               </Button>
             ) : null}
-          </>
+          </div>
         }
       />
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -8,7 +8,11 @@ import {
   FileText,
   Gauge,
   Loader2,
+  MapPin,
   Monitor,
+  Phone,
+  ShieldCheck,
+  UserRound,
 } from "lucide-react";
 import {
   garantiaFormSchema,
@@ -16,6 +20,7 @@ import {
   EstadoComercialEquipo,
   type GarantiaFormPayload,
   type EquipoListItem,
+  type LocationPayload,
 } from "@erp/shared";
 
 import { Button } from "@/components/ui/button";
@@ -38,8 +43,22 @@ import {
 } from "@/components/ui/field";
 import { DatePicker } from "@/components/ui/date-picker";
 import { SearchableSelect } from "@/components/searchable-select";
+import type { SearchableSelectOption } from "@/components/searchable-select";
+import { LocationPicker } from "@/components/location/location-picker";
 import { useEquipos } from "@/hooks/use-equipos";
 import { useDebounce } from "@/hooks/use-debounce";
+import {
+  DEFAULT_UBIGEO_SELECTION,
+  findUbigeoCodeBySelection,
+  getCanonicalUbigeoSelection,
+  getDepartamentos,
+  getDistritosByDepartamentoAndProvinciaName,
+  getProvinciasByDepartamentoName,
+  inferUbigeoSelectionFromText,
+} from "@/lib/ubigeo";
+
+const DEFAULT_INSTALLATION_UBIGEO =
+  findUbigeoCodeBySelection(DEFAULT_UBIGEO_SELECTION) ?? "";
 
 function addMonthsISO(dateStr: string, meses: number): string {
   if (!dateStr || !Number.isFinite(meses)) return "";
@@ -72,6 +91,7 @@ interface GarantiaFormProps {
   onSubmit: (data: GarantiaFormPayload) => void;
   isLoading?: boolean;
   mode: "create" | "edit";
+  submitLabel?: string;
 }
 
 export function GarantiaForm({
@@ -79,6 +99,7 @@ export function GarantiaForm({
   onSubmit,
   isLoading = false,
   mode,
+  submitLabel,
 }: GarantiaFormProps) {
   const {
     register,
@@ -89,16 +110,55 @@ export function GarantiaForm({
   } = useForm<GarantiaFormPayload>({
     resolver: zodResolver(garantiaFormSchema),
     defaultValues: {
-      estado: EstadoGarantia.ACTIVA,
+      estado: EstadoGarantia.PENDIENTE_COMPLETAR,
       usarContadorActual: false,
       contadorMaxCopias: null,
       ...defaultValues,
+      departamentoInstalacion:
+        defaultValues?.departamentoInstalacion ??
+        DEFAULT_UBIGEO_SELECTION.departamento,
+      provinciaInstalacion:
+        defaultValues?.provinciaInstalacion ?? DEFAULT_UBIGEO_SELECTION.provincia,
+      distritoInstalacion:
+        defaultValues?.distritoInstalacion ?? DEFAULT_UBIGEO_SELECTION.distrito,
+      ubigeoInstalacion:
+        defaultValues?.ubigeoInstalacion ?? DEFAULT_INSTALLATION_UBIGEO,
     },
   });
 
-  const estado = useWatch({ control, name: "estado" }) ?? EstadoGarantia.ACTIVA;
+  const estado =
+    useWatch({ control, name: "estado" }) ??
+    EstadoGarantia.PENDIENTE_COMPLETAR;
   const fechaInicioStr = useWatch({ control, name: "fechaInicio" });
   const fechaFinStr = useWatch({ control, name: "fechaFin" });
+  const fechaInstalacionStr = useWatch({
+    control,
+    name: "fechaInstalacion",
+  });
+  const direccionInstalacion = useWatch({
+    control,
+    name: "direccionInstalacion",
+  });
+  const departamentoInstalacion = useWatch({
+    control,
+    name: "departamentoInstalacion",
+  });
+  const provinciaInstalacion = useWatch({
+    control,
+    name: "provinciaInstalacion",
+  });
+  const distritoInstalacion = useWatch({
+    control,
+    name: "distritoInstalacion",
+  });
+  const latitudInstalacion = useWatch({
+    control,
+    name: "latitudInstalacion",
+  });
+  const longitudInstalacion = useWatch({
+    control,
+    name: "longitudInstalacion",
+  });
   const equipoId = useWatch({ control, name: "equipoId" });
   const usarContadorActual =
     useWatch({ control, name: "usarContadorActual" }) ?? false;
@@ -164,18 +224,222 @@ export function GarantiaForm({
     !equipoSeleccionado ||
     (equipoSeleccionado.estadoComercial === EstadoComercialEquipo.VENDIDO &&
       !!equipoSeleccionado.clienteActual?.id);
+  const activarRequiereInstalacion = estado === EstadoGarantia.ACTIVA;
+  const [showInstallationMap, setShowInstallationMap] = useState(() => {
+    const hasDefaultPoint =
+      defaultValues?.latitudInstalacion != null &&
+      defaultValues?.longitudInstalacion != null;
+
+    return (
+      mode === "edit" &&
+      (defaultValues?.estado === EstadoGarantia.ACTIVA || !hasDefaultPoint)
+    );
+  });
+  const departamentoOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getDepartamentos().map((option) => ({
+        value: option.name,
+        label: option.name,
+      })),
+    [],
+  );
+  const provinciaOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getProvinciasByDepartamentoName(departamentoInstalacion).map(
+        (option) => ({
+          value: option.name,
+          label: option.name,
+        }),
+      ),
+    [departamentoInstalacion],
+  );
+  const distritoOptions = useMemo<SearchableSelectOption[]>(
+    () =>
+      getDistritosByDepartamentoAndProvinciaName(
+        departamentoInstalacion,
+        provinciaInstalacion,
+      ).map((option) => ({
+        value: option.name,
+        label: option.name,
+      })),
+    [departamentoInstalacion, provinciaInstalacion],
+  );
+  const locationValue = useMemo<LocationPayload>(
+    () => ({
+      direccion: direccionInstalacion ?? "",
+      departamento: departamentoInstalacion ?? "",
+      provincia: provinciaInstalacion ?? "",
+      distrito: distritoInstalacion ?? "",
+      latitud: latitudInstalacion ?? null,
+      longitud: longitudInstalacion ?? null,
+    }),
+    [
+      departamentoInstalacion,
+      direccionInstalacion,
+      distritoInstalacion,
+      latitudInstalacion,
+      longitudInstalacion,
+      provinciaInstalacion,
+    ],
+  );
+  const hasInstallationPoint =
+    latitudInstalacion != null && longitudInstalacion != null;
+  const hasMapValidationError = Boolean(
+    errors.latitudInstalacion || errors.longitudInstalacion,
+  );
+  const isInstallationMapVisible =
+    showInstallationMap || hasMapValidationError;
+
+  function setInstallationLocation(patch: Partial<LocationPayload>) {
+    if (patch.direccion !== undefined) {
+      setValue("direccionInstalacion", patch.direccion, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    if (patch.latitud !== undefined) {
+      setValue("latitudInstalacion", patch.latitud, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+    if (patch.longitud !== undefined) {
+      setValue("longitudInstalacion", patch.longitud, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    const rawUbigeoSelection = {
+      departamento:
+        patch.departamento !== undefined
+          ? patch.departamento
+          : departamentoInstalacion,
+      provincia:
+        patch.provincia !== undefined ? patch.provincia : provinciaInstalacion,
+      distrito:
+        patch.distrito !== undefined ? patch.distrito : distritoInstalacion,
+    };
+    const inferredUbigeo = inferUbigeoSelectionFromText(
+      patch.direccion,
+      rawUbigeoSelection,
+    );
+    const canonicalUbigeo = getCanonicalUbigeoSelection({
+      ...rawUbigeoSelection,
+      ...inferredUbigeo,
+    });
+    const nextDepartamento =
+      canonicalUbigeo.departamento ??
+      patch.departamento ??
+      departamentoInstalacion ??
+      "";
+    const nextProvincia =
+      canonicalUbigeo.provincia ?? patch.provincia ?? provinciaInstalacion ?? "";
+    const nextDistrito =
+      canonicalUbigeo.distrito ?? patch.distrito ?? distritoInstalacion ?? "";
+
+    const shouldSyncUbigeo =
+      patch.departamento !== undefined ||
+      patch.provincia !== undefined ||
+      patch.distrito !== undefined ||
+      patch.direccion !== undefined;
+
+    if (shouldSyncUbigeo) {
+      setValue("departamentoInstalacion", nextDepartamento, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      setValue("provinciaInstalacion", nextProvincia, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      setValue("distritoInstalacion", nextDistrito, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    const ubigeo = findUbigeoCodeBySelection({
+      departamento: nextDepartamento,
+      provincia: nextProvincia,
+      distrito: nextDistrito,
+    });
+    if (
+      ubigeo ||
+      shouldSyncUbigeo
+    ) {
+      setValue("ubigeoInstalacion", ubigeo ?? "", {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }
+
+  function handleDepartamentoChange(nextDepartamento: string) {
+    if (nextDepartamento === departamentoInstalacion) return;
+
+    setValue("departamentoInstalacion", nextDepartamento, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("provinciaInstalacion", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("distritoInstalacion", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("ubigeoInstalacion", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  function handleProvinciaChange(nextProvincia: string) {
+    if (nextProvincia === provinciaInstalacion) return;
+
+    setValue("provinciaInstalacion", nextProvincia, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("distritoInstalacion", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("ubigeoInstalacion", "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
+  function handleDistritoChange(nextDistrito: string) {
+    setValue("distritoInstalacion", nextDistrito, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    const ubigeo = findUbigeoCodeBySelection({
+      departamento: departamentoInstalacion,
+      provincia: provinciaInstalacion,
+      distrito: nextDistrito,
+    });
+    setValue("ubigeoInstalacion", ubigeo ?? "", {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
 
   // === Autofill al seleccionar equipo ===
-  const [lastAutoEquipo, setLastAutoEquipo] = useState<string | null>(null);
+  const lastAutoEquipoRef = useRef<string | null>(null);
   useEffect(() => {
     if (!equipoSeleccionado) return;
-    if (lastAutoEquipo === equipoSeleccionado.id) return;
-    if (mode === "edit" && lastAutoEquipo === null) {
+    if (lastAutoEquipoRef.current === equipoSeleccionado.id) return;
+    if (mode === "edit" && lastAutoEquipoRef.current === null) {
       // En edición, primer render: no sobrescribir valores existentes
-      setLastAutoEquipo(equipoSeleccionado.id);
+      lastAutoEquipoRef.current = equipoSeleccionado.id;
       return;
     }
-    setLastAutoEquipo(equipoSeleccionado.id);
+    lastAutoEquipoRef.current = equipoSeleccionado.id;
 
     const meses = equipoSeleccionado.producto?.mesesGarantia ?? 12;
     const today = new Date().toISOString().slice(0, 10);
@@ -196,11 +460,12 @@ export function GarantiaForm({
       shouldDirty: true,
       shouldValidate: true,
     });
-  }, [equipoSeleccionado, mode, lastAutoEquipo, fechaInicioStr, setValue]);
+  }, [equipoSeleccionado, mode, fechaInicioStr, setValue]);
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <input type="hidden" {...register("ventaId")} />
+      <input type="hidden" {...register("ubigeoInstalacion")} />
       <FieldGroup className="gap-3 sm:gap-7">
         {/* === SECCIÓN 1: EQUIPO Y VENTA === */}
         <div className="rounded-xl border border-border/40 border-l-[3px] border-l-blue-400 bg-card/50 p-4 shadow-sm dark:border-l-blue-800 sm:p-6">
@@ -276,6 +541,7 @@ export function GarantiaForm({
                 placeholder="Se derivará del equipo vendido"
                 readOnly
                 disabled
+                startIcon={FileText}
                 aria-invalid={!!errors.ventaId}
               />
               <FieldDescription>
@@ -341,29 +607,247 @@ export function GarantiaForm({
                   })
                 }
               >
-                <SelectTrigger aria-invalid={!!errors.estado}>
+                <SelectTrigger aria-invalid={!!errors.estado} className="gap-2.5">
+                  <ShieldCheck className="size-4 text-muted-foreground/60" />
                   <SelectValue placeholder="Estado de garantía" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={EstadoGarantia.PENDIENTE_COMPLETAR}>
+                    Pendiente de completar
+                  </SelectItem>
                   <SelectItem value={EstadoGarantia.ACTIVA}>Activa</SelectItem>
-                  <SelectItem value={EstadoGarantia.VENCIDA}>
-                    Vencida
-                  </SelectItem>
-                  <SelectItem value={EstadoGarantia.ANULADA}>
-                    Anulada
-                  </SelectItem>
+                  <SelectItem value={EstadoGarantia.VENCIDA}>Vencida</SelectItem>
+                  <SelectItem value={EstadoGarantia.ANULADA}>Anulada</SelectItem>
                 </SelectContent>
               </Select>
+              <FieldDescription>
+                {activarRequiereInstalacion
+                  ? "Para activar debes completar fecha y lugar de instalación."
+                  : "Queda pendiente hasta completar instalación y activar."}
+              </FieldDescription>
               <FieldError>{errors.estado?.message}</FieldError>
             </Field>
           </div>
         </div>
 
-        {/* === SECCIÓN 3: COBERTURA POR COPIAS === */}
+        {/* === SECCIÓN 3: INSTALACIÓN === */}
+        <div className="rounded-xl border border-border/40 border-l-[3px] border-l-sky-400 bg-card/50 p-4 shadow-sm dark:border-l-sky-800 sm:p-6">
+          <div className="mb-4 flex items-center gap-2.5 border-b border-border/40 pb-3">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[11px] font-bold text-sky-600 ring-2 ring-sky-100 dark:bg-sky-900/40 dark:text-sky-400 dark:ring-sky-900/30">
+              3
+            </span>
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/40">
+              <MapPin className="size-3.5 text-sky-600 dark:text-sky-400" />
+            </div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Instalación
+            </h3>
+          </div>
+          <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
+            <Field data-invalid={errors.fechaInstalacion ? true : undefined}>
+              <FieldLabel>Fecha de instalación</FieldLabel>
+              <DatePicker
+                value={fechaInstalacionStr}
+                onChange={(v) =>
+                  setValue("fechaInstalacion", v ?? "", {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+                placeholder="Seleccionar fecha de instalación"
+                aria-invalid={!!errors.fechaInstalacion}
+              />
+              <FieldDescription>
+                Obligatoria para activar la garantía.
+              </FieldDescription>
+              <FieldError>{errors.fechaInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field data-invalid={errors.direccionInstalacion ? true : undefined}>
+              <FieldLabel>Dirección / lugar de instalación</FieldLabel>
+              <Input
+                {...register("direccionInstalacion")}
+                placeholder="Ej: Oficina Lima, Piso 3"
+                startIcon={MapPin}
+                aria-invalid={!!errors.direccionInstalacion}
+              />
+              <FieldDescription>
+                Obligatoria para activar la garantía.
+              </FieldDescription>
+              <FieldError>{errors.direccionInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field data-invalid={errors.departamentoInstalacion ? true : undefined}>
+              <FieldLabel>Departamento</FieldLabel>
+              <SearchableSelect
+                value={departamentoInstalacion ?? ""}
+                onChange={handleDepartamentoChange}
+                options={departamentoOptions}
+                placeholder="Seleccionar departamento"
+                searchPlaceholder="Buscar departamento..."
+                emptyLabel="No se encontraron departamentos."
+                ariaLabel="Departamento de instalación"
+                invalid={!!errors.departamentoInstalacion}
+                clearable
+                clearLabel="Limpiar departamento"
+              />
+              <FieldError>
+                {errors.departamentoInstalacion?.message}
+              </FieldError>
+            </Field>
+
+            <Field data-invalid={errors.provinciaInstalacion ? true : undefined}>
+              <FieldLabel>Provincia</FieldLabel>
+              <SearchableSelect
+                value={provinciaInstalacion ?? ""}
+                onChange={handleProvinciaChange}
+                options={provinciaOptions}
+                placeholder="Seleccionar provincia"
+                searchPlaceholder="Buscar provincia..."
+                emptyLabel="No se encontraron provincias."
+                ariaLabel="Provincia de instalación"
+                disabled={!departamentoInstalacion}
+                invalid={!!errors.provinciaInstalacion}
+                clearable
+                clearLabel="Limpiar provincia"
+              />
+              <FieldError>{errors.provinciaInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field data-invalid={errors.distritoInstalacion ? true : undefined}>
+              <FieldLabel>Distrito</FieldLabel>
+              <SearchableSelect
+                value={distritoInstalacion ?? ""}
+                onChange={handleDistritoChange}
+                options={distritoOptions}
+                placeholder="Seleccionar distrito"
+                searchPlaceholder="Buscar distrito..."
+                emptyLabel="No se encontraron distritos."
+                ariaLabel="Distrito de instalación"
+                disabled={!departamentoInstalacion || !provinciaInstalacion}
+                invalid={!!errors.distritoInstalacion}
+                clearable
+                clearLabel="Limpiar distrito"
+              />
+              <FieldError>{errors.distritoInstalacion?.message}</FieldError>
+              <FieldError>{errors.ubigeoInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field
+              data-invalid={
+                errors.latitudInstalacion || errors.longitudInstalacion
+                  ? true
+                  : undefined
+              }
+              className="md:col-span-2"
+            >
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <FieldLabel>Punto en mapa</FieldLabel>
+                <div className="flex flex-wrap items-center gap-2">
+                  {hasInstallationPoint ? (
+                    <span className="rounded-full border border-sky-500/20 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">
+                      {latitudInstalacion.toFixed(5)},{" "}
+                      {longitudInstalacion.toFixed(5)}
+                    </span>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5 rounded-lg text-xs"
+                    onClick={() =>
+                      setShowInstallationMap((current) => !current)
+                    }
+                  >
+                    <MapPin className="size-3.5" />
+                    {isInstallationMapVisible
+                      ? "Ocultar mapa"
+                      : "Mapa y coordenadas"}
+                  </Button>
+                </div>
+              </div>
+              {isInstallationMapVisible ? (
+                <LocationPicker
+                  value={locationValue}
+                  onChange={setInstallationLocation}
+                  disabled={isLoading}
+                  autoApplyReverse
+                />
+              ) : null}
+              <FieldDescription>
+                Haz clic o arrastra el marcador para guardar coordenadas y
+                completar dirección, departamento, provincia y distrito; luego
+                ajusta el lugar exacto si necesitas indicar oficina, piso o
+                referencia.
+              </FieldDescription>
+              {hasInstallationPoint && direccionInstalacion ? (
+                <p className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground">
+                  Se guardará en instalación:{" "}
+                  <span className="font-medium text-foreground">
+                    {direccionInstalacion}
+                  </span>
+                  {[distritoInstalacion, provinciaInstalacion, departamentoInstalacion]
+                    .filter(Boolean)
+                    .length > 0
+                    ? ` · ${[
+                        distritoInstalacion,
+                        provinciaInstalacion,
+                        departamentoInstalacion,
+                      ]
+                        .filter(Boolean)
+                        .join(" / ")}`
+                    : ""}
+                </p>
+              ) : null}
+              <FieldError>
+                {errors.latitudInstalacion?.message ||
+                  errors.longitudInstalacion?.message}
+              </FieldError>
+            </Field>
+
+            <Field data-invalid={errors.contactoInstalacion ? true : undefined}>
+              <FieldLabel>Contacto en sitio</FieldLabel>
+              <Input
+                {...register("contactoInstalacion")}
+                placeholder="Nombre del responsable"
+                startIcon={UserRound}
+                aria-invalid={!!errors.contactoInstalacion}
+              />
+              <FieldError>{errors.contactoInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field data-invalid={errors.telefonoInstalacion ? true : undefined}>
+              <FieldLabel>Teléfono de contacto</FieldLabel>
+              <Input
+                {...register("telefonoInstalacion")}
+                placeholder="Celular o anexo"
+                startIcon={Phone}
+                aria-invalid={!!errors.telefonoInstalacion}
+              />
+              <FieldError>{errors.telefonoInstalacion?.message}</FieldError>
+            </Field>
+
+            <Field
+              data-invalid={errors.notasInstalacion ? true : undefined}
+              className="md:col-span-2"
+            >
+              <FieldLabel>Notas de instalación</FieldLabel>
+              <Textarea
+                {...register("notasInstalacion")}
+                placeholder="Condiciones del ambiente, acceso, responsable, observaciones..."
+                rows={3}
+                aria-invalid={!!errors.notasInstalacion}
+              />
+              <FieldError>{errors.notasInstalacion?.message}</FieldError>
+            </Field>
+          </div>
+        </div>
+
+        {/* === SECCIÓN 4: COBERTURA POR COPIAS === */}
         <div className="rounded-xl border border-border/40 border-l-[3px] border-l-amber-400 bg-card/50 p-4 shadow-sm dark:border-l-amber-800 sm:p-6">
           <div className="mb-4 flex items-center gap-2.5 border-b border-border/40 pb-3">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-600 ring-2 ring-amber-100 dark:bg-amber-900/40 dark:text-amber-400 dark:ring-amber-900/30">
-              3
+              4
             </span>
             <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40">
               <Gauge className="size-3.5 text-amber-600 dark:text-amber-400" />
@@ -381,6 +865,7 @@ export function GarantiaForm({
                 placeholder="Se tomará del equipo seleccionado"
                 readOnly
                 disabled
+                startIcon={Gauge}
               />
               <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-border/50 bg-background px-3 py-2">
                 <span className="text-sm text-foreground">
@@ -410,6 +895,7 @@ export function GarantiaForm({
                 min="0"
                 step="1"
                 placeholder="Sin límite"
+                startIcon={Gauge}
                 {...register("contadorMaxCopias", {
                   setValueAs: (value) => {
                     if (value === "" || value === null || value === undefined) {
@@ -430,11 +916,11 @@ export function GarantiaForm({
           </div>
         </div>
 
-        {/* === SECCIÓN 4: COBERTURA === */}
+        {/* === SECCIÓN 5: COBERTURA === */}
         <div className="rounded-xl border border-border/40 border-l-[3px] border-l-orange-400 bg-card/50 p-4 shadow-sm dark:border-l-orange-800 sm:p-6">
           <div className="mb-4 flex items-center gap-2.5 border-b border-border/40 pb-3">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-bold text-orange-600 ring-2 ring-orange-100 dark:bg-orange-900/40 dark:text-orange-400 dark:ring-orange-900/30">
-              4
+              5
             </span>
             <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
               <FileText className="size-3.5 text-orange-600 dark:text-orange-400" />
@@ -474,7 +960,7 @@ export function GarantiaForm({
           className="min-w-36 gap-2"
         >
           {isLoading && <Loader2 className="size-4 animate-spin" />}
-          {mode === "create" ? "Crear garantía" : "Guardar cambios"}
+          {submitLabel ?? (mode === "create" ? "Crear garantía" : "Guardar cambios")}
         </Button>
       </div>
     </form>

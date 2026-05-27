@@ -24,6 +24,22 @@ describe('ventas schemas', () => {
     expect(parsed.detalles).toHaveLength(1)
   })
 
+  it('rechaza cantidad mayor a 1 cuando la linea tiene serie', () => {
+    const parsed = ventaFormSchema.safeParse({
+      clienteId: '11111111-1111-1111-1111-111111111111',
+      detalles: [
+        {
+          productoId: '22222222-2222-2222-2222-222222222222',
+          cantidad: 2,
+          precioUnitario: 100,
+          equipoSerie: 'SN-001',
+        },
+      ],
+    })
+
+    expect(parsed.success).toBe(false)
+  })
+
   it('valida payload de confirmacion', () => {
     const parsed = confirmarVentaSchema.parse({
       metodoPagoId: '33333333-3333-4333-8333-000000000001',

@@ -25,9 +25,9 @@ async function main() {
       include: {
         detallesFiscales: true,
         envioLogs: {
-          orderBy: { fecha: 'desc' }
-        }
-      }
+          orderBy: { fecha: 'desc' },
+        },
+      },
     });
 
     if (!comp) {
@@ -44,15 +44,18 @@ async function main() {
     console.log('CDR Storage Key:', comp.cdrStorageKey);
     console.log('Mensaje SUNAT:', comp.mensajeSunat);
     console.log('Codigo SUNAT:', comp.codigoSunat);
-    console.log('Logs de envío:', comp.envioLogs.map(l => ({
-      fecha: l.fecha,
-      tipoEvento: l.tipoEvento,
-      estado: l.estado,
-      responseCode: l.responseCode,
-      responseDescription: l.responseDescription,
-      mensaje: l.mensaje,
-      errorMessage: l.errorMessage
-    })));
+    console.log(
+      'Logs de envío:',
+      comp.envioLogs.map((l) => ({
+        fecha: l.fecha,
+        tipoEvento: l.tipoEvento,
+        estado: l.estado,
+        responseCode: l.responseCode,
+        responseDescription: l.responseDescription,
+        mensaje: l.mensaje,
+        errorMessage: l.errorMessage,
+      })),
+    );
 
     if (comp.xmlStorageKey) {
       try {
@@ -62,7 +65,7 @@ async function main() {
           console.log(xml.slice(0, 1000));
           console.log('... [TRUNCATED] ...');
           console.log(xml.slice(-1000));
-          
+
           fs.writeFileSync(
             path.join(__dirname, 'last-signed-invoice.xml'),
             xml,

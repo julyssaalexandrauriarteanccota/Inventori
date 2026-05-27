@@ -1,4 +1,3 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
 const AdmZip = require('adm-zip');
 
 import { ServiceUnavailableException } from '@nestjs/common';
@@ -64,7 +63,9 @@ describe('PadronSunatRucService', () => {
       async (callback: (tx: typeof mockTx) => Promise<unknown>) =>
         callback(mockTx),
     );
-    mockConfig.get.mockImplementation((_key: string, fallback?: string) => fallback);
+    mockConfig.get.mockImplementation(
+      (_key: string, fallback?: string) => fallback,
+    );
 
     service = new PadronSunatRucService(
       mockPrisma as unknown as PrismaService,

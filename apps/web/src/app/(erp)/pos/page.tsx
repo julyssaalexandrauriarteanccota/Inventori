@@ -2,16 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
   ArrowRight,
   FileText,
-  Loader2,
   Minus,
   Plus,
-  Save,
   ShoppingBag,
   Trash2,
   X,
@@ -19,9 +17,7 @@ import {
 import { toast } from "sonner";
 import {
   EstadoComercialEquipo,
-  TipoCliente,
   TipoProducto,
-  type VentaFormPayload,
 } from "@erp/shared";
 
 import { Button } from "@/components/ui/button";
@@ -37,18 +33,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { useMiAperturaActiva } from "@/hooks/use-caja";
-import { useCreateCliente } from "@/hooks/use-clientes";
 import { useEquipos } from "@/hooks/use-equipos";
-import { useCreateVenta } from "@/hooks/use-ventas";
-import { api } from "@/lib/api";
-import { POS_GENERIC_CLIENT_NAME } from "@/lib/pos-navigation";
 import { lineTotalInclIgv } from "@/lib/pos-pricing";
 import { cn } from "@/lib/utils";
 
+import { PageHeader } from "@/components/layout/page-header";
 import { useCart, type CartLine } from "./_components/cart-context";
 import { PosCatalog } from "./_components/pos-catalog";
-
-type ClienteRaw = { id: string };
 
 function money(n: number) {
   return `S/ ${n.toFixed(2)}`;
@@ -59,34 +50,6 @@ export default function PosCarritoPage() {
   const cart = useCart();
   const aperturaQ = useMiAperturaActiva();
   const aperturaActiva = aperturaQ.data?.data ?? null;
-
-  const createVenta = useCreateVenta();
-  const createCliente = useCreateCliente();
-  const [submitting, setSubmitting] = useState(false);
-
-  // Buscar/crear cliente genérico para cotizaciones rápidas
-  const upsertGenericClient = useCallback(async (): Promise<string> => {
-    try {
-      const res = await api.get<{ data: ClienteRaw[] }>(
-        `/clientes?esGenerico=true&limit=1`,
-      );
-      const found = res.data?.[0];
-      if (found?.id) return found.id;
-    } catch {
-      /* continuamos con create */
-    }
-    const createRes = (await createCliente.mutateAsync({
-      tipo: TipoCliente.NATURAL,
-      nombre: POS_GENERIC_CLIENT_NAME,
-      apellido: "-",
-      dni: "00000000",
-      activo: true,
-      esGenerico: true,
-    })) as { data?: { id: string } };
-    if (!createRes?.data?.id)
-      throw new Error("No se pudo obtener el cliente genérico");
-    return createRes.data.id;
-  }, [createCliente]);
 
   // Validaciones del carrito (espejo backend ventas.service)
   const overStockLine = useMemo(
@@ -124,39 +87,6 @@ export default function PosCarritoPage() {
     return null;
   }, [cart.lines.length, overStockLine, underMinPriceLine, missingSerieLine]);
 
-  const handleGuardarCotizacion = useCallback(async () => {
-    if (validacionCarrito) {
-      toast.error(validacionCarrito);
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const clienteId = await upsertGenericClient();
-      const payload: VentaFormPayload = {
-        clienteId,
-        notas: cart.notas || undefined,
-        detalles: cart.lines.map((l) => ({
-          productoId: l.productoId,
-          cantidad: l.cantidad,
-          precioUnitario: l.precioUnitario,
-          descuento: l.descuento || undefined,
-          equipoSerie: l.equipoSerie || undefined,
-        })),
-      };
-      const res = (await createVenta.mutateAsync(payload)) as {
-        data?: { numero?: string };
-      };
-      toast.success(`Cotización ${res.data?.numero ?? "guardada"}`);
-      cart.clear();
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Error al guardar cotización",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  }, [validacionCarrito, upsertGenericClient, cart, createVenta]);
-
   const handleIrACobrar = useCallback(() => {
     if (validacionCarrito) {
       toast.error(validacionCarrito);
@@ -166,11 +96,9 @@ export default function PosCarritoPage() {
   }, [validacionCarrito, router]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* Cabecera compacta */}
-      <div className="flex items-center justify-between h-[36px] min-h-[36px] px-1">
-        <h1 className="text-xl font-bold tracking-tight">Punto de venta</h1>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto md:overflow-hidden pr-1">
+      {/* Cabecera invisible para SEO/a11y */}
+      <PageHeader title="Punto de venta" hideTitleVisually={true} />
 
       {/* Alerta de Caja no abierta - Banner delgado de una línea */}
       {!aperturaActiva ? (
@@ -178,7 +106,7 @@ export default function PosCarritoPage() {
           <AlertTriangle className="size-3.5 shrink-0 text-[oklch(0.45_0.10_75)] dark:text-[oklch(0.75_0.10_75)]" />
           <span className="flex-1 truncate">
             <strong className="font-bold mr-1">No tienes una caja abierta.</strong>
-            <span>Puedes guardar cotizaciones sin caja. Para cobrar y emitir comprobantes, abre tu turno en </span>
+            <span>Para cobrar y emitir comprobantes, abre tu turno en </span>
             <Link
               href="/pos/caja"
               className="font-semibold underline underline-offset-1 hover:text-[oklch(0.30_0.08_75)] dark:hover:text-[oklch(0.85_0.08_75)] transition-colors"
@@ -191,9 +119,10 @@ export default function PosCarritoPage() {
       ) : null}
 
       {/* Grid General con Spacing consistente a tokens */}
-      <div className="grid h-full min-h-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      <div className="grid h-auto md:h-full min-h-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
         {/* Catálogo visual de productos */}
         <PosCatalog
+          className="h-[520px] md:h-full"
           onPick={(p) =>
             cart.addLine({
               kind: p.tipo === TipoProducto.EQUIPO ? "EQUIPO" : "PRODUCTO",
@@ -213,7 +142,7 @@ export default function PosCarritoPage() {
         />
 
         {/* Aside Sidebar de Carrito de Alto Nivel */}
-        <aside className="flex min-h-0 flex-col rounded-2xl border border-border/80 bg-card shadow-xl shadow-primary/[0.015] transition-all duration-300">
+        <aside className="flex h-[420px] md:h-full min-h-0 flex-col rounded-2xl border border-border/80 bg-card shadow-xl shadow-primary/[0.015] transition-all duration-300">
           {/* Header de Carrito Premium con degradado muy sutil */}
           <header className="flex items-center justify-between gap-3 border-b border-border/40 px-3.5 py-3 bg-gradient-to-r from-primary/5 via-primary/[0.01] to-transparent rounded-t-2xl">
             <div className="flex items-center gap-2.5">
@@ -343,21 +272,6 @@ export default function PosCarritoPage() {
             >
               <ArrowRight className="size-4.5 transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover/cobro:translate-x-0.5" />
               Proceder al cobro · {money(cart.totals.total)}
-            </Button>
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleGuardarCotizacion()}
-              disabled={submitting || cart.lines.length === 0}
-              className="h-10 rounded-xl border-border bg-background/50 hover:bg-primary/5 hover:border-primary/20 hover:text-primary hover:-translate-y-[1px] active:scale-[0.98] active:translate-y-0 active:duration-150 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] cursor-pointer text-xs font-semibold text-muted-foreground gap-2"
-            >
-              {submitting ? (
-                <Loader2 className="size-4 animate-spin text-primary" />
-              ) : (
-                <Save className="size-4 text-muted-foreground/80 group-hover:text-primary" />
-              )}
-              Guardar cotización (Público en General)
             </Button>
           </div>
         </aside>

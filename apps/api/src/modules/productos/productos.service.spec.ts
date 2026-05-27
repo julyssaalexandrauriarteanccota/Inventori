@@ -234,6 +234,126 @@ describe('ProductosService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should allow repuesto to reference an equipo catalog model from another brand', async () => {
+      mockPrismaService.producto.findFirst.mockResolvedValue(null);
+      mockPrismaService.categoria.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        deletedAt: null,
+        tipo: TipoProducto.REPUESTO,
+      });
+      mockPrismaService.modeloCatalogo.findFirst.mockResolvedValue({
+        id: 'modelo-equipo-1',
+        nombre: 'Bizhub 808',
+        tipo: TipoProducto.EQUIPO,
+        marcaId: 'marca-equipo',
+      });
+      mockPrismaService.marca.findUnique.mockResolvedValue({
+        id: 'marca-repuesto',
+        deletedAt: null,
+        tipos: [TipoProducto.REPUESTO],
+      });
+      mockPrismaService.unidadMedida.findUnique.mockResolvedValue({
+        id: 'unidad-1',
+        deletedAt: null,
+        activo: true,
+      });
+      mockPrismaService.producto.create.mockResolvedValue({
+        id: 'uuid-1',
+        ...createDto,
+        marcaId: 'marca-repuesto',
+        modeloCatalogoId: 'modelo-equipo-1',
+      });
+
+      await service.create({
+        ...createDto,
+        marcaId: 'marca-repuesto',
+        modeloId: 'modelo-equipo-1',
+      });
+
+      expect(mockPrismaService.producto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            marcaId: 'marca-repuesto',
+            modeloCatalogoId: 'modelo-equipo-1',
+          }),
+        }),
+      );
+    });
+
+    it('should persist several equipo catalog models as compatible models', async () => {
+      mockPrismaService.producto.findFirst.mockResolvedValue(null);
+      mockPrismaService.categoria.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        deletedAt: null,
+        tipo: TipoProducto.REPUESTO,
+      });
+      mockPrismaService.modeloCatalogo.findFirst
+        .mockResolvedValueOnce({
+          id: 'modelo-equipo-1',
+          nombre: 'Bizhub 707',
+          tipo: TipoProducto.EQUIPO,
+          marcaId: 'marca-equipo',
+        })
+        .mockResolvedValueOnce({
+          id: 'modelo-equipo-2',
+          nombre: 'Bizhub 808',
+          tipo: TipoProducto.EQUIPO,
+          marcaId: 'marca-equipo',
+        });
+      mockPrismaService.unidadMedida.findUnique.mockResolvedValue({
+        id: 'unidad-1',
+        deletedAt: null,
+        activo: true,
+      });
+      mockPrismaService.producto.create.mockResolvedValue({
+        id: 'uuid-1',
+        ...createDto,
+        modeloCatalogoId: 'modelo-equipo-1',
+        modelosCompatibles: [
+          { modeloCatalogoId: 'modelo-equipo-1' },
+          { modeloCatalogoId: 'modelo-equipo-2' },
+        ],
+      });
+
+      await service.create({
+        ...createDto,
+        modeloIds: ['modelo-equipo-1', 'modelo-equipo-2'],
+      });
+
+      expect(mockPrismaService.producto.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            modeloCatalogoId: 'modelo-equipo-1',
+            modelosCompatibles: {
+              create: [
+                { modeloCatalogoId: 'modelo-equipo-1' },
+                { modeloCatalogoId: 'modelo-equipo-2' },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('should reject repuesto catalog models as compatibility targets', async () => {
+      mockPrismaService.producto.findFirst.mockResolvedValue(null);
+      mockPrismaService.categoria.findUnique.mockResolvedValue({
+        id: 'cat-1',
+        deletedAt: null,
+        tipo: TipoProducto.REPUESTO,
+      });
+      mockPrismaService.modeloCatalogo.findFirst.mockResolvedValue({
+        id: 'modelo-repuesto-1',
+        nombre: 'Cartucho interno',
+        tipo: TipoProducto.REPUESTO,
+        marcaId: null,
+      });
+
+      await expect(
+        service.create({ ...createDto, modeloId: 'modelo-repuesto-1' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should reject invalid unidad de medida on create', async () => {
       mockPrismaService.producto.findFirst.mockResolvedValue(null);
       mockPrismaService.categoria.findUnique.mockResolvedValue({

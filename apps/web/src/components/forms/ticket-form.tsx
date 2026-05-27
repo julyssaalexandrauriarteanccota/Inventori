@@ -177,6 +177,7 @@ export function TicketForm({
   const descripcion = useWatch({ control, name: "descripcion" });
   const fechaPromesa = useWatch({ control, name: "fechaPromesa" });
   const detallesIniciales = useWatch({ control, name: "detalles" });
+  const allowQuickCreate = mode === "create";
 
   const [aiSuggestion, setAiSuggestion] =
     useState<TicketClassificationResult | null>(null);
@@ -217,6 +218,12 @@ export function TicketForm({
   const [equipoOrigen, setEquipoOrigen] = useState<EquipoOrigen>(
     defaultValues?.equipoId ? "propio" : "externo",
   );
+  const [ultimoEquipoPropioId, setUltimoEquipoPropioId] = useState(
+    defaultValues?.equipoId ?? "",
+  );
+  const [ultimoClienteEquipoId, setUltimoClienteEquipoId] = useState(
+    defaultValues?.clienteEquipoId ?? "",
+  );
   const { data: equiposPropiosData } = useEquipos(
     { search: equipoPropioSearch, clienteId, limit: 20 },
     { enabled: !!clienteId },
@@ -255,7 +262,49 @@ export function TicketForm({
     }
     setValue("equipoId", undefined);
     setValue("clienteEquipoId", undefined);
+    setUltimoEquipoPropioId("");
+    setUltimoClienteEquipoId("");
   }, [clienteId, setValue]);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+
+    if (initialSelections?.equipo?.id) {
+      setEquipoOrigen("propio");
+      setUltimoEquipoPropioId(initialSelections.equipo.id);
+      setValue("equipoId", initialSelections.equipo.id, {
+        shouldValidate: false,
+      });
+      setValue("clienteEquipoId", undefined, { shouldValidate: false });
+      return;
+    }
+
+    if (initialSelections?.clienteEquipo?.id) {
+      setEquipoOrigen("externo");
+      setUltimoClienteEquipoId(initialSelections.clienteEquipo.id);
+      setValue("clienteEquipoId", initialSelections.clienteEquipo.id, {
+        shouldValidate: false,
+      });
+      setValue("equipoId", undefined, { shouldValidate: false });
+    }
+  }, [
+    initialSelections?.clienteEquipo?.id,
+    initialSelections?.equipo?.id,
+    mode,
+    setValue,
+  ]);
+
+  useEffect(() => {
+    if (equipoId) {
+      setUltimoEquipoPropioId(equipoId);
+    }
+  }, [equipoId]);
+
+  useEffect(() => {
+    if (clienteEquipoId) {
+      setUltimoClienteEquipoId(clienteEquipoId);
+    }
+  }, [clienteEquipoId]);
 
   const handleEquipoOrigenChange = (value: string) => {
     if (value !== "propio" && value !== "externo") return;
@@ -263,9 +312,15 @@ export function TicketForm({
     const nextOrigen = value as EquipoOrigen;
     setEquipoOrigen(nextOrigen);
     if (nextOrigen === "propio") {
-      setValue("clienteEquipoId", undefined);
+      setValue("clienteEquipoId", undefined, { shouldValidate: true });
+      setValue("equipoId", ultimoEquipoPropioId || undefined, {
+        shouldValidate: true,
+      });
     } else {
-      setValue("equipoId", undefined);
+      setValue("equipoId", undefined, { shouldValidate: true });
+      setValue("clienteEquipoId", ultimoClienteEquipoId || undefined, {
+        shouldValidate: true,
+      });
     }
   };
 
@@ -309,7 +364,18 @@ export function TicketForm({
   const serviciosSeleccionados = detallesIniciales ?? [];
 
   const addServicioInicial = (servicioId: string) => {
-    if (serviciosSeleccionados.some((detalle) => detalle.productoId === servicioId)) {
+    const existing = serviciosSeleccionados.find(
+      (detalle) => detalle.productoId === servicioId,
+    );
+    if (existing) {
+      setValue(
+        "detalles",
+        serviciosSeleccionados.map((detalle) =>
+          detalle.productoId === servicioId
+            ? { ...detalle, cantidad: detalle.cantidad + 1 }
+            : detalle,
+        ),
+      );
       setServicioOpen(false);
       return;
     }
@@ -340,8 +406,12 @@ export function TicketForm({
   };
 
   return (
-    <form id={formId} onSubmit={handleSubmit(onSubmit)} noValidate>
-      <FieldGroup className="gap-0 overflow-hidden rounded-xl border border-border/60 bg-card/70 shadow-sm">
+    <form
+      id={formId}
+      onSubmit={handleSubmit(onSubmit)}
+      noValidate
+    >
+      <FieldGroup className="gap-0 overflow-hidden sm:rounded-xl sm:border sm:border-border/60 sm:bg-card/70 bg-transparent border-none sm:shadow-sm shadow-none">
         {/* === SECCIÓN 1: CLIENTE Y EQUIPO === */}
         <div className="border-l-[3px] border-l-blue-400 p-4 dark:border-l-blue-800 sm:p-5">
           <div className="mb-4 flex items-center gap-2.5">
@@ -359,16 +429,18 @@ export function TicketForm({
             <Field data-invalid={errors.clienteId ? true : undefined}>
               <div className="flex items-center justify-between gap-2">
                 <FieldLabel>Cliente *</FieldLabel>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
-                  onClick={() => setClienteQuickCreateOpen(true)}
-                  title="Registrar nuevo cliente"
-                >
-                  <Plus className="size-3.5" /> Nuevo cliente
-                </Button>
+                {allowQuickCreate ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
+                    onClick={() => setClienteQuickCreateOpen(true)}
+                    title="Registrar nuevo cliente"
+                  >
+                    <Plus className="size-3.5" /> Nuevo cliente
+                  </Button>
+                ) : null}
               </div>
               <Popover open={clienteOpen} onOpenChange={setClienteOpen}>
                 <PopoverTrigger asChild>
@@ -538,6 +610,7 @@ export function TicketForm({
                             value={e.id}
                             onSelect={(v) => {
                               setEquipoOrigen("propio");
+                              setUltimoEquipoPropioId(v);
                               setValue("equipoId", v);
                               setValue("clienteEquipoId", undefined);
                               setEquipoPropioOpen(false);
@@ -575,21 +648,23 @@ export function TicketForm({
               >
               <div className="flex items-center justify-between gap-2">
                 <FieldLabel>Equipo externo del cliente</FieldLabel>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
-                  disabled={!clienteId}
-                  onClick={() => setEquipoQuickCreateOpen(true)}
-                  title={
-                    clienteId
-                      ? "Registrar equipo externo para soporte"
-                      : "Selecciona un cliente primero"
-                  }
-                >
-                  <Plus className="size-3.5" /> Registrar externo
-                </Button>
+                {allowQuickCreate ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-primary hover:bg-primary/10"
+                    disabled={!clienteId}
+                    onClick={() => setEquipoQuickCreateOpen(true)}
+                    title={
+                      clienteId
+                        ? "Registrar equipo externo para soporte"
+                        : "Selecciona un cliente primero"
+                    }
+                  >
+                    <Plus className="size-3.5" /> Registrar externo
+                  </Button>
+                ) : null}
               </div>
               <Popover
                 open={clienteEquipoOpen}
@@ -639,6 +714,7 @@ export function TicketForm({
                             value={e.id}
                             onSelect={(v) => {
                               setEquipoOrigen("externo");
+                              setUltimoClienteEquipoId(v);
                               setValue("clienteEquipoId", v);
                               setValue("equipoId", undefined);
                               setClienteEquipoOpen(false);
@@ -964,6 +1040,7 @@ export function TicketForm({
               ) : null}
               <FieldError>{errors.tipoServicio?.message}</FieldError>
             </Field>
+
           </div>
         </div>
 
@@ -990,13 +1067,14 @@ export function TicketForm({
       </FieldGroup>
 
       {/* Quick create equipo modal */}
-      {clienteId && (
+      {allowQuickCreate && clienteId && (
         <EquipoQuickCreateModal
           open={equipoQuickCreateOpen}
           onClose={() => setEquipoQuickCreateOpen(false)}
           clienteId={clienteId}
           onCreated={(equipo) => {
             setEquipoOrigen("externo");
+            setUltimoClienteEquipoId(equipo.id);
             setValue("clienteEquipoId", equipo.id);
             setValue("equipoId", undefined);
             setClienteEquipoSearch(equipo.nombre ?? equipo.numeroSerie);
@@ -1005,17 +1083,22 @@ export function TicketForm({
       )}
 
       {/* Quick create cliente modal */}
-      <ClienteQuickCreateModal
-        open={clienteQuickCreateOpen}
-        onClose={() => setClienteQuickCreateOpen(false)}
-        onCreated={(cliente) => {
-          setValue("clienteId", cliente.id);
-          const display =
-            cliente.razonSocial ??
-            [cliente.nombre, cliente.apellido].filter(Boolean).join(" ").trim();
-          if (display) setClienteSearch(display);
-        }}
-      />
+      {allowQuickCreate ? (
+        <ClienteQuickCreateModal
+          open={clienteQuickCreateOpen}
+          onClose={() => setClienteQuickCreateOpen(false)}
+          onCreated={(cliente) => {
+            setValue("clienteId", cliente.id);
+            const display =
+              cliente.razonSocial ??
+              [cliente.nombre, cliente.apellido]
+                .filter(Boolean)
+                .join(" ")
+                .trim();
+            if (display) setClienteSearch(display);
+          }}
+        />
+      ) : null}
     </form>
   );
 }

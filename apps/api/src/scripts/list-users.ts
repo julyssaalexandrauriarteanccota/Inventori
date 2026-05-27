@@ -8,7 +8,7 @@ async function main() {
   console.log('Querying users from database...');
   const prisma = new PrismaService();
   await prisma.$connect();
-  
+
   const users = await prisma.usuario.findMany({
     select: {
       id: true,
@@ -18,7 +18,7 @@ async function main() {
       rol: true,
       mustChangePassword: true,
       activo: true,
-    }
+    },
   });
 
   console.log('Registered Users:');

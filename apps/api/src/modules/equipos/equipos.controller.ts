@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   Post,
   Patch,
@@ -18,6 +19,7 @@ import {
   AsignarClienteDto,
   CreateLecturaSNMPDto,
   QueryLecturaSNMPDto,
+  ReactivarEquipoDto,
 } from './dto';
 
 @ApiTags('Equipos')
@@ -58,6 +60,55 @@ export class EquiposController {
     @CurrentUser('sub') userId: string,
   ) {
     return this.equiposService.update(serie, dto, userId);
+  }
+
+  @Post(':serie/reservar')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Reservar equipo propio disponible' })
+  reservar(@Param('serie') serie: string, @CurrentUser('sub') userId: string) {
+    return this.equiposService.reservar(serie, userId);
+  }
+
+  @Post(':serie/uso-interno')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Marcar equipo propio para uso interno' })
+  marcarUsoInterno(
+    @Param('serie') serie: string,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.equiposService.marcarUsoInterno(serie, userId);
+  }
+
+  @Post(':serie/liberar')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Liberar equipo propio a disponible' })
+  liberar(@Param('serie') serie: string, @CurrentUser('sub') userId: string) {
+    return this.equiposService.liberar(serie, userId);
+  }
+
+  @Post(':serie/baja')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Dar de baja equipo propio' })
+  darBaja(@Param('serie') serie: string, @CurrentUser('sub') userId: string) {
+    return this.equiposService.darBaja(serie, userId);
+  }
+
+  @Post(':serie/reactivar')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Reactivar equipo propio dado de baja' })
+  reactivar(
+    @Param('serie') serie: string,
+    @Body() dto: ReactivarEquipoDto,
+    @CurrentUser('sub') userId: string,
+  ) {
+    return this.equiposService.reactivar(serie, dto, userId);
+  }
+
+  @Delete(':serie')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Eliminar equipo propio no vendido/alquilado' })
+  remove(@Param('serie') serie: string, @CurrentUser('sub') userId: string) {
+    return this.equiposService.remove(serie, userId);
   }
 
   // ── ASIGNACIÓN EQUIPO ↔ CLIENTE ────────────

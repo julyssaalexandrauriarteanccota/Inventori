@@ -5,6 +5,7 @@ import { PaginatedResponse, QueryParams } from './pagination.type'
 
 export interface VentaDetallePayload {
   productoId: string
+  /** Debe ser 1 cuando `equipoSerie` está presente. */
   cantidad: number
   precioUnitario: number
   descuento?: number
@@ -28,6 +29,7 @@ export interface ConfirmarVentaPayload {
 
 export interface QueryVentaFilters extends QueryParams {
   estado?: EstadoVenta
+  estados?: EstadoVenta[]
   clienteId?: string
 }
 

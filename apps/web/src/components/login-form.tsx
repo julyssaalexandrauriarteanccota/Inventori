@@ -65,10 +65,10 @@ export function LoginForm({
     <div className={cn('flex w-full flex-col', className)} {...props}>
       <Card className="overflow-hidden rounded-2xl border-border/70 py-0 shadow-[0_20px_60px_-36px_rgba(15,23,42,0.35)]">
         <CardContent className="grid p-0 md:grid-cols-2">
-          <div className="flex items-center justify-center p-8 md:p-12">
+          <div className="flex items-center justify-center px-4 py-8 sm:p-8 md:p-12">
             <div className="w-full max-w-[360px]">
               <CardHeader className="px-0 pb-0">
-                <CardTitle className="font-display text-3xl font-bold tracking-tight text-foreground/90">
+                <CardTitle className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-foreground/90">
                   Bienvenido de vuelta
                 </CardTitle>
                 <CardDescription className="text-sm leading-6">
@@ -195,7 +195,7 @@ export function LoginForm({
 
                 <Button
                   type="submit"
-                  className="h-12 w-full rounded-xl py-3 px-8 text-sm font-medium transition-all duration-150 ease-out active:scale-95 hover:bg-primary/95"
+                  className="h-12 w-full rounded-xl py-3 px-8 text-sm font-medium bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/10 hover:shadow-lg hover:shadow-primary/20 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98]"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? (

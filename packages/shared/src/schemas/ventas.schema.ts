@@ -18,12 +18,24 @@ export const ventaDetalleSchema = z.object({
   equipoSerie: z.string().optional(),
 })
 
-export const ventaFormSchema = z.object({
-  clienteId: z.string().uuid(),
-  notas: z.string().optional(),
-  validoHasta: z.string().trim().optional(),
-  detalles: z.array(ventaDetalleSchema).min(1),
-})
+export const ventaFormSchema = z
+  .object({
+    clienteId: z.string().uuid(),
+    notas: z.string().optional(),
+    validoHasta: z.string().trim().optional(),
+    detalles: z.array(ventaDetalleSchema).min(1),
+  })
+  .superRefine((value, ctx) => {
+    value.detalles.forEach((detalle, index) => {
+      if (detalle.equipoSerie && detalle.cantidad !== 1) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['detalles', index, 'cantidad'],
+          message: 'Un equipo serializado se vende de a una unidad por serie',
+        })
+      }
+    })
+  })
 
 export const confirmarVentaSchema = z.object({
   metodoPagoId: z.string().uuid(),
@@ -37,6 +49,7 @@ export const queryVentaFiltersSchema = z.object({
   page: z.number().int().min(1).optional(),
   limit: z.number().int().min(1).optional(),
   estado: z.nativeEnum(EstadoVenta).optional(),
+  estados: z.array(z.nativeEnum(EstadoVenta)).optional(),
   clienteId: z.string().uuid().optional(),
   search: z.string().trim().min(1).optional(),
 })

@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
@@ -234,6 +235,17 @@ export class ProductosService {
     }
   }
 
+  private validateTecnicoServicioAccess(
+    userRol: RolUsuario | undefined,
+    tipo: TipoProducto | string | undefined,
+  ) {
+    if (userRol === RolUsuario.TECNICO && tipo !== TipoProducto.SERVICIO) {
+      throw new ForbiddenException(
+        'Los técnicos solo pueden gestionar servicios',
+      );
+    }
+  }
+
   private normalizeCodigoQrProducto(
     tipo: TipoProducto,
     codigoQr: string | undefined,
@@ -249,6 +261,7 @@ export class ProductosService {
   private serializeProducto<
     T extends {
       modeloCatalogoId?: string | null;
+      modelosCompatibles?: Array<{ modeloCatalogoId?: string | null }>;
       almacenStocks?: Array<{ cantidad: number }>;
       tipo?: TipoProducto | string;
       precioCompra?: unknown;
@@ -259,6 +272,10 @@ export class ProductosService {
     const serialized = {
       ...rest,
       modeloId: producto.modeloCatalogoId ?? null,
+      modeloIds:
+        producto.modelosCompatibles?.flatMap((item) =>
+          item.modeloCatalogoId ? [item.modeloCatalogoId] : [],
+        ) ?? [],
       stockActual: (almacenStocks ?? []).reduce(
         (total, stock) => total + stock.cantidad,
         0,
@@ -317,11 +334,24 @@ export class ProductosService {
     return marca;
   }
 
+  private getModeloCatalogoTipoForProducto(tipo: TipoProducto) {
+    if (
+      tipo === TipoProducto.REPUESTO ||
+      tipo === TipoProducto.INSUMO ||
+      tipo === TipoProducto.ACCESORIO
+    ) {
+      return TipoProducto.EQUIPO;
+    }
+
+    return tipo;
+  }
+
   private async validateModeloCatalogo(
     modeloId: string,
     tipo: TipoProducto,
     marcaId?: string | null,
   ) {
+    const expectedTipo = this.getModeloCatalogoTipoForProducto(tipo);
     const modelo = await this.prisma.modeloCatalogo.findFirst({
       where: {
         id: modeloId,
@@ -340,13 +370,18 @@ export class ProductosService {
       throw new NotFoundException(`Modelo ${modeloId} no encontrado`);
     }
 
-    if ((modelo.tipo as TipoProducto) !== tipo) {
+    if ((modelo.tipo as TipoProducto) !== expectedTipo) {
       throw new BadRequestException(
         'El modelo seleccionado no pertenece al tipo de producto',
       );
     }
 
-    if (marcaId && modelo.marcaId && modelo.marcaId !== marcaId) {
+    if (
+      tipo === TipoProducto.EQUIPO &&
+      marcaId &&
+      modelo.marcaId &&
+      modelo.marcaId !== marcaId
+    ) {
       throw new BadRequestException(
         'El modelo seleccionado pertenece a una marca distinta',
       );
@@ -355,7 +390,33 @@ export class ProductosService {
     return modelo;
   }
 
-  async suggestSku(tipo = TipoProducto.REPUESTO, categoriaId?: string) {
+  private getUniqueModeloIds(
+    modeloIds: Array<string | null | undefined> | undefined,
+  ) {
+    return [...new Set((modeloIds ?? []).filter(Boolean) as string[])];
+  }
+
+  private async validateModelosCatalogo(
+    modeloIds: string[],
+    tipo: TipoProducto,
+    marcaId?: string | null,
+  ) {
+    const uniqueModeloIds = this.getUniqueModeloIds(modeloIds);
+    const modelos = [];
+
+    for (const modeloId of uniqueModeloIds) {
+      modelos.push(await this.validateModeloCatalogo(modeloId, tipo, marcaId));
+    }
+
+    return modelos;
+  }
+
+  async suggestSku(
+    tipo = TipoProducto.REPUESTO,
+    categoriaId?: string,
+    userRol?: RolUsuario,
+  ) {
+    this.validateTecnicoServicioAccess(userRol, tipo);
     const categoria = categoriaId
       ? await this.validateCategoria(categoriaId, tipo)
       : undefined;
@@ -367,6 +428,7 @@ export class ProductosService {
 
   async create(dto: CreateProductoDto, userId?: string, userRol?: RolUsuario) {
     const { data, imagenes } = this.normalizeProductoPayload(dto);
+    this.validateTecnicoServicioAccess(userRol, data.tipo);
     this.validateProductoFlags(data);
 
     if (dto.stockInicial?.length && data.manejaInventario === false) {
@@ -397,15 +459,24 @@ export class ProductosService {
       throw new ConflictException('Ya existe un producto con este SKU');
     }
 
-    const selectedModelo = data.modeloId
-      ? await this.validateModeloCatalogo(
-          data.modeloId,
-          data.tipo,
-          data.marcaId ?? null,
-        )
-      : null;
+    const selectedModelos = await this.validateModelosCatalogo(
+      this.getUniqueModeloIds(
+        data.modeloIds !== undefined
+          ? data.modeloIds
+          : data.modeloId
+            ? [data.modeloId]
+            : [],
+      ),
+      data.tipo,
+      data.marcaId ?? null,
+    );
+    const selectedModelo = selectedModelos[0] ?? null;
 
-    if (!data.marcaId && selectedModelo?.marcaId) {
+    if (
+      data.tipo === TipoProducto.EQUIPO &&
+      !data.marcaId &&
+      selectedModelo?.marcaId
+    ) {
       data.marcaId = selectedModelo.marcaId;
     }
 
@@ -445,6 +516,13 @@ export class ProductosService {
         categoriaId: data.categoriaId!,
         marcaId: data.marcaId ?? null,
         modeloCatalogoId: selectedModelo?.id ?? null,
+        modelosCompatibles: selectedModelos.length
+          ? {
+              create: selectedModelos.map((modelo) => ({
+                modeloCatalogoId: modelo.id,
+              })),
+            }
+          : undefined,
         unidadMedidaId: data.unidadMedidaId!,
         modelo: normalizedModelo,
         codigoBarras: data.codigoBarras?.trim() || null,
@@ -492,6 +570,19 @@ export class ProductosService {
             tipo: true,
             marca: { select: { id: true, nombre: true } },
           },
+        },
+        modelosCompatibles: {
+          include: {
+            modeloCatalogo: {
+              select: {
+                id: true,
+                nombre: true,
+                tipo: true,
+                marca: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
         },
         unidadMedida: { select: { id: true, codigo: true, nombre: true } },
         imagenes: { orderBy: [{ esPrincipal: 'desc' }, { orden: 'asc' }] },
@@ -627,6 +718,19 @@ export class ProductosService {
               marca: { select: { id: true, nombre: true } },
             },
           },
+          modelosCompatibles: {
+            include: {
+              modeloCatalogo: {
+                select: {
+                  id: true,
+                  nombre: true,
+                  tipo: true,
+                  marca: { select: { id: true, nombre: true } },
+                },
+              },
+            },
+            orderBy: { createdAt: 'asc' },
+          },
           unidadMedida: { select: { id: true, codigo: true, nombre: true } },
           imagenes: { orderBy: [{ esPrincipal: 'desc' }, { orden: 'asc' }] },
           almacenStocks: { select: { cantidad: true } },
@@ -666,6 +770,19 @@ export class ProductosService {
             marca: { select: { id: true, nombre: true } },
           },
         },
+        modelosCompatibles: {
+          include: {
+            modeloCatalogo: {
+              select: {
+                id: true,
+                nombre: true,
+                tipo: true,
+                marca: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         unidadMedida: { select: { id: true, codigo: true, nombre: true } },
         imagenes: { orderBy: [{ esPrincipal: 'desc' }, { orden: 'asc' }] },
         almacenStocks: { select: { cantidad: true } },
@@ -696,6 +813,8 @@ export class ProductosService {
       currentProduct.tipo,
     );
     const effectiveTipo = data.tipo;
+    this.validateTecnicoServicioAccess(userRol, currentProduct.tipo);
+    this.validateTecnicoServicioAccess(userRol, effectiveTipo);
     let effectiveMarcaId =
       data.marcaId === undefined
         ? (currentProduct.marca?.id ?? null)
@@ -704,6 +823,16 @@ export class ProductosService {
       data.modeloId === undefined
         ? (currentProduct.modeloCatalogoId ?? null)
         : (data.modeloId ?? null);
+    const shouldSyncModelos = data.modeloIds !== undefined;
+    const effectiveModeloIds = shouldSyncModelos
+      ? this.getUniqueModeloIds(data.modeloIds)
+      : data.modeloId !== undefined
+        ? this.getUniqueModeloIds(data.modeloId ? [data.modeloId] : [])
+        : this.getUniqueModeloIds(
+            currentProduct.modelosCompatibles?.map(
+              (item) => item.modeloCatalogoId,
+            ) ?? (effectiveModeloId ? [effectiveModeloId] : []),
+          );
 
     this.validateProductoFlags({
       tipo: effectiveTipo,
@@ -725,15 +854,18 @@ export class ProductosService {
       await this.validateCategoria(data.categoriaId, effectiveTipo);
     }
 
-    const selectedModelo = effectiveModeloId
-      ? await this.validateModeloCatalogo(
-          effectiveModeloId,
-          effectiveTipo,
-          effectiveMarcaId,
-        )
-      : null;
+    const selectedModelos = await this.validateModelosCatalogo(
+      effectiveModeloIds,
+      effectiveTipo,
+      effectiveMarcaId,
+    );
+    const selectedModelo = selectedModelos[0] ?? null;
 
-    if (!effectiveMarcaId && selectedModelo?.marcaId) {
+    if (
+      effectiveTipo === TipoProducto.EQUIPO &&
+      !effectiveMarcaId &&
+      selectedModelo?.marcaId
+    ) {
       effectiveMarcaId = selectedModelo.marcaId;
     }
 
@@ -770,6 +902,10 @@ export class ProductosService {
     const normalizedModelo =
       selectedModelo?.nombre ??
       (data.modelo !== undefined ? data.modelo.trim() || null : undefined);
+    const shouldUpdateModelo =
+      data.modeloId !== undefined ||
+      data.modelo !== undefined ||
+      shouldSyncModelos;
 
     const producto = await this.prisma.producto.update({
       where: { id },
@@ -786,10 +922,20 @@ export class ProductosService {
         ...(data.marcaId !== undefined || selectedModelo?.marcaId
           ? { marcaId: effectiveMarcaId }
           : {}),
-        ...(data.modeloId !== undefined || data.modelo !== undefined
+        ...(shouldUpdateModelo
           ? {
               modeloCatalogoId: selectedModelo?.id ?? null,
               modelo: normalizedModelo ?? null,
+            }
+          : {}),
+        ...(shouldSyncModelos || data.modeloId !== undefined
+          ? {
+              modelosCompatibles: {
+                deleteMany: {},
+                create: selectedModelos.map((modelo) => ({
+                  modeloCatalogoId: modelo.id,
+                })),
+              },
             }
           : {}),
         ...(data.unidadMedidaId !== undefined
@@ -879,6 +1025,19 @@ export class ProductosService {
             tipo: true,
             marca: { select: { id: true, nombre: true } },
           },
+        },
+        modelosCompatibles: {
+          include: {
+            modeloCatalogo: {
+              select: {
+                id: true,
+                nombre: true,
+                tipo: true,
+                marca: { select: { id: true, nombre: true } },
+              },
+            },
+          },
+          orderBy: { createdAt: 'asc' },
         },
         unidadMedida: { select: { id: true, codigo: true, nombre: true } },
         imagenes: { orderBy: [{ esPrincipal: 'desc' }, { orden: 'asc' }] },

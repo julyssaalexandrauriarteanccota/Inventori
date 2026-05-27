@@ -25,6 +25,8 @@ import {
 } from './dto';
 import { AuthService } from './auth.service';
 
+const AUTH_PUBLIC_RATE_LIMIT = process.env.NODE_ENV === 'production' ? 5 : 30;
+
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
@@ -33,7 +35,7 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: AUTH_PUBLIC_RATE_LIMIT, ttl: 60000 } })
   @ApiOperation({ summary: 'Iniciar sesion' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);

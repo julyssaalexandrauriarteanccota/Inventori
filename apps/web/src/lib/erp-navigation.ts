@@ -3,6 +3,7 @@ import {
   Box,
   HeadsetIcon,
   LayoutDashboard,
+  Monitor,
   Package,
   Printer,
   Receipt,
@@ -53,11 +54,25 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     roles: ALL_ROLES,
   },
   {
+    title: "Proveedores",
+    url: "/proveedores",
+    icon: Truck,
+    description: "Administración de proveedores, datos fiscales y contacto.",
+    roles: ADMIN_AND_ENCARGADO,
+  },
+  {
     title: "Productos",
     url: "/productos",
     icon: Package,
     description: "Catalogo, repuestos, consumibles y estructura comercial.",
     roles: ADMIN_AND_ENCARGADO,
+  },
+  {
+    title: "Servicios",
+    url: "/servicios",
+    icon: Wrench,
+    description: "Catalogo de servicios tecnicos y reglas de repuestos.",
+    roles: ALL_ROLES,
   },
   {
     title: "Inventario",
@@ -71,7 +86,14 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     url: "/equipos",
     icon: Printer,
     description: "Equipos serializados y trazabilidad de servicio.",
-    roles: ALL_ROLES,
+    roles: ADMIN_AND_ENCARGADO,
+  },
+  {
+    title: "Alquileres",
+    url: "/alquileres",
+    icon: ScrollText,
+    description: "Contratos mensuales, lecturas, excedentes y devolución de equipos.",
+    roles: ADMIN_AND_ENCARGADO,
   },
   {
     title: "Ventas",
@@ -79,7 +101,20 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     icon: ShoppingCart,
     description: "Hub de ventas: rápida, detallada, historial y comprobantes.",
     roles: ADMIN_AND_ENCARGADO,
-
+    items: [
+      {
+        title: "Cotizaciones",
+        url: "/ventas/cotizaciones",
+        description: "Propuestas comerciales para entregar al cliente.",
+        roles: ADMIN_AND_ENCARGADO,
+      },
+      {
+        title: "Punto de venta",
+        url: "/pos",
+        description: "Venta rápida desde catálogo y carrito.",
+        roles: ADMIN_AND_ENCARGADO,
+      },
+    ],
   },
   {
     title: "Comprobantes",
@@ -101,6 +136,13 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     url: "/soporte",
     icon: HeadsetIcon,
     description: "Tickets, recepcion de equipos y trabajo tecnico.",
+    roles: ALL_ROLES,
+  },
+  {
+    title: "Equipos externos",
+    url: "/soporte/equipos-externos",
+    icon: Monitor,
+    description: "Equipos propiedad de clientes para soporte y mantenimiento.",
     roles: ALL_ROLES,
   },
   {
@@ -170,7 +212,7 @@ export const ERP_SPECIAL_ROUTES: ErpRouteDescriptor[] = [
     title: "Nuevo cliente",
     url: "/clientes/nuevo",
     description: "Acceso directo al formulario de clientes.",
-    roles: ADMIN_AND_ENCARGADO,
+    roles: ALL_ROLES,
   },
   {
     title: "Nuevo producto",
@@ -182,7 +224,7 @@ export const ERP_SPECIAL_ROUTES: ErpRouteDescriptor[] = [
     title: "Nuevo servicio",
     url: "/servicios/nuevo",
     description: "Acceso directo al formulario de servicios.",
-    roles: ADMIN_AND_ENCARGADO,
+    roles: ALL_ROLES,
   },
   {
     title: "Nuevo equipo",
@@ -209,9 +251,9 @@ export const ERP_SPECIAL_ROUTES: ErpRouteDescriptor[] = [
     roles: ADMIN_AND_ENCARGADO,
   },
   {
-    title: "Proveedores",
-    url: "/compras/proveedores",
-    description: "Administración de proveedores desde configuración.",
+    title: "Nuevo proveedor",
+    url: "/proveedores/nuevo",
+    description: "Acceso directo al formulario de proveedores.",
     roles: ADMIN_AND_ENCARGADO,
   },
   {
@@ -326,8 +368,29 @@ export const ERP_DYNAMIC_ROUTES: ErpDynamicRouteDescriptor[] = [
     title: "Editar servicio",
     url: "/servicios/[id]/editar",
     description: "Formulario completo de edición de servicios.",
-    roles: ADMIN_AND_ENCARGADO,
+    roles: ALL_ROLES,
     matcher: (pathname) => /^\/servicios\/[^/]+\/editar$/.test(pathname),
+  },
+  {
+    title: "Detalle de ticket",
+    url: "/soporte/[id]",
+    description: "Ficha completa del caso de soporte.",
+    roles: ALL_ROLES,
+    matcher: (pathname) => /^\/soporte\/[^/]+$/.test(pathname),
+  },
+  {
+    title: "Detalle de alquiler",
+    url: "/alquileres/[id]",
+    description: "Contrato, periodos, lecturas, cargos y estado del alquiler.",
+    roles: ADMIN_AND_ENCARGADO,
+    matcher: (pathname) => /^\/alquileres\/[^/]+$/.test(pathname),
+  },
+  {
+    title: "Editar ticket",
+    url: "/soporte/[id]/editar",
+    description: "Formulario completo de edición del ticket.",
+    roles: ALL_ROLES,
+    matcher: (pathname) => /^\/soporte\/[^/]+\/editar$/.test(pathname),
   },
   {
     title: "Detalle de comprobante",

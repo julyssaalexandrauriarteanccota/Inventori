@@ -63,6 +63,14 @@ type StockConMinimo = {
   };
 };
 
+type AlmacenPrincipal = {
+  id: string;
+  nombre: string;
+  esPrincipal: boolean;
+  activo: boolean;
+  deletedAt: Date | null;
+};
+
 type AlertaForPayload = {
   id: string;
 };
@@ -91,6 +99,46 @@ export class InventarioService {
   //  ALMACENES
   // ═══════════════════════════════════════════
 
+  async ensurePrincipalAlmacen(): Promise<AlmacenPrincipal> {
+    const principal = await this.prisma.almacen.findFirst({
+      where: { esPrincipal: true, activo: true, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (principal) return principal;
+
+    const firstActive = await this.prisma.almacen.findFirst({
+      where: { activo: true, deletedAt: null },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (firstActive) {
+      await this.prisma.almacen.updateMany({
+        where: { esPrincipal: true, deletedAt: null },
+        data: { esPrincipal: false },
+      });
+
+      const promoted = await this.prisma.almacen.update({
+        where: { id: firstActive.id },
+        data: { esPrincipal: true, activo: true },
+      });
+      this.logger.warn(
+        `Almacén ${promoted.id} promovido como principal automáticamente`,
+      );
+      return promoted;
+    }
+
+    const created = await this.prisma.almacen.create({
+      data: {
+        nombre: 'Almacén Principal',
+        descripcion: 'Almacén principal del sistema',
+        esPrincipal: true,
+        activo: true,
+      },
+    });
+    this.logger.warn(`Almacén principal creado automáticamente: ${created.id}`);
+    return created;
+  }
+
   async createAlmacen(dto: CreateAlmacenDto) {
     const existing = await this.prisma.almacen.findFirst({
       where: { nombre: dto.nombre, deletedAt: null },
@@ -99,20 +147,33 @@ export class InventarioService {
       throw new ConflictException('Ya existe un almacén con este nombre');
     }
 
+    const existingPrincipal = await this.prisma.almacen.findFirst({
+      where: { esPrincipal: true, activo: true, deletedAt: null },
+      select: { id: true },
+    });
+    const shouldBePrincipal = dto.esPrincipal === true || !existingPrincipal;
+
     // Si se marca como principal, desmarcar el anterior
-    if (dto.esPrincipal) {
+    if (shouldBePrincipal) {
       await this.prisma.almacen.updateMany({
         where: { esPrincipal: true, deletedAt: null },
         data: { esPrincipal: false },
       });
     }
 
-    const almacen = await this.prisma.almacen.create({ data: dto });
+    const almacen = await this.prisma.almacen.create({
+      data: {
+        ...dto,
+        esPrincipal: shouldBePrincipal,
+        activo: shouldBePrincipal ? true : (dto.activo ?? true),
+      },
+    });
     this.logger.log(`Almacén creado: ${almacen.id}`);
     return almacen;
   }
 
   async findAllAlmacenes() {
+    await this.ensurePrincipalAlmacen();
     return this.prisma.almacen.findMany({
       where: { deletedAt: null },
       orderBy: { nombre: 'asc' },
@@ -130,7 +191,7 @@ export class InventarioService {
   }
 
   async updateAlmacen(id: string, dto: UpdateAlmacenDto) {
-    await this.findOneAlmacen(id);
+    const current = await this.findOneAlmacen(id);
 
     if (dto.nombre) {
       const existing = await this.prisma.almacen.findFirst({
@@ -139,6 +200,18 @@ export class InventarioService {
       if (existing) {
         throw new ConflictException('Ya existe un almacén con este nombre');
       }
+    }
+
+    if (current.esPrincipal && dto.esPrincipal === false) {
+      throw new BadRequestException(
+        'El almacén principal no puede desmarcarse directamente. Marca otro almacén como principal primero.',
+      );
+    }
+
+    if (current.esPrincipal && dto.activo === false) {
+      throw new BadRequestException(
+        'El almacén principal debe permanecer activo. Marca otro almacén como principal antes de desactivarlo.',
+      );
     }
 
     if (dto.esPrincipal) {
@@ -150,14 +223,23 @@ export class InventarioService {
 
     const almacen = await this.prisma.almacen.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        activo: dto.esPrincipal ? true : dto.activo,
+      },
     });
     this.logger.log(`Almacén actualizado: ${id}`);
     return almacen;
   }
 
   async removeAlmacen(id: string) {
-    await this.findOneAlmacen(id);
+    const almacen = await this.findOneAlmacen(id);
+
+    if (almacen.esPrincipal) {
+      throw new BadRequestException(
+        'No se puede eliminar el almacén principal. Marca otro almacén como principal antes de eliminar este.',
+      );
+    }
 
     const stockCount = await this.prisma.almacenStock.count({
       where: { almacenId: id, cantidad: { gt: 0 } },

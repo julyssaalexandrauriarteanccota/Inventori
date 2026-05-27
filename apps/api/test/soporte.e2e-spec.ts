@@ -28,6 +28,7 @@ describe('Soporte (e2e)', () => {
         id: '22222222-2222-4222-8222-000000000001',
         numeroSerie: 'SN-SOP-001',
         productoId: '33333333-3333-4333-8333-000000000001',
+        deletedAt: null,
         producto: {
           id: '33333333-3333-4333-8333-000000000001',
           nombre: 'Bizhub C258',
@@ -94,6 +95,17 @@ describe('Soporte (e2e)', () => {
     };
 
     prismaMock.equipo = {
+      findFirst: jest.fn(({ where }: { where?: Record<string, any> }) => {
+        return Promise.resolve(
+          equipos.find((candidate) => {
+            if (!where) return false;
+            if (where.id && candidate.id !== where.id) return false;
+            if (where.deletedAt === null && candidate.deletedAt !== null)
+              return false;
+            return true;
+          }) ?? null,
+        );
+      }),
       findUnique: jest.fn(({ where }: { where: Record<string, string> }) => {
         if (where.id)
           return Promise.resolve(

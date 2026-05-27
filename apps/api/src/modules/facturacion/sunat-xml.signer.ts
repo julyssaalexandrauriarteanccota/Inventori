@@ -76,7 +76,10 @@ export class SunatXmlSigner {
       return signedXml;
     }
 
-    const xml = signedXml.replace(referenceCanonicalizationTransformPattern, '');
+    const xml = signedXml.replace(
+      referenceCanonicalizationTransformPattern,
+      '',
+    );
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const signedInfo = doc.getElementsByTagName('ds:SignedInfo')[0];
     if (!signedInfo) {

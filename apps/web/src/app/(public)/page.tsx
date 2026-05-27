@@ -4,7 +4,10 @@ import { IvIcon } from "@/components/iv";
 import type { IvIconName } from "@/components/iv";
 import { getPublicBrandingFromApi } from "@/lib/public-branding";
 
+import { BrandMarquee } from "./_components/brand-marquee";
 import { ContactQuickForm } from "./_components/contact-quick-form";
+import { InfiniteMarquee } from "./_components/infinite-marquee";
+import type { MarqueeItem } from "./_components/infinite-marquee";
 import { RevealOnScroll } from "./_components/reveal-on-scroll";
 
 const STRIP_METRICS: { num: string; unit: string; label: string }[] = [
@@ -36,13 +39,7 @@ const EQUIPAMIENTO_FEATURES: {
   },
 ];
 
-const EQUIPOS: {
-  num: string;
-  icon: IvIconName;
-  title: string;
-  body: string;
-  href: string;
-}[] = [
+const EQUIPOS: MarqueeItem[] = [
   {
     num: "A3 · 01",
     icon: "copier",
@@ -70,6 +67,27 @@ const EQUIPOS: {
     title: "Consumibles originales",
     body: "Tóners, drums y fusores originales. Compatibles garantizados con tu equipo.",
     href: "/catalogo?categoria=insumos",
+  },
+  {
+    num: "REP · 05",
+    icon: "settings",
+    title: "Repuestos técnicos",
+    body: "Rodillos, fusores, piñones y tarjetas electrónicas. Componentes internos garantizados.",
+    href: "/catalogo?categoria=repuestos",
+  },
+  {
+    num: "SERV · 06",
+    icon: "tools",
+    title: "Servicio técnico",
+    body: "Mantenimiento preventivo y correctivo. Diagnóstico especializado en tu oficina.",
+    href: "/contacto",
+  },
+  {
+    num: "PROD · 07",
+    icon: "box",
+    title: "Equipos de producción",
+    body: "Sistemas de pedestal para alto volumen. Imprentas y oficinas con demanda intensiva.",
+    href: "/catalogo?categoria=equipos",
   },
 ];
 
@@ -374,24 +392,9 @@ export default async function PublicHomePage() {
             </p>
           </RevealOnScroll>
 
-          <div className="iv-cards-grid">
-            {EQUIPOS.map((p) => (
-              <RevealOnScroll key={p.title}>
-                <Link href={p.href} className="iv-product-card">
-                  <span className="iv-num">{p.num}</span>
-                  <span className="iv-product-icon">
-                    <IvIcon name={p.icon} size={36} stroke={1.4} />
-                  </span>
-                  <h3>{p.title}</h3>
-                  <p>{p.body}</p>
-                  <span className="iv-arrow">
-                    EXPLORAR
-                    <IvIcon name="arrow" size={14} stroke={2.2} />
-                  </span>
-                </Link>
-              </RevealOnScroll>
-            ))}
-          </div>
+          <RevealOnScroll>
+            <InfiniteMarquee items={EQUIPOS} speed={45} />
+          </RevealOnScroll>
 
           <RevealOnScroll className="mt-[72px] block">
             <div className="iv-feature-row iv-reverse">
@@ -489,6 +492,9 @@ export default async function PublicHomePage() {
           ))}
         </div>
       </section>
+
+      {/* ======================== MARCAS (brand marquee) ======================== */}
+      <BrandMarquee />
 
       {/* ============================ FINAL CTA ============================ */}
       <section className="iv-tech-section" id="contacto">

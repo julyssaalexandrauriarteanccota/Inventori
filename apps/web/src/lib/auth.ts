@@ -2,7 +2,7 @@ const TOKEN_KEY = "erp_token";
 const REFRESH_KEY = "erp_refresh_token";
 const AUTH_COOKIE = "erp_authenticated";
 
-import { clearStoredAutoRefreshPreference } from "@/lib/auto-refresh";
+
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -18,7 +18,7 @@ export function setTokens(token: string, refreshToken: string) {
 export function clearTokens() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
-  clearStoredAutoRefreshPreference("clientes");
+
   document.cookie = `${AUTH_COOKIE}=; path=/; max-age=0`;
 }
 

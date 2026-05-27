@@ -15,15 +15,17 @@ import type {
   UpdateOwnProfilePayload,
 } from "@erp/shared";
 
-import { api } from "@/lib/api";
+import { api, isApiConnectionError } from "@/lib/api";
 import { clearTokens, getToken, setTokens } from "@/lib/auth";
 
 interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  authError: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  retryAuth: () => Promise<void>;
   updateProfile: (data: UpdateOwnProfilePayload) => Promise<AuthUser>;
   hasRole: (...roles: RolUsuario[]) => boolean;
 }
@@ -38,34 +40,52 @@ interface ApiEnvelope<T> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
+  const loadUser = useCallback(async () => {
     const token = getToken();
     if (!token) {
+      setUser(null);
+      setAuthError(null);
       setIsLoading(false);
       return;
     }
 
-    api
-      .get<ApiEnvelope<AuthUser>>("/auth/me")
-      .then((res) => {
-        setUser(res.data);
-        if (res.data.mustChangePassword) {
-          router.replace("/auth/cambiar-contrasena");
-        }
-      })
-      .catch(() => {
-        clearTokens();
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+    setIsLoading(true);
+    try {
+      const res = await api.get<ApiEnvelope<AuthUser>>("/auth/me");
+      setUser(res.data);
+      setAuthError(null);
+      if (res.data.mustChangePassword) {
+        router.replace("/auth/cambiar-contrasena");
+      }
+    } catch (error) {
+      if (isApiConnectionError(error)) {
+        setAuthError(error.message);
+        return;
+      }
+
+      setAuthError(null);
+      setUser(null);
+      clearTokens();
+    } finally {
+      setIsLoading(false);
+    }
   }, [router]);
+
+  useEffect(() => {
+    void loadUser();
+  }, [loadUser]);
+
+  const retryAuth = useCallback(async () => {
+    await loadUser();
+  }, [loadUser]);
 
   useEffect(() => {
     function handleExpired() {
       setUser(null);
+      setAuthError(null);
       clearTokens();
       router.replace("/auth/login");
     }
@@ -85,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = res.data;
       setTokens(data.accessToken, data.refreshToken);
       setUser(data.user);
+      setAuthError(null);
 
       if (data.user.mustChangePassword) {
         router.replace("/auth/cambiar-contrasena");
@@ -129,13 +150,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       user,
       isLoading,
+      authError,
       isAuthenticated: !!user,
       login,
       logout,
+      retryAuth,
       updateProfile,
       hasRole,
     }),
-    [user, isLoading, login, logout, updateProfile, hasRole],
+    [user, isLoading, authError, login, logout, retryAuth, updateProfile, hasRole],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

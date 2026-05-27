@@ -215,10 +215,16 @@ export class SoporteController {
   }
 
   @Delete('tickets/:id')
-  @Roles(RolUsuario.ADMIN)
-  @ApiOperation({ summary: 'Eliminar ticket (soft delete, solo ADMIN)' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.soporteService.remove(id);
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
+  @ApiOperation({
+    summary: 'Eliminar definitivamente un ticket',
+  })
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('sub') userId: string,
+    @CurrentUser('rol') userRol: RolUsuario,
+  ) {
+    return this.soporteService.remove(id, userId, userRol);
   }
 
   @Post('clasificar-ticket')

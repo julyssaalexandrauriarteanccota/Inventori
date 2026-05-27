@@ -4,7 +4,9 @@ import { PrismaService } from '../../database/prisma.service';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { CajaService } from '../caja/caja.service';
 import {
+  EstadoComercialEquipo,
   EstadoFacturacionVenta,
+  EstadoGarantia,
   ModalidadEnvioBoletas,
   TipoDocumento,
 } from '@erp/shared';
@@ -14,7 +16,7 @@ const mockTx = {
   almacenStock: { findUnique: jest.fn(), updateMany: jest.fn() },
   movimientoStock: { create: jest.fn() },
   equipoCliente: { updateMany: jest.fn(), create: jest.fn() },
-  equipo: { findUnique: jest.fn(), update: jest.fn() },
+  equipo: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   garantia: { create: jest.fn() },
   cliente: { findUnique: jest.fn() },
   adjunto: { create: jest.fn() },
@@ -40,6 +42,7 @@ const mockPrisma = {
   adjunto: { findMany: jest.fn() },
   almacen: { findFirst: jest.fn() },
   almacenStock: { findUnique: jest.fn() },
+  detalleVenta: { findFirst: jest.fn() },
   configEmpresaFiscal: { findFirst: jest.fn() },
   certificadoDigital: { findFirst: jest.fn() },
   fiscalSecret: { findMany: jest.fn() },
@@ -121,6 +124,13 @@ describe('VentasService', () => {
     mockPrisma.$transaction.mockImplementation(
       (fn: (tx: typeof mockTx) => Promise<unknown>) => fn(mockTx),
     );
+    mockTx.venta.create.mockImplementation((args) =>
+      mockPrisma.venta.create(args),
+    );
+    mockTx.venta.update.mockImplementation((args) =>
+      mockPrisma.venta.update(args),
+    );
+    mockPrisma.detalleVenta.findFirst.mockResolvedValue(null);
   });
 
   // ═══════════════════════════════════════════
@@ -183,7 +193,34 @@ describe('VentasService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should require equipoSerie for productos con serie', async () => {
+    it('should allow cotizar productos con serie sin seleccionar equipo físico', async () => {
+      mockPrisma.cliente.findFirst.mockResolvedValue({ id: 'cli-1' });
+      mockPrisma.producto.findMany.mockResolvedValue([mockProductoSerie]);
+      mockPrisma.venta.findFirst.mockResolvedValue(null);
+      mockPrisma.venta.create.mockResolvedValue({
+        id: 'vta-1',
+        numero: 'VTA-0001',
+        estado: 'COTIZACION',
+        subtotal: 5084.75,
+        igv: 915.25,
+        total: 6000,
+      });
+
+      const result = await service.create(
+        {
+          clienteId: 'cli-1',
+          detalles: [
+            { productoId: 'prod-2', cantidad: 1, precioUnitario: 6000 },
+          ],
+        },
+        'user-1',
+      );
+
+      expect(result.numero).toBe('VTA-0001');
+      expect(mockPrisma.equipo.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('should reject quantity greater than 1 for serialized equipo lines', async () => {
       mockPrisma.cliente.findFirst.mockResolvedValue({ id: 'cli-1' });
       mockPrisma.producto.findMany.mockResolvedValue([mockProductoSerie]);
 
@@ -192,12 +229,18 @@ describe('VentasService', () => {
           {
             clienteId: 'cli-1',
             detalles: [
-              { productoId: 'prod-2', cantidad: 1, precioUnitario: 6000 },
+              {
+                productoId: 'prod-2',
+                cantidad: 2,
+                precioUnitario: 6000,
+                equipoSerie: 'SN-123',
+              },
             ],
           },
           'user-1',
         ),
       ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.equipo.findUnique).not.toHaveBeenCalled();
     });
 
     it('should validate equipo exists and matches producto', async () => {
@@ -324,6 +367,7 @@ describe('VentasService', () => {
       mockPrisma.venta.findFirst.mockResolvedValue({
         id: 'vta-1',
         estado: 'COTIZACION',
+        detalles: [],
       });
       mockPrisma.venta.update.mockResolvedValue({
         id: 'vta-1',
@@ -349,6 +393,7 @@ describe('VentasService', () => {
       mockPrisma.venta.findFirst.mockResolvedValue({
         id: 'vta-1',
         estado: 'COTIZACION',
+        detalles: [],
       });
       mockPrisma.producto.findMany.mockResolvedValue([mockProducto]);
       mockPrisma.venta.update.mockResolvedValue({
@@ -452,9 +497,35 @@ describe('VentasService', () => {
       );
     });
 
+    it('should require equipoSerie before confirming serialized product sales', async () => {
+      mockPrisma.venta.findFirst.mockResolvedValue({
+        ...mockVenta,
+        detalles: [
+          {
+            id: 'det-2',
+            productoId: 'prod-2',
+            cantidad: 1,
+            equipoSerie: null,
+            producto: mockProductoSerie,
+          },
+        ],
+      });
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+
+      await expect(
+        service.confirmar('vta-1', confirmarDto, 'user-1'),
+      ).rejects.toThrow('seleccione una serie');
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('should assign equipo and create garantia for serialized products', async () => {
       const ventaConSerie = {
         ...mockVenta,
+        estado: 'RESERVADA',
         detalles: [
           {
             id: 'det-2',
@@ -476,7 +547,13 @@ describe('VentasService', () => {
       mockTx.equipo.findUnique.mockResolvedValue({
         id: 'eq-1',
         numeroSerie: 'SN-123',
+        estadoComercial: EstadoComercialEquipo.RESERVADO,
+        almacenId: 'alm-1',
         contadorActual: 1234,
+      });
+      mockPrisma.detalleVenta.findFirst.mockResolvedValue({
+        ventaId: 'vta-1',
+        venta: { numero: 'VTA-0001' },
       });
       mockTx.cliente.findUnique.mockResolvedValue({
         id: 'cli-1',
@@ -513,10 +590,111 @@ describe('VentasService', () => {
             clienteDocNumero: '12345678',
             contadorInicio: 1234,
             contadorMaxCopias: 50000,
+            estado: EstadoGarantia.PENDIENTE_COMPLETAR,
             cobertura: expect.stringContaining('24 meses'),
           }),
         }),
       );
+    });
+
+    it('should confirm a direct POS sale with an available serialized equipo without reservation', async () => {
+      const ventaConSerie = {
+        ...mockVenta,
+        estado: 'COTIZACION',
+        detalles: [
+          {
+            id: 'det-2',
+            productoId: 'prod-2',
+            cantidad: 1,
+            equipoSerie: 'SN-123',
+            producto: mockProductoSerie,
+          },
+        ],
+      };
+      mockPrisma.venta.findFirst.mockResolvedValue(ventaConSerie);
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+      mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 4 });
+      mockTx.equipo.findUnique.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-123',
+        estadoComercial: EstadoComercialEquipo.DISPONIBLE,
+        almacenId: 'alm-1',
+        contadorActual: 1234,
+      });
+      mockTx.cliente.findUnique.mockResolvedValue({
+        id: 'cli-1',
+        nombre: 'Juan',
+        apellido: 'Pérez',
+        razonSocial: null,
+        ruc: null,
+        dni: '12345678',
+      });
+      mockTx.venta.update.mockResolvedValue({
+        ...ventaConSerie,
+        estado: 'ORDEN_CONFIRMADA',
+      });
+
+      const result = await service.confirmar('vta-1', confirmarDto, 'user-1');
+
+      expect(result.estado).toBe('ORDEN_CONFIRMADA');
+      expect(mockPrisma.detalleVenta.findFirst).not.toHaveBeenCalled();
+      expect(mockTx.equipo.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'eq-1' },
+          data: expect.objectContaining({
+            estadoComercial: 'VENDIDO',
+            almacenId: null,
+          }),
+        }),
+      );
+      expect(mockTx.garantia.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            equipoId: 'eq-1',
+            ventaId: 'vta-1',
+            estado: EstadoGarantia.PENDIENTE_COMPLETAR,
+          }),
+        }),
+      );
+    });
+
+    it('should reject a direct POS sale when the serialized equipo is reserved by another quote', async () => {
+      const ventaConSerie = {
+        ...mockVenta,
+        estado: 'COTIZACION',
+        detalles: [
+          {
+            id: 'det-2',
+            productoId: 'prod-2',
+            cantidad: 1,
+            equipoSerie: 'SN-123',
+            producto: mockProductoSerie,
+          },
+        ],
+      };
+      mockPrisma.venta.findFirst.mockResolvedValue(ventaConSerie);
+      mockPrisma.metodoPago.findUnique.mockResolvedValue({
+        id: 'mp-1',
+        activo: true,
+      });
+      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+      mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 4 });
+      mockTx.equipo.findUnique.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-123',
+        estadoComercial: EstadoComercialEquipo.RESERVADO,
+        almacenId: 'alm-1',
+      });
+
+      await expect(
+        service.confirmar('vta-1', confirmarDto, 'user-1'),
+      ).rejects.toThrow('no está disponible para confirmar venta');
     });
 
     it('should close generic sales up to S/ 5 as internal', async () => {

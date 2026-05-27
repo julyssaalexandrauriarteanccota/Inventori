@@ -17,7 +17,9 @@ async function main() {
 
   console.log('--- COMPROBANTE SUMMARY ---');
   for (const s of summary) {
-    console.log(`Tipo: ${s.tipo} | Estado: ${s.estado} | SUNAT Code: ${s.codigoSunat} | Count: ${s._count.id}`);
+    console.log(
+      `Tipo: ${s.tipo} | Estado: ${s.estado} | SUNAT Code: ${s.codigoSunat} | Count: ${s._count.id}`,
+    );
   }
 
   const latest = await prisma.comprobante.findMany({
@@ -30,12 +32,14 @@ async function main() {
       estado: true,
       codigoSunat: true,
       mensajeSunat: true,
-    }
+    },
   });
 
   console.log('\n--- LATEST 20 COMPROBANTES ---');
   for (const c of latest) {
-    console.log(`ID: ${c.id} | Numero: ${c.numero} | Tipo: ${c.tipo} | Estado: ${c.estado}`);
+    console.log(
+      `ID: ${c.id} | Numero: ${c.numero} | Tipo: ${c.tipo} | Estado: ${c.estado}`,
+    );
     console.log(`  SUNAT Code: ${c.codigoSunat} | Msg: ${c.mensajeSunat}`);
   }
 

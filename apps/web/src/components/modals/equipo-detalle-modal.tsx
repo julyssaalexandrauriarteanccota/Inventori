@@ -63,6 +63,7 @@ const CONDICION_LABELS: Record<CondicionProducto, string> = {
 };
 
 const GARANTIA_LABELS: Record<EstadoGarantia, string> = {
+  [EstadoGarantia.PENDIENTE_COMPLETAR]: "Pendiente de completar",
   [EstadoGarantia.ACTIVA]: "Activa",
   [EstadoGarantia.VENCIDA]: "Vencida",
   [EstadoGarantia.ANULADA]: "Anulada",

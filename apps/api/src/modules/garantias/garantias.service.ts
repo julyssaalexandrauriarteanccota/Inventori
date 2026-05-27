@@ -9,6 +9,7 @@ import { EstadoComercialEquipo, EstadoGarantia } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
 import {
   CreateGarantiaDto,
+  UpdateGarantiaDto,
   CreateCasoGarantiaDto,
   UpdateCasoGarantiaDto,
   QueryGarantiaDto,
@@ -19,6 +20,72 @@ export class GarantiasService {
   private readonly logger = new Logger(GarantiasService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private assertGarantiaActivaCompleta(input: {
+    estado?: EstadoGarantia | string | null;
+    fechaInstalacion?: Date | string | null;
+    direccionInstalacion?: string | null;
+    ubigeoInstalacion?: string | null;
+    departamentoInstalacion?: string | null;
+    provinciaInstalacion?: string | null;
+    distritoInstalacion?: string | null;
+    latitudInstalacion?: number | null;
+    longitudInstalacion?: number | null;
+  }) {
+    if (input.estado !== EstadoGarantia.ACTIVA) return;
+
+    if (
+      !input.fechaInstalacion ||
+      !input.direccionInstalacion?.trim() ||
+      !input.ubigeoInstalacion?.trim() ||
+      !input.departamentoInstalacion?.trim() ||
+      !input.provinciaInstalacion?.trim() ||
+      !input.distritoInstalacion?.trim() ||
+      input.latitudInstalacion == null ||
+      input.longitudInstalacion == null
+    ) {
+      throw new BadRequestException(
+        'Para activar la garantía completa fecha, dirección, ubigeo y punto de instalación',
+      );
+    }
+  }
+
+  private optionalText(value?: string | null) {
+    return value?.trim() || null;
+  }
+
+  private enrichGarantia(garantia: any) {
+    if (!garantia) return garantia;
+
+    const ahora = new Date();
+    const vigentePorFecha =
+      garantia.estado === EstadoGarantia.ACTIVA &&
+      new Date(garantia.fechaFin) > ahora;
+
+    let vigentePorCopias = true;
+    let copiasUsadas: number | null = null;
+    if (
+      garantia.contadorMaxCopias != null &&
+      garantia.contadorInicio != null &&
+      garantia.equipo?.contadorActual != null
+    ) {
+      copiasUsadas = Math.max(
+        garantia.equipo.contadorActual - garantia.contadorInicio,
+        0,
+      );
+      vigentePorCopias = copiasUsadas < garantia.contadorMaxCopias;
+    }
+
+    const vigente = vigentePorFecha && vigentePorCopias;
+
+    return {
+      ...garantia,
+      vigente,
+      vigentePorFecha,
+      vigentePorCopias,
+      copiasUsadas,
+    };
+  }
 
   // ═══════════════════════════════════════════
   //  GARANTÍAS
@@ -75,7 +142,10 @@ export class GarantiasService {
     }
 
     const existingGarantia = await this.prisma.garantia.findFirst({
-      where: { equipoId: equipo.id },
+      where: {
+        equipoId: equipo.id,
+        estado: { not: EstadoGarantia.ANULADA },
+      },
       select: { id: true },
     });
     if (existingGarantia) {
@@ -139,6 +209,21 @@ export class GarantiasService {
       : (equipo.contadorInicial ?? equipo.contadorActual ?? null);
     const contadorMaxCopias =
       dto.contadorMaxCopias ?? equipo.producto?.garantiaMaxCopias ?? null;
+    const estado = dto.estado ?? EstadoGarantia.PENDIENTE_COMPLETAR;
+    const fechaInstalacion = dto.fechaInstalacion
+      ? new Date(dto.fechaInstalacion)
+      : null;
+    this.assertGarantiaActivaCompleta({
+      estado,
+      fechaInstalacion,
+      direccionInstalacion: dto.direccionInstalacion,
+      ubigeoInstalacion: dto.ubigeoInstalacion,
+      departamentoInstalacion: dto.departamentoInstalacion,
+      provinciaInstalacion: dto.provinciaInstalacion,
+      distritoInstalacion: dto.distritoInstalacion,
+      latitudInstalacion: dto.latitudInstalacion ?? null,
+      longitudInstalacion: dto.longitudInstalacion ?? null,
+    });
 
     const garantia = await this.prisma.garantia.create({
       data: {
@@ -152,7 +237,18 @@ export class GarantiasService {
         fechaFin,
         cobertura: dto.cobertura,
         exclusiones: dto.exclusiones ?? null,
-        estado: dto.estado ?? EstadoGarantia.ACTIVA,
+        fechaInstalacion,
+        direccionInstalacion: this.optionalText(dto.direccionInstalacion),
+        ubigeoInstalacion: this.optionalText(dto.ubigeoInstalacion),
+        departamentoInstalacion: this.optionalText(dto.departamentoInstalacion),
+        provinciaInstalacion: this.optionalText(dto.provinciaInstalacion),
+        distritoInstalacion: this.optionalText(dto.distritoInstalacion),
+        latitudInstalacion: dto.latitudInstalacion ?? null,
+        longitudInstalacion: dto.longitudInstalacion ?? null,
+        contactoInstalacion: this.optionalText(dto.contactoInstalacion),
+        telefonoInstalacion: this.optionalText(dto.telefonoInstalacion),
+        notasInstalacion: dto.notasInstalacion ?? null,
+        estado,
         codigoQR,
         contadorInicio,
         contadorMaxCopias,
@@ -162,6 +258,7 @@ export class GarantiasService {
           select: {
             id: true,
             numeroSerie: true,
+            contadorActual: true,
             producto: { select: { nombre: true, modelo: true } },
           },
         },
@@ -171,15 +268,28 @@ export class GarantiasService {
     this.logger.log(
       `Garantía creada: ${garantia.id} — Equipo: ${equipo.numeroSerie} — QR: ${codigoQR}`,
     );
-    return garantia;
+    return this.enrichGarantia(garantia);
   }
 
   async findAll(query: QueryGarantiaDto) {
-    const { page = 1, limit = 20, estado, equipoId, search } = query;
+    const {
+      page = 1,
+      limit = 20,
+      estado,
+      equipoId,
+      search,
+      soloOperativas,
+    } = query;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {};
-    if (estado) where.estado = estado;
+    if (estado) {
+      where.estado = estado;
+    } else if (soloOperativas) {
+      where.estado = {
+        in: [EstadoGarantia.PENDIENTE_COMPLETAR, EstadoGarantia.ACTIVA],
+      };
+    }
     if (equipoId) where.equipoId = equipoId;
     if (search) {
       where.OR = [
@@ -209,6 +319,7 @@ export class GarantiasService {
             select: {
               id: true,
               numeroSerie: true,
+              contadorActual: true,
               producto: { select: { nombre: true, modelo: true } },
             },
           },
@@ -220,9 +331,142 @@ export class GarantiasService {
     ]);
 
     return {
-      data: garantias,
+      data: garantias.map((g) => this.enrichGarantia(g)),
       meta: { total, page, limit, timestamp: new Date().toISOString() },
     };
+  }
+
+  async update(id: string, dto: UpdateGarantiaDto) {
+    const current = await this.prisma.garantia.findUnique({
+      where: { id },
+    });
+    if (!current) {
+      throw new NotFoundException(`Garantía ${id} no encontrada`);
+    }
+
+    const fechaInicio = dto.fechaInicio
+      ? new Date(dto.fechaInicio)
+      : current.fechaInicio;
+    const fechaFin = dto.fechaFin ? new Date(dto.fechaFin) : current.fechaFin;
+    if (fechaFin <= fechaInicio) {
+      throw new BadRequestException(
+        'La fecha de fin debe ser posterior a la fecha de inicio',
+      );
+    }
+
+    const estado = dto.estado ?? current.estado;
+    const fechaInstalacion =
+      dto.fechaInstalacion !== undefined
+        ? dto.fechaInstalacion
+          ? new Date(dto.fechaInstalacion)
+          : null
+        : current.fechaInstalacion;
+    const direccionInstalacion =
+      dto.direccionInstalacion !== undefined
+        ? this.optionalText(dto.direccionInstalacion)
+        : current.direccionInstalacion;
+    const ubigeoInstalacion =
+      dto.ubigeoInstalacion !== undefined
+        ? this.optionalText(dto.ubigeoInstalacion)
+        : current.ubigeoInstalacion;
+    const departamentoInstalacion =
+      dto.departamentoInstalacion !== undefined
+        ? this.optionalText(dto.departamentoInstalacion)
+        : current.departamentoInstalacion;
+    const provinciaInstalacion =
+      dto.provinciaInstalacion !== undefined
+        ? this.optionalText(dto.provinciaInstalacion)
+        : current.provinciaInstalacion;
+    const distritoInstalacion =
+      dto.distritoInstalacion !== undefined
+        ? this.optionalText(dto.distritoInstalacion)
+        : current.distritoInstalacion;
+    const latitudInstalacion =
+      dto.latitudInstalacion !== undefined
+        ? dto.latitudInstalacion
+        : current.latitudInstalacion;
+    const longitudInstalacion =
+      dto.longitudInstalacion !== undefined
+        ? dto.longitudInstalacion
+        : current.longitudInstalacion;
+
+    this.assertGarantiaActivaCompleta({
+      estado,
+      fechaInstalacion,
+      direccionInstalacion,
+      ubigeoInstalacion,
+      departamentoInstalacion,
+      provinciaInstalacion,
+      distritoInstalacion,
+      latitudInstalacion,
+      longitudInstalacion,
+    });
+
+    return this.prisma.garantia.update({
+      where: { id },
+      data: {
+        ventaId: dto.ventaId !== undefined ? (dto.ventaId ?? null) : undefined,
+        clienteDocTipo:
+          dto.clienteDocTipo !== undefined
+            ? dto.clienteDocTipo?.trim() || null
+            : undefined,
+        clienteDocNumero:
+          dto.clienteDocNumero !== undefined
+            ? dto.clienteDocNumero?.trim() || null
+            : undefined,
+        clienteNombre:
+          dto.clienteNombre !== undefined
+            ? dto.clienteNombre?.trim() || null
+            : undefined,
+        fechaInicio,
+        fechaFin,
+        cobertura: dto.cobertura?.trim(),
+        exclusiones:
+          dto.exclusiones !== undefined
+            ? dto.exclusiones?.trim() || null
+            : undefined,
+        fechaInstalacion,
+        direccionInstalacion,
+        ubigeoInstalacion,
+        departamentoInstalacion,
+        provinciaInstalacion,
+        distritoInstalacion,
+        latitudInstalacion,
+        longitudInstalacion,
+        contactoInstalacion:
+          dto.contactoInstalacion !== undefined
+            ? this.optionalText(dto.contactoInstalacion)
+            : undefined,
+        telefonoInstalacion:
+          dto.telefonoInstalacion !== undefined
+            ? this.optionalText(dto.telefonoInstalacion)
+            : undefined,
+        notasInstalacion:
+          dto.notasInstalacion !== undefined
+            ? (dto.notasInstalacion ?? null)
+            : undefined,
+        estado,
+        contadorMaxCopias:
+          dto.contadorMaxCopias !== undefined
+            ? dto.contadorMaxCopias
+            : undefined,
+      },
+    });
+  }
+
+  async remove(id: string) {
+    const current = await this.prisma.garantia.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!current) {
+      throw new NotFoundException(`Garantía ${id} no encontrada`);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.casoGarantia.deleteMany({ where: { garantiaId: id } });
+      return tx.garantia.delete({ where: { id } });
+    });
   }
 
   async findOne(id: string) {
@@ -233,6 +477,7 @@ export class GarantiasService {
           select: {
             id: true,
             numeroSerie: true,
+            contadorActual: true,
             producto: {
               select: {
                 nombre: true,
@@ -248,7 +493,7 @@ export class GarantiasService {
     if (!garantia) {
       throw new NotFoundException(`Garantía ${id} no encontrada`);
     }
-    return garantia;
+    return this.enrichGarantia(garantia);
   }
 
   // ═══════════════════════════════════════════
@@ -265,6 +510,17 @@ export class GarantiasService {
         fechaFin: true,
         cobertura: true,
         exclusiones: true,
+        fechaInstalacion: true,
+        direccionInstalacion: true,
+        ubigeoInstalacion: true,
+        departamentoInstalacion: true,
+        provinciaInstalacion: true,
+        distritoInstalacion: true,
+        latitudInstalacion: true,
+        longitudInstalacion: true,
+        contactoInstalacion: true,
+        telefonoInstalacion: true,
+        notasInstalacion: true,
         clienteNombre: true,
         codigoQR: true,
         contadorInicio: true,
@@ -288,35 +544,7 @@ export class GarantiasService {
       throw new NotFoundException('Garantía no encontrada');
     }
 
-    // Determinar vigencia por fechas y por copias (si aplica)
-    const ahora = new Date();
-    const vigentePorFecha =
-      (garantia.estado as EstadoGarantia) === EstadoGarantia.ACTIVA &&
-      new Date(garantia.fechaFin) > ahora;
-
-    let vigentePorCopias = true;
-    let copiasUsadas: number | null = null;
-    if (
-      garantia.contadorMaxCopias != null &&
-      garantia.contadorInicio != null &&
-      garantia.equipo.contadorActual != null
-    ) {
-      copiasUsadas = Math.max(
-        garantia.equipo.contadorActual - garantia.contadorInicio,
-        0,
-      );
-      vigentePorCopias = copiasUsadas < garantia.contadorMaxCopias;
-    }
-
-    const vigente = vigentePorFecha && vigentePorCopias;
-
-    return {
-      ...garantia,
-      vigente,
-      vigentePorFecha,
-      vigentePorCopias,
-      copiasUsadas,
-    };
+    return this.enrichGarantia(garantia);
   }
 
   // ═══════════════════════════════════════════
@@ -345,9 +573,8 @@ export class GarantiasService {
       );
     }
 
-    // Validar consistencia aceptada / motivo (si se rechaza, motivo obligatorio)
-    const aceptada = dto.aceptada ?? true;
-    if (aceptada === false && !dto.motivo) {
+    // Un caso manual nace pendiente si no se decide aceptarlo/rechazarlo.
+    if (dto.aceptada === false && !dto.motivo?.trim()) {
       throw new BadRequestException(
         'Debe indicar el motivo cuando se rechaza la cobertura de garantía',
       );
@@ -358,7 +585,7 @@ export class GarantiasService {
         garantiaId,
         ticketId: dto.ticketId ?? null,
         descripcion: dto.descripcion,
-        aceptada,
+        aceptada: dto.aceptada ?? null,
         motivo: dto.motivo ?? null,
       },
       include: {
@@ -406,6 +633,26 @@ export class GarantiasService {
     return this.prisma.casoGarantia.update({
       where: { id: casoId },
       data: dto,
+    });
+  }
+
+  async deleteCaso(garantiaId: string, casoId: string) {
+    const caso = await this.prisma.casoGarantia.findUnique({
+      where: { id: casoId },
+    });
+
+    if (!caso) {
+      throw new NotFoundException(`Caso ${casoId} no encontrado`);
+    }
+
+    if (caso.garantiaId !== garantiaId) {
+      throw new BadRequestException(
+        'El caso no pertenece a la garantía indicada',
+      );
+    }
+
+    return this.prisma.casoGarantia.delete({
+      where: { id: casoId },
     });
   }
 }

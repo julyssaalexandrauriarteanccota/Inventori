@@ -83,6 +83,15 @@ export class VentasController {
     return this.ventasService.confirmar(id, dto, userId);
   }
 
+  @Patch(':id/reservar')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({
+    summary: 'Reservar equipos de una cotización aceptada',
+  })
+  reservar(@Param('id', ParseUUIDPipe) id: string) {
+    return this.ventasService.reservar(id);
+  }
+
   @Patch(':id/entregar')
   @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
   @ApiOperation({ summary: 'Marcar venta como entregada' })

@@ -73,6 +73,7 @@ enum EstadoOrdenCompra {
 
 enum EstadoVenta {
   COTIZACION
+  RESERVADA
   ORDEN_CONFIRMADA
   ENTREGADA
   CANCELADA
@@ -152,6 +153,7 @@ enum CertificadoStorageProvider {
 }
 
 enum EstadoGarantia {
+  PENDIENTE_COMPLETAR
   ACTIVA
   VENCIDA
   ANULADA
@@ -187,6 +189,47 @@ enum EstadoComercialEquipo {
   EN_REPARACION
   USO_INTERNO
   BAJA
+}
+
+enum EstadoContratoAlquiler {
+  BORRADOR
+  RESERVADO
+  PENDIENTE_ENTREGA
+  ACTIVO
+  EN_RETORNO
+  CERRADO
+  FINALIZADO
+  CANCELADO
+}
+
+enum EstadoPeriodoAlquiler {
+  PENDIENTE_BASE
+  ACTIVO
+  PENDIENTE_CIERRE
+  CERRADO
+  CANCELADO
+}
+
+enum TipoCargoAlquiler {
+  BASE
+  DEPOSITO_GARANTIA
+  EXCEDENTE_COPIAS
+  SOPORTE
+  DANO
+  MORA
+  TRANSPORTE
+  AJUSTE
+}
+
+enum TipoInspeccionAlquiler {
+  ENTREGA
+  RETORNO
+}
+
+enum CondicionInspeccionAlquiler {
+  BUENO
+  REGULAR
+  DANADO
 }
 
 enum EstadoCaja {
@@ -227,6 +270,7 @@ model Usuario {
   cargo              String?
   bio                String?
   avatarUrl          String?
+  sessionVersion     Int        @default(1)
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
   deletedAt          DateTime?
@@ -248,6 +292,9 @@ model Usuario {
   movimientosCaja  MovimientoCaja[]
   arqueosCaja      ArqueoCaja[]
   solicitudesAsignadas SolicitudPublica[] @relation("SolicitudAsignada")
+  contratosAlquilerCreados ContratoAlquiler[] @relation("ContratoAlquilerCreador")
+  lecturasAlquiler LecturaAlquiler[]
+  inspeccionesAlquiler InspeccionAlquiler[]
 
   @@map("usuarios")
 }
@@ -315,9 +362,11 @@ model Cliente {
 
   contactos         ContactoCliente[]
   equipoClientes    EquipoCliente[]
+  equiposCliente    EquipoClienteActivo[]
   ventas            Venta[]
   tickets           Ticket[]
   validacionesSunat ClienteValidacionSunat[]
+  contratosAlquiler ContratoAlquiler[]
 
   @@map("clientes")
 }
@@ -345,7 +394,14 @@ model Proveedor {
   ruc              String    @unique
   email            String?
   telefono         String?
+  celular          String?
   direccion        String?
+  distrito         String?
+  provincia        String?
+  departamento     String?
+  referencia       String?
+  latitud          Float?
+  longitud         Float?
   contactoNombre   String?
   contactoTelefono String?
   notas            String?
@@ -404,12 +460,28 @@ model ModeloCatalogo {
   updatedAt   DateTime     @updatedAt
   deletedAt   DateTime?
 
-  marca     Marca?     @relation(fields: [marcaId], references: [id])
-  productos Producto[]
+  marca                   Marca?                         @relation(fields: [marcaId], references: [id])
+  productos               Producto[]
+  productosCompatibilidad ProductoModeloCompatibilidad[]
 
   @@index([tipo])
   @@index([marcaId])
   @@map("modelos_catalogo")
+}
+
+model ProductoModeloCompatibilidad {
+  id               String   @id @default(uuid())
+  productoId       String
+  modeloCatalogoId String
+  createdAt        DateTime @default(now())
+
+  producto       Producto       @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  modeloCatalogo ModeloCatalogo @relation(fields: [modeloCatalogoId], references: [id], onDelete: Cascade)
+
+  @@unique([productoId, modeloCatalogoId])
+  @@index([productoId])
+  @@index([modeloCatalogoId])
+  @@map("producto_modelo_compatibilidades")
 }
 
 model UnidadMedida {
@@ -462,12 +534,14 @@ model Producto {
   categoria                    Categoria            @relation(fields: [categoriaId], references: [id])
   marca                        Marca?               @relation(fields: [marcaId], references: [id])
   modeloCatalogo               ModeloCatalogo?      @relation(fields: [modeloCatalogoId], references: [id])
+  modelosCompatibles           ProductoModeloCompatibilidad[]
   unidadMedida                 UnidadMedida         @relation(fields: [unidadMedidaId], references: [id])
   imagenes                     ProductoImagen[]
   productoProveedores          ProductoProveedor[]
   compatibilidadesComoRepuesto Compatibilidad[]     @relation("RepuestoCompatibilidad")
   compatibilidadesComoModelo   Compatibilidad[]     @relation("ModeloCompatibilidad")
   equipos                      Equipo[]
+  equiposCliente               EquipoClienteActivo[]
   almacenStocks                AlmacenStock[]
   movimientosStock             MovimientoStock[]
   detallesOrdenCompra          DetalleOrdenCompra[]
@@ -560,13 +634,17 @@ model Equipo {
   snmpPort          Int?                  @default(161)
   createdAt         DateTime              @default(now())
   updatedAt         DateTime              @updatedAt
+  deletedAt         DateTime?
 
   producto       Producto        @relation(fields: [productoId], references: [id])
   almacen        Almacen?        @relation(fields: [almacenId], references: [id])
   equipoClientes EquipoCliente[]
   lecturasSNMP   LecturaSNMP[]
+  lecturasAlquiler LecturaAlquiler[]
+  inspeccionesAlquiler InspeccionAlquiler[]
   garantias      Garantia[]
   tickets        Ticket[]
+  contratosAlquiler ContratoAlquiler[]
 
   @@index([productoId])
   @@index([almacenId])
@@ -593,6 +671,170 @@ model EquipoCliente {
   @@index([clienteId])
   @@index([ventaId])
   @@map("equipo_clientes")
+}
+
+model EquipoClienteActivo {
+  id             String       @id @default(uuid())
+  clienteId      String
+  productoId     String?
+  numeroSerie    String
+  nombre         String?
+  marca          String?
+  modelo         String?
+  estado         EstadoEquipo @default(ACTIVO)
+  codigoQr       String?      @unique
+  ubicacion      String?
+  notas          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  cliente  Cliente  @relation(fields: [clienteId], references: [id])
+  producto Producto? @relation(fields: [productoId], references: [id])
+  tickets  Ticket[]
+
+  @@unique([clienteId, numeroSerie])
+  @@index([clienteId])
+  @@index([productoId])
+  @@index([estado])
+  @@map("equipos_cliente")
+}
+
+model ContratoAlquiler {
+  id                    String                 @id @default(uuid())
+  numero                String                 @unique
+  clienteId             String
+  equipoId              String
+  creadoPorId           String
+  fechaInicio           DateTime
+  fechaFinPrevista      DateTime
+  mesesPlazo            Int                    @default(6)
+  copiasIncluidasMes    Int
+  precioMensual         Decimal                @db.Decimal(10, 2)
+  precioCopiaExcedente  Decimal                @db.Decimal(10, 4)
+  depositoGarantia      Decimal                @default(0) @db.Decimal(10, 2)
+  depositoCobradoAt     DateTime?
+  depositoDevueltoAt    DateTime?
+  depositoAplicado      Decimal                @default(0) @db.Decimal(10, 2)
+  contadorInicio        Int
+  contadorActual        Int?
+  estado                EstadoContratoAlquiler @default(BORRADOR)
+  notas                 String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deletedAt             DateTime?
+
+  cliente   Cliente          @relation(fields: [clienteId], references: [id])
+  equipo    Equipo           @relation(fields: [equipoId], references: [id])
+  creadoPor Usuario          @relation("ContratoAlquilerCreador", fields: [creadoPorId], references: [id])
+  garantia  Garantia?
+  periodos  PeriodoAlquiler[]
+  lecturas  LecturaAlquiler[]
+  inspecciones InspeccionAlquiler[]
+
+  @@index([clienteId])
+  @@index([equipoId])
+  @@index([creadoPorId])
+  @@index([estado])
+  @@map("contratos_alquiler")
+}
+
+model PeriodoAlquiler {
+  id                String                @id @default(uuid())
+  contratoId        String
+  numeroPeriodo     Int
+  fechaInicio       DateTime
+  fechaFin          DateTime
+  lecturaInicial    Int?
+  lecturaFinal      Int?
+  copiasUsadas      Int?
+  copiasIncluidas   Int
+  copiasExcedentes  Int?
+  montoBase         Decimal               @db.Decimal(10, 2)
+  montoExcedente    Decimal               @default(0) @db.Decimal(10, 2)
+  montoSoporte      Decimal               @default(0) @db.Decimal(10, 2)
+  totalCierre       Decimal               @default(0) @db.Decimal(10, 2)
+  baseCobradoAt     DateTime?
+  cierreCalculadoAt DateTime?
+  cierreCobradoAt   DateTime?
+  estado            EstadoPeriodoAlquiler @default(PENDIENTE_BASE)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  contrato ContratoAlquiler @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  lecturas LecturaAlquiler[]
+  cargos   CargoPeriodoAlquiler[]
+
+  @@unique([contratoId, numeroPeriodo])
+  @@index([contratoId])
+  @@index([estado])
+  @@index([fechaInicio, fechaFin])
+  @@map("periodos_alquiler")
+}
+
+model LecturaAlquiler {
+  id           String   @id @default(uuid())
+  contratoId   String
+  periodoId    String?
+  equipoId     String
+  usuarioId    String
+  contador     Int
+  fechaLectura DateTime @default(now())
+  notas        String?
+  createdAt    DateTime @default(now())
+
+  contrato ContratoAlquiler @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  periodo  PeriodoAlquiler? @relation(fields: [periodoId], references: [id], onDelete: SetNull)
+  equipo   Equipo           @relation(fields: [equipoId], references: [id])
+  usuario  Usuario          @relation(fields: [usuarioId], references: [id])
+
+  @@index([contratoId])
+  @@index([periodoId])
+  @@index([equipoId])
+  @@index([usuarioId])
+  @@map("lecturas_alquiler")
+}
+
+model InspeccionAlquiler {
+  id                String                       @id @default(uuid())
+  contratoId        String
+  equipoId          String
+  usuarioId         String
+  tipo              TipoInspeccionAlquiler
+  condicion         CondicionInspeccionAlquiler
+  contador          Int?
+  evidenciaFilename String?
+  notas             String?
+  createdAt         DateTime                     @default(now())
+
+  contrato ContratoAlquiler @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  equipo   Equipo           @relation(fields: [equipoId], references: [id])
+  usuario  Usuario          @relation(fields: [usuarioId], references: [id])
+
+  @@index([contratoId])
+  @@index([equipoId])
+  @@index([usuarioId])
+  @@index([tipo])
+  @@map("inspecciones_alquiler")
+}
+
+model CargoPeriodoAlquiler {
+  id          String            @id @default(uuid())
+  periodoId   String
+  tipo        TipoCargoAlquiler
+  ticketId    String?
+  descripcion String
+  monto       Decimal           @db.Decimal(10, 2)
+  createdAt   DateTime          @default(now())
+
+  periodo PeriodoAlquiler @relation(fields: [periodoId], references: [id], onDelete: Cascade)
+  ticket  Ticket?         @relation(fields: [ticketId], references: [id])
+
+  @@unique([periodoId, tipo, ticketId])
+  @@index([periodoId])
+  @@index([ticketId])
+  @@index([tipo])
+  @@map("cargos_periodo_alquiler")
 }
 
 model LecturaSNMP {
@@ -1306,6 +1548,7 @@ model Garantia {
   id                String         @id @default(uuid())
   equipoId          String
   ventaId           String?
+  contratoAlquilerId String?       @unique
   clienteIdOriginal String?
   clienteDocTipo    String?
   clienteDocNumero  String?
@@ -1314,19 +1557,32 @@ model Garantia {
   fechaFin          DateTime
   cobertura         String
   exclusiones       String?
+    fechaInstalacion  DateTime?
+    direccionInstalacion String?
+    ubigeoInstalacion String?
+    departamentoInstalacion String?
+    provinciaInstalacion String?
+    distritoInstalacion String?
+    latitudInstalacion Float?
+    longitudInstalacion Float?
+    contactoInstalacion String?
+    telefonoInstalacion String?
+  notasInstalacion String?
   contadorInicio    Int?
   contadorMaxCopias Int?
-  estado            EstadoGarantia @default(ACTIVA)
+  estado            EstadoGarantia @default(PENDIENTE_COMPLETAR)
   codigoQR          String         @unique
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
   equipo Equipo         @relation(fields: [equipoId], references: [id])
   venta  Venta?         @relation(fields: [ventaId], references: [id])
+  contratoAlquiler ContratoAlquiler? @relation(fields: [contratoAlquilerId], references: [id])
   casos  CasoGarantia[]
 
   @@index([equipoId])
   @@index([ventaId])
+  @@index([contratoAlquilerId])
   @@map("garantias")
 }
 
@@ -1354,6 +1610,7 @@ model Ticket {
   codigo         String          @unique
   clienteId      String
   equipoId       String?
+  clienteEquipoId String?
   tecnicoId      String?
   creadoPorId    String
   titulo         String
@@ -1381,15 +1638,18 @@ model Ticket {
 
   cliente       Cliente           @relation(fields: [clienteId], references: [id])
   equipo        Equipo?           @relation(fields: [equipoId], references: [id])
+  clienteEquipo EquipoClienteActivo? @relation(fields: [clienteEquipoId], references: [id])
   tecnico       Usuario?          @relation("TecnicoTickets", fields: [tecnicoId], references: [id])
   creadoPor     Usuario           @relation("CreadorTickets", fields: [creadoPorId], references: [id])
   detalles      DetalleTicket[]
   adjuntos      AdjuntoTicket[]
   historial     HistorialTicket[]
   casosGarantia CasoGarantia[]
+  cargosAlquiler CargoPeriodoAlquiler[]
 
   @@index([clienteId])
   @@index([equipoId])
+  @@index([clienteEquipoId])
   @@index([tecnicoId])
   @@index([creadoPorId])
   @@index([estado])

@@ -76,11 +76,12 @@ describe('EquiposService', () => {
         manejaInventario: true,
       });
       mockPrismaService.equipo.findUnique.mockResolvedValue(null);
+      mockPrismaService.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
       mockPrismaService.equipo.create.mockResolvedValue({
         id: 'eq-1',
         numeroSerie: 'SN-001',
         productoId: 'prod-1',
-        almacenId: null,
+        almacenId: 'alm-1',
         estadoComercial: 'DISPONIBLE',
       });
 
@@ -88,6 +89,7 @@ describe('EquiposService', () => {
         {
           numeroSerie: 'SN-001',
           productoId: 'prod-1',
+          almacenId: 'alm-1',
         },
         'user-1',
       );
@@ -136,6 +138,38 @@ describe('EquiposService', () => {
           'user-1',
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should require an internal almacen for own equipment intake', async () => {
+      mockPrismaService.producto.findFirst.mockResolvedValue({
+        id: 'prod-1',
+        tipo: 'EQUIPO',
+        tieneNumeroSerie: true,
+        manejaInventario: true,
+      });
+      mockPrismaService.equipo.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          { numeroSerie: 'SN-004', productoId: 'prod-1' },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should only allow active operative state on intake', async () => {
+      await expect(
+        service.create(
+          {
+            numeroSerie: 'SN-005',
+            productoId: 'prod-1',
+            almacenId: 'alm-1',
+            estado: 'EN_REPARACION' as any,
+          },
+          'user-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.producto.findFirst).not.toHaveBeenCalled();
     });
 
     it('should register a movement when an equipo enters inventory', async () => {
@@ -251,6 +285,105 @@ describe('EquiposService', () => {
     });
   });
 
+  describe('flujo propio', () => {
+    it('should dar baja without deleting and decrement stock', async () => {
+      mockPrismaService.equipo.findUnique.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-BAJA',
+        productoId: 'prod-1',
+        almacenId: 'alm-1',
+        estado: 'ACTIVO',
+        estadoComercial: 'DISPONIBLE',
+        producto: { manejaInventario: true },
+      });
+      mockPrismaService.equipo.update.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-BAJA',
+        productoId: 'prod-1',
+        almacenId: null,
+        estado: 'BAJA',
+        estadoComercial: 'BAJA',
+      });
+      mockPrismaService.almacenStock.findUnique.mockResolvedValue({
+        cantidad: 1,
+      });
+
+      const result = await service.darBaja('SN-BAJA', 'user-1');
+
+      expect(result.estadoComercial).toBe('BAJA');
+      expect(mockPrismaService.equipo.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            estado: 'BAJA',
+            estadoComercial: 'BAJA',
+            almacenId: null,
+          }),
+        }),
+      );
+      expect(mockPrismaService.movimientoStock.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tipo: 'AJUSTE_NEGATIVO',
+            productoId: 'prod-1',
+            almacenOrigenId: 'alm-1',
+            cantidadAnterior: 1,
+            cantidadPosterior: 0,
+          }),
+        }),
+      );
+    });
+
+    it('should reactivate a baja equipo into selected almacen and increment stock', async () => {
+      mockPrismaService.equipo.findUnique.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-BAJA',
+        productoId: 'prod-1',
+        almacenId: null,
+        estado: 'BAJA',
+        estadoComercial: 'BAJA',
+        producto: { manejaInventario: true },
+      });
+      mockPrismaService.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
+      mockPrismaService.equipo.update.mockResolvedValue({
+        id: 'eq-1',
+        numeroSerie: 'SN-BAJA',
+        productoId: 'prod-1',
+        almacenId: 'alm-1',
+        estado: 'ACTIVO',
+        estadoComercial: 'DISPONIBLE',
+      });
+      mockPrismaService.almacenStock.findUnique.mockResolvedValue(null);
+
+      const result = await service.reactivar(
+        'SN-BAJA',
+        { almacenId: 'alm-1' },
+        'user-1',
+      );
+
+      expect(result.estadoComercial).toBe('DISPONIBLE');
+      expect(mockPrismaService.equipo.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            estado: 'ACTIVO',
+            estadoComercial: 'DISPONIBLE',
+            almacenId: 'alm-1',
+          }),
+        }),
+      );
+      expect(mockPrismaService.movimientoStock.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tipo: 'AJUSTE_POSITIVO',
+            productoId: 'prod-1',
+            almacenDestinoId: 'alm-1',
+            cantidadAnterior: 0,
+            cantidadPosterior: 1,
+          }),
+        }),
+      );
+    });
+  });
+
   // ═══════════════════════════════════════════
   //  ASIGNACIÓN EQUIPO ↔ CLIENTE
   // ═══════════════════════════════════════════
@@ -340,6 +473,24 @@ describe('EquiposService', () => {
       await expect(
         service.asignarCliente('SN-001', { clienteId: 'missing' }, 'user-1'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should only assign available or reserved equipos', async () => {
+      mockPrismaService.equipo.findUnique.mockResolvedValue({
+        id: 'eq-1',
+        productoId: 'prod-1',
+        almacenId: 'alm-1',
+        estadoComercial: 'USO_INTERNO',
+        producto: {
+          id: 'prod-1',
+          manejaInventario: true,
+        },
+      });
+      mockPrismaService.cliente.findFirst.mockResolvedValue({ id: 'cli-1' });
+
+      await expect(
+        service.asignarCliente('SN-001', { clienteId: 'cli-1' }, 'user-1'),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

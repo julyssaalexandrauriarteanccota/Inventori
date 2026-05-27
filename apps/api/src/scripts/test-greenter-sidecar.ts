@@ -25,7 +25,9 @@ async function main() {
         },
       })
     : await prisma.comprobante.findFirst({
-        where: { tipo: { in: ['FACTURA', 'BOLETA', 'NOTA_CREDITO', 'NOTA_DEBITO'] } },
+        where: {
+          tipo: { in: ['FACTURA', 'BOLETA', 'NOTA_CREDITO', 'NOTA_DEBITO'] },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
           detallesFiscales: { orderBy: { item: 'asc' } },
@@ -57,7 +59,10 @@ async function main() {
     send,
   );
 
-  const baseUrl = config.get<string>('GREENTER_SERVICE_URL', 'http://localhost:8081');
+  const baseUrl = config.get<string>(
+    'GREENTER_SERVICE_URL',
+    'http://localhost:8081',
+  );
   const response = await fetch(`${baseUrl.replace(/\/$/, '')}/emitir`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -71,7 +76,12 @@ async function main() {
 
   console.log('=== GREENTER SIDECAR TEST ===');
   console.log('HTTP:', response.status);
-  console.log('Comprobante:', comprobante.numero, comprobante.tipo, comprobante.estado);
+  console.log(
+    'Comprobante:',
+    comprobante.numero,
+    comprobante.tipo,
+    comprobante.estado,
+  );
   console.log('Send SUNAT:', send);
   console.log('Success:', body.success);
   console.log('Accepted:', body.accepted);

@@ -4,8 +4,11 @@ import {
   IsString,
   IsEmail,
   IsBoolean,
+  IsNumber,
   Length,
   Matches,
+  Min,
+  Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -34,7 +37,46 @@ export class CreateProveedorDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  celular?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   direccion?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  distrito?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  provincia?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departamento?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  referencia?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitud?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitud?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

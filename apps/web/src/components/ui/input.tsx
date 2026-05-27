@@ -12,7 +12,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="group/input relative flex items-center w-full" data-slot="input-wrapper">
         {StartIcon && (
-          <div className="pointer-events-none absolute left-3 flex items-center justify-center text-muted-foreground/50 transition-colors group-focus-within/input:text-[var(--accent)]">
+          <div className="pointer-events-none absolute left-3 z-10 flex items-center justify-center text-muted-foreground/50 transition-colors group-focus-within/input:text-primary">
             <StartIcon className="size-4" />
           </div>
         )}
@@ -31,7 +31,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           {...props}
         />
         {EndIcon && (
-          <div className="pointer-events-none absolute right-3 flex items-center justify-center text-muted-foreground/50 transition-colors group-focus-within/input:text-[var(--accent)]">
+          <div className="pointer-events-none absolute right-3 z-10 flex items-center justify-center text-muted-foreground/50 transition-colors group-focus-within/input:text-primary">
             <EndIcon className="size-4" />
           </div>
         )}

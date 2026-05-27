@@ -164,6 +164,28 @@ describe('InventarioService', () => {
       expect(result.id).toBe('alm-1');
     });
 
+    it('should mark the first almacen as principal automatically', async () => {
+      mockPrismaService.almacen.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockPrismaService.almacen.updateMany.mockResolvedValue({ count: 0 });
+      mockPrismaService.almacen.create.mockResolvedValue({
+        id: 'alm-1',
+        nombre: 'Almacén Inicial',
+        esPrincipal: true,
+        activo: true,
+      });
+
+      await service.createAlmacen({ nombre: 'Almacén Inicial' });
+
+      expect(mockPrismaService.almacen.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          esPrincipal: true,
+          activo: true,
+        }),
+      });
+    });
+
     it('should throw ConflictException for duplicate name', async () => {
       mockPrismaService.almacen.findFirst.mockResolvedValue({ id: 'existing' });
 
@@ -193,6 +215,76 @@ describe('InventarioService', () => {
     });
   });
 
+  describe('ensurePrincipalAlmacen', () => {
+    it('should return the active principal when it exists', async () => {
+      mockPrismaService.almacen.findFirst.mockResolvedValueOnce({
+        id: 'alm-principal',
+        nombre: 'Principal',
+        esPrincipal: true,
+        activo: true,
+        deletedAt: null,
+      });
+
+      const result = await service.ensurePrincipalAlmacen();
+
+      expect(result.id).toBe('alm-principal');
+      expect(mockPrismaService.almacen.update).not.toHaveBeenCalled();
+      expect(mockPrismaService.almacen.create).not.toHaveBeenCalled();
+    });
+
+    it('should promote the first active almacen when no principal exists', async () => {
+      mockPrismaService.almacen.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'alm-1',
+          nombre: 'Almacén existente',
+          esPrincipal: false,
+          activo: true,
+          deletedAt: null,
+        });
+      mockPrismaService.almacen.updateMany.mockResolvedValue({ count: 0 });
+      mockPrismaService.almacen.update.mockResolvedValue({
+        id: 'alm-1',
+        nombre: 'Almacén existente',
+        esPrincipal: true,
+        activo: true,
+        deletedAt: null,
+      });
+
+      const result = await service.ensurePrincipalAlmacen();
+
+      expect(result.esPrincipal).toBe(true);
+      expect(mockPrismaService.almacen.update).toHaveBeenCalledWith({
+        where: { id: 'alm-1' },
+        data: { esPrincipal: true, activo: true },
+      });
+    });
+
+    it('should create a default principal when there are no active almacenes', async () => {
+      mockPrismaService.almacen.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null);
+      mockPrismaService.almacen.create.mockResolvedValue({
+        id: 'alm-default',
+        nombre: 'Almacén Principal',
+        esPrincipal: true,
+        activo: true,
+        deletedAt: null,
+      });
+
+      const result = await service.ensurePrincipalAlmacen();
+
+      expect(result.id).toBe('alm-default');
+      expect(mockPrismaService.almacen.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          nombre: 'Almacén Principal',
+          esPrincipal: true,
+          activo: true,
+        }),
+      });
+    });
+  });
+
   describe('removeAlmacen', () => {
     it('should soft delete an empty almacen', async () => {
       mockPrismaService.almacen.findFirst.mockResolvedValue({ id: 'alm-1' });
@@ -217,6 +309,18 @@ describe('InventarioService', () => {
       await expect(service.removeAlmacen('alm-1')).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('should not delete the principal almacen', async () => {
+      mockPrismaService.almacen.findFirst.mockResolvedValue({
+        id: 'alm-1',
+        esPrincipal: true,
+      });
+
+      await expect(service.removeAlmacen('alm-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockPrismaService.almacen.update).not.toHaveBeenCalled();
     });
   });
 

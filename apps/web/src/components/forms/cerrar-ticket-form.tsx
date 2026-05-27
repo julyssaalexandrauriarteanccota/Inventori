@@ -1,9 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Eraser, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cerrarTicketSchema, type CerrarTicketPayload } from '@erp/shared'
 
@@ -23,10 +23,6 @@ interface CerrarTicketFormProps {
 }
 
 export function CerrarTicketForm({ ticketId, onSuccess }: CerrarTicketFormProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const isDrawingRef = useRef(false)
-  const [hasSignature, setHasSignature] = useState(false)
-
   const mutation = useCerrarTicket(ticketId)
 
   const {
@@ -37,104 +33,9 @@ export function CerrarTicketForm({ ticketId, onSuccess }: CerrarTicketFormProps)
     resolver: zodResolver(cerrarTicketSchema),
   })
 
-  /* ── Canvas setup ────────────────────────────────── */
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.strokeStyle = 'hsl(var(--foreground))'
-    ctx.lineWidth = 2
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
-  }, [])
-
-  const getPos = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      const canvas = canvasRef.current
-      if (!canvas) return { x: 0, y: 0 }
-      const rect = canvas.getBoundingClientRect()
-      if ('touches' in e) {
-        const touch = e.touches[0]
-        return { x: touch.clientX - rect.left, y: touch.clientY - rect.top }
-      }
-      return { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    },
-    [],
-  )
-
-  const startDrawing = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault()
-      isDrawingRef.current = true
-      const ctx = canvasRef.current?.getContext('2d')
-      if (!ctx) return
-      const { x, y } = getPos(e)
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-    },
-    [getPos],
-  )
-
-  const draw = useCallback(
-    (e: React.MouseEvent | React.TouchEvent) => {
-      e.preventDefault()
-      if (!isDrawingRef.current) return
-      const ctx = canvasRef.current?.getContext('2d')
-      if (!ctx) return
-      const { x, y } = getPos(e)
-      ctx.lineTo(x, y)
-      ctx.stroke()
-      setHasSignature(true)
-    },
-    [getPos],
-  )
-
-  const stopDrawing = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault()
-    isDrawingRef.current = false
-  }, [])
-
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    setHasSignature(false)
-  }, [])
-
-  /* ── Geolocation helper ──────────────────────────── */
-  const getGeolocation = useCallback(
-    () =>
-      new Promise<{ lat?: number; lng?: number }>((resolve) => {
-        if (!navigator.geolocation) {
-          resolve({})
-          return
-        }
-        navigator.geolocation.getCurrentPosition(
-          (pos) =>
-            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-          () => resolve({}),
-          { timeout: 5000 },
-        )
-      }),
-    [],
-  )
-
   /* ── Submit ──────────────────────────────────────── */
   const onSubmit = useCallback(
     async (data: CerrarTicketPayload) => {
-      // Firma digital → base64
-      if (hasSignature && canvasRef.current) {
-        data.firmaCliente = canvasRef.current.toDataURL('image/png')
-      }
-
-      // Geolocation (optional)
-      const geo = await getGeolocation()
-      if (geo.lat !== undefined) data.firmaGeoLat = geo.lat
-      if (geo.lng !== undefined) data.firmaGeoLng = geo.lng
-
       mutation.mutate(data, {
         onSuccess: () => {
           toast.success('Ticket cerrado correctamente')
@@ -145,12 +46,10 @@ export function CerrarTicketForm({ ticketId, onSuccess }: CerrarTicketFormProps)
         },
       })
     },
-    [hasSignature, getGeolocation, mutation, onSuccess],
+    [mutation, onSuccess],
   )
 
   return (
-    // The signature canvas ref is read only when react-hook-form invokes submit.
-    // eslint-disable-next-line react-hooks/refs
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <FieldGroup>
         <Field data-invalid={errors.solucion ? true : undefined}>
@@ -179,36 +78,6 @@ export function CerrarTicketForm({ ticketId, onSuccess }: CerrarTicketFormProps)
             aria-invalid={!!errors.notas}
           />
           <FieldError>{errors.notas?.message}</FieldError>
-        </Field>
-
-        {/* ── Firma digital ── */}
-        <Field>
-          <FieldLabel>Firma del cliente</FieldLabel>
-          <div className="flex flex-col gap-2">
-            <canvas
-              ref={canvasRef}
-              width={400}
-              height={180}
-              className="w-full rounded-lg border border-border bg-background touch-none"
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={clearCanvas}
-              className="self-start"
-            >
-              <Eraser className="size-4" />
-              Limpiar firma
-            </Button>
-          </div>
         </Field>
 
         <div className="flex justify-end pt-2">

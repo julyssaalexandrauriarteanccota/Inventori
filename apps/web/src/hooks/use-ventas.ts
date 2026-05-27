@@ -19,6 +19,7 @@ function buildParams(filters: QueryVentaFilters) {
   if (filters.limit) params.set('limit', String(filters.limit))
   if (filters.search) params.set('search', filters.search)
   if (filters.estado) params.set('estado', filters.estado)
+  if (filters.estados?.length) params.set('estados', filters.estados.join(','))
   if (filters.clienteId) params.set('clienteId', filters.clienteId)
   return params.toString()
 }
@@ -58,6 +59,17 @@ export function useConfirmarVenta(id: string) {
       api.patch(`/ventas/${id}/confirmar`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [VENTAS_KEY] })
+    },
+  })
+}
+
+export function useReservarVenta() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/ventas/${id}/reservar`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [VENTAS_KEY] })
+      qc.invalidateQueries({ queryKey: ['equipos'] })
     },
   })
 }

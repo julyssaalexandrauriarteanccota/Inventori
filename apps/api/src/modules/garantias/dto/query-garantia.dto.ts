@@ -5,9 +5,10 @@ import {
   IsUUID,
   IsEnum,
   IsString,
+  IsBoolean,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { EstadoGarantia } from '@erp/shared';
 
 export class QueryGarantiaDto {
@@ -29,6 +30,14 @@ export class QueryGarantiaDto {
   @IsOptional()
   @IsEnum(EstadoGarantia)
   estado?: EstadoGarantia;
+
+  @ApiPropertyOptional({
+    description: 'Cuando es true, lista sólo garantías pendientes o activas',
+  })
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  soloOperativas?: boolean;
 
   @ApiPropertyOptional({
     description: 'Buscar por serie, cliente, QR o modelo',

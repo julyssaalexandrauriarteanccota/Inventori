@@ -21,7 +21,6 @@ import {
   Printer,
   Receipt,
   RefreshCcw,
-  ScrollText,
   ShoppingCart,
   Tag,
   Trash2,
@@ -56,7 +55,6 @@ import {
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { StatCard } from "@/components/layout/stat-card";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
@@ -1412,7 +1410,6 @@ export function HistorialVentasWorkspace({
               </ToggleGroupItem>
             </ToggleGroup>
 
-            <RealtimeStatus />
             <PageActionsMenu
               items={[
                 {

@@ -1576,9 +1576,7 @@ export class SunatProcessor extends WorkerHost {
     const declared =
       xml.match(/<\?xml[^>]*encoding=["']([^"']+)["']/i)?.[1]?.toUpperCase() ??
       '';
-    return declared === 'UTF-8' || declared === 'UTF8'
-      ? 'UTF-8'
-      : 'ISO-8859-1';
+    return declared === 'UTF-8' || declared === 'UTF8' ? 'UTF-8' : 'ISO-8859-1';
   }
 
   private emitComprobanteEvent(

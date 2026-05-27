@@ -29,6 +29,10 @@ import {
   Palette,
   Globe,
   Wand2,
+  UserCheck,
+  UserX,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -54,10 +58,17 @@ import {
   useCreateUsuario,
   useUpdateUsuario,
   useChangeUsuarioPassword,
+  useActivarUsuario,
+  useDesactivarUsuario,
   type UsuarioItem,
   type CreateUsuarioPayload,
   type UpdateUsuarioPayload,
 } from "@/hooks/use-configuracion";
+import {
+  RoleAccessCompact,
+  RoleAccessFull,
+  RoleModuleCountBadge,
+} from "@/components/settings/role-access-preview";
 import {
   useAlmacenes,
   useCreateAlmacen,
@@ -463,10 +474,11 @@ function AlmacenCreateForm({
     formState: { errors },
   } = useForm<AlmacenFormPayload>({
     resolver: zodResolver(almacenFormSchema),
-    defaultValues: { nombre: "", activo: true },
+    defaultValues: { nombre: "", activo: true, esPrincipal: false },
   });
 
   const activo = watch("activo");
+  const esPrincipal = watch("esPrincipal");
 
   const onSubmit = (data: AlmacenFormPayload) => {
     createMutation.mutate(data, {
@@ -481,7 +493,7 @@ function AlmacenCreateForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <FieldGroup className="gap-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field data-invalid={errors.nombre ? true : undefined}>
             <FieldLabel>Nombre *</FieldLabel>
             <Input
@@ -498,6 +510,17 @@ function AlmacenCreateForm({
             <Switch
               checked={activo ?? true}
               onCheckedChange={(v) => setValue("activo", v)}
+            />
+          </Field>
+
+          <Field orientation="horizontal" className="self-end pb-1">
+            <FieldLabel>Principal</FieldLabel>
+            <Switch
+              checked={esPrincipal ?? false}
+              onCheckedChange={(v) => {
+                setValue("esPrincipal", v);
+                if (v) setValue("activo", true);
+              }}
             />
           </Field>
         </div>
@@ -561,10 +584,12 @@ function AlmacenEditForm({
       nombre: almacen.nombre,
       descripcion: almacen.descripcion ?? undefined,
       activo: almacen.activo,
+      esPrincipal: almacen.esPrincipal,
     },
   });
 
   const activo = watch("activo");
+  const esPrincipal = watch("esPrincipal");
 
   const onSubmit = (data: AlmacenFormPayload) => {
     updateMutation.mutate(data, {
@@ -580,7 +605,7 @@ function AlmacenEditForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <FieldGroup className="gap-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <Field data-invalid={errors.nombre ? true : undefined}>
             <FieldLabel>Nombre *</FieldLabel>
             <Input
@@ -597,6 +622,19 @@ function AlmacenEditForm({
             <Switch
               checked={activo ?? true}
               onCheckedChange={(v) => setValue("activo", v)}
+              disabled={almacen.esPrincipal}
+            />
+          </Field>
+
+          <Field orientation="horizontal" className="self-end pb-1">
+            <FieldLabel>Principal</FieldLabel>
+            <Switch
+              checked={esPrincipal ?? false}
+              onCheckedChange={(v) => {
+                setValue("esPrincipal", v);
+                if (v) setValue("activo", true);
+              }}
+              disabled={almacen.esPrincipal}
             />
           </Field>
         </div>
@@ -3079,9 +3117,34 @@ function UsuariosContent({
     USERS_PAGE_SIZE,
   );
   const createMutation = useCreateUsuario();
+  const activarMutation = useActivarUsuario();
+  const desactivarMutation = useDesactivarUsuario();
+
+  const handleToggleActive = React.useCallback(
+    (usuario: UsuarioItem) => {
+      if (usuario.activo) {
+        desactivarMutation.mutate(usuario.id, {
+          onSuccess: () => toast.success(`${usuario.nombre} desactivado`),
+          onError: (err: Error) =>
+            toast.error(err.message || "Error al desactivar"),
+        });
+      } else {
+        activarMutation.mutate(usuario.id, {
+          onSuccess: () => toast.success(`${usuario.nombre} activado`),
+          onError: (err: Error) =>
+            toast.error(err.message || "Error al activar"),
+        });
+      }
+    },
+    [activarMutation, desactivarMutation],
+  );
 
   const usuarios = res?.data ?? [];
   const meta = res?.meta;
+
+  const activeViewingItem = viewingItem
+    ? usuarios.find((u) => u.id === viewingItem.id) || viewingItem
+    : null;
 
   const columns = React.useMemo<ColumnDef<UsuarioItem, unknown>[]>(
     () => [
@@ -3135,6 +3198,15 @@ function UsuariosContent({
             <Shield className="mr-1 size-3" />
             {ROL_LABELS[row.original.rol] ?? row.original.rol}
           </Badge>
+        ),
+      },
+      {
+        id: "modules",
+        header: "Módulos",
+        size: 90,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <RoleModuleCountBadge rol={row.original.rol} />
         ),
       },
       {
@@ -3240,6 +3312,23 @@ function UsuariosContent({
                       </DropdownMenuItem>
                       {!isSelf ? (
                         <DropdownMenuItem
+                          onClick={() => handleToggleActive(usuario)}
+                        >
+                          {usuario.activo ? (
+                            <>
+                              <PowerOff className="size-4" />
+                              Desactivar
+                            </>
+                          ) : (
+                            <>
+                              <Power className="size-4" />
+                              Activar
+                            </>
+                          )}
+                        </DropdownMenuItem>
+                      ) : null}
+                      {!isSelf ? (
+                        <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           onClick={() => onRequestDelete(usuario.id)}
                         >
@@ -3256,7 +3345,7 @@ function UsuariosContent({
         },
       },
     ],
-    [canManage, currentUser?.id, onRequestDelete],
+    [canManage, currentUser?.id, onRequestDelete, handleToggleActive],
   );
 
   return (
@@ -3377,6 +3466,7 @@ function UsuariosContent({
                     onEdit={() => setEditingItem(usuario)}
                     onChangePassword={() => setChangingPasswordItem(usuario)}
                     onDelete={() => onRequestDelete(usuario.id)}
+                    onToggleActive={() => handleToggleActive(usuario)}
                   />
                 ))}
               </div>
@@ -3499,10 +3589,12 @@ function UsuariosContent({
               Información completa de la cuenta seleccionada.
             </DialogDescription>
           </DialogHeader>
-          {viewingItem ? (
+          {activeViewingItem ? (
             <UsuarioDetailsContent
-              usuario={viewingItem}
-              isSelf={currentUser?.id === viewingItem.id}
+              usuario={activeViewingItem}
+              isSelf={currentUser?.id === activeViewingItem.id}
+              canManage={canManage}
+              onToggleActive={() => handleToggleActive(activeViewingItem)}
             />
           ) : null}
         </DialogContent>
@@ -3521,6 +3613,7 @@ function UsuarioCard({
   onEdit,
   onChangePassword,
   onDelete,
+  onToggleActive,
 }: {
   usuario: UsuarioItem;
   canManage: boolean;
@@ -3529,6 +3622,7 @@ function UsuarioCard({
   onEdit: () => void;
   onChangePassword: () => void;
   onDelete: () => void;
+  onToggleActive?: () => void;
 }) {
   const profileImage =
     usuario.avatarUrl ??
@@ -3581,6 +3675,7 @@ function UsuarioCard({
           <Shield className="size-3" />
           {ROL_LABELS[usuario.rol] ?? usuario.rol}
         </Badge>
+        <RoleModuleCountBadge rol={usuario.rol} />
         <Badge
           variant={usuario.activo ? "default" : "outline"}
           className="text-[10px]"
@@ -3641,16 +3736,44 @@ function UsuarioCard({
       </div>
 
       {canManage ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 justify-start gap-1.5 rounded-lg px-2 text-xs text-muted-foreground"
-          onClick={onChangePassword}
-        >
-          <KeyRound className="size-3.5" />
-          Cambiar contraseña
-        </Button>
+        <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 justify-start gap-1.5 rounded-lg px-2 text-xs text-muted-foreground hover:bg-muted"
+            onClick={onChangePassword}
+          >
+            <KeyRound className="size-3.5" />
+            Cambiar contr.
+          </Button>
+          {!isSelf && onToggleActive ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={cn(
+                "h-7 justify-end gap-1.5 rounded-lg px-2 text-xs font-medium hover:bg-muted",
+                usuario.activo
+                  ? "text-destructive/80 hover:text-destructive hover:bg-destructive/10"
+                  : "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+              )}
+              onClick={onToggleActive}
+            >
+              {usuario.activo ? (
+                <>
+                  <PowerOff className="size-3.5" />
+                  Desactivar
+                </>
+              ) : (
+                <>
+                  <Power className="size-3.5" />
+                  Activar
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );
@@ -3659,9 +3782,13 @@ function UsuarioCard({
 function UsuarioDetailsContent({
   usuario,
   isSelf,
+  canManage,
+  onToggleActive,
 }: {
   usuario: UsuarioItem;
   isSelf: boolean;
+  canManage: boolean;
+  onToggleActive: () => void;
 }) {
   const profileImage =
     usuario.avatarUrl ??
@@ -3721,68 +3848,103 @@ function UsuarioDetailsContent({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
-        <div
-          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 bg-cover bg-center text-sm font-semibold text-primary"
-          style={
-            profileImageUrl
-              ? { backgroundImage: `url(${profileImageUrl})` }
-              : undefined
-          }
-        >
-          {profileImageUrl ? null : usuarioInitials(usuario)}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-semibold text-foreground">
-              {usuarioFullName(usuario)}
-            </h3>
-            {isSelf ? (
-              <Badge variant="secondary" className="text-[10px]">
-                Tú
-              </Badge>
-            ) : null}
-            <Badge variant="outline" className="text-[10px]">
-              {ROL_LABELS[usuario.rol] ?? usuario.rol}
-            </Badge>
+      <div className="flex items-start justify-between gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <div
+            className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 bg-cover bg-center text-sm font-semibold text-primary"
+            style={
+              profileImageUrl
+                ? { backgroundImage: `url(${profileImageUrl})` }
+                : undefined
+            }
+          >
+            {profileImageUrl ? null : usuarioInitials(usuario)}
           </div>
-          <p className="mt-1 truncate text-xs text-muted-foreground">
-            {usuario.email}
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            Los datos de contacto y foto de perfil los completa el usuario desde
-            su perfil personal.
-          </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-sm font-semibold text-foreground">
+                {usuarioFullName(usuario)}
+              </h3>
+              {isSelf ? (
+                <Badge variant="secondary" className="text-[10px]">
+                  Tú
+                </Badge>
+              ) : null}
+              <Badge variant="outline" className="text-[10px]">
+                {ROL_LABELS[usuario.rol] ?? usuario.rol}
+              </Badge>
+            </div>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {usuario.email}
+            </p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Los datos de contacto y foto de perfil los completa el usuario desde
+              su perfil personal.
+            </p>
+          </div>
         </div>
-        <Badge variant={usuario.activo ? "default" : "outline"}>
-          {usuario.activo ? "Activo" : "Inactivo"}
-        </Badge>
+        <div className="flex flex-col items-end gap-2 shrink-0">
+          <Badge variant={usuario.activo ? "default" : "outline"} className="text-[10px]">
+            {usuario.activo ? "Activo" : "Inactivo"}
+          </Badge>
+          {canManage && !isSelf ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className={cn(
+                "h-7 rounded-lg text-xs gap-1.5",
+                usuario.activo
+                  ? "text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  : "text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+              )}
+              onClick={onToggleActive}
+            >
+              {usuario.activo ? (
+                <>
+                  <PowerOff className="size-3" />
+                  Desactivar
+                </>
+              ) : (
+                <>
+                  <Power className="size-3" />
+                  Activar
+                </>
+              )}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         {sections.map((section) => (
-          <section
-            key={section.title}
-            className="rounded-xl border border-border/50 bg-background/60 p-3"
-          >
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div key={section.title} className="rounded-xl border border-border/40 p-4">
+            <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               {section.title}
             </h4>
-            <dl className="mt-2 space-y-2">
-              {section.rows.map((row) => (
-                <div key={row.label} className="min-w-0">
-                  <dt className="text-[11px] text-muted-foreground">
+            <div className="space-y-2">
+              {section.rows.map((row, i) => (
+                <div
+                  key={row.label}
+                  className={cn(
+                    "flex items-center justify-between gap-2 rounded-lg px-3 py-1.5",
+                    i % 2 === 0 ? "bg-muted/30" : "",
+                  )}
+                >
+                  <span className="text-[11px] text-muted-foreground">
                     {row.label}
-                  </dt>
-                  <dd className="mt-0.5 wrap-break-word text-sm text-foreground">
+                  </span>
+                  <span className="text-right text-sm text-foreground">
                     {row.value || "—"}
-                  </dd>
+                  </span>
                 </div>
               ))}
-            </dl>
-          </section>
+            </div>
+          </div>
         ))}
       </div>
+
+      <RoleAccessFull rol={usuario.rol} />
     </div>
   );
 }
@@ -3873,6 +4035,7 @@ function UsuarioCreateForm({
   });
 
   const activo = watch("activo");
+  const rol = watch("rol");
 
   const handleGeneratePassword = () => {
     const password = generateSecurePassword();
@@ -3949,7 +4112,7 @@ function UsuarioCreateForm({
               <Input
                 type={showPw ? "text" : "password"}
                 {...register("password")}
-                placeholder="Contrasena segura"
+                placeholder="Contraseña segura"
                 aria-invalid={!!errors.password}
                 className="pr-9"
               />
@@ -3977,7 +4140,7 @@ function UsuarioCreateForm({
           <Field data-invalid={errors.rol ? true : undefined}>
             <FieldLabel>Rol *</FieldLabel>
             <Select
-              defaultValue={RolUsuario.TECNICO}
+              value={rol}
               onValueChange={(v) => setValue("rol", v as RolUsuario)}
             >
               <SelectTrigger aria-invalid={!!errors.rol}>
@@ -4002,6 +4165,13 @@ function UsuarioCreateForm({
             onCheckedChange={(v) => setValue("activo", v)}
           />
         </Field>
+
+        {rol ? (
+          <div className="space-y-1.5 border-t border-border/40 pt-3 mt-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preview de accesos</span>
+            <RoleAccessCompact rol={rol} />
+          </div>
+        ) : null}
 
         <div className="flex justify-end gap-2 pt-1">
           <Button
@@ -4030,8 +4200,6 @@ function UsuarioCreateForm({
   );
 }
 
-/* ── Edit User Form (inline) ── */
-
 function UsuarioEditForm({
   usuario,
   onDone,
@@ -4058,17 +4226,17 @@ function UsuarioEditForm({
     },
   });
 
-  const activo = watch("activo");
   const rol = watch("rol");
+  const activo = watch("activo");
 
   const onSubmit = (data: EditUsuarioForm) => {
     updateMutation.mutate(data as UpdateUsuarioPayload, {
       onSuccess: () => {
-        toast.success("Usuario actualizado");
+        toast.success("Usuario actualizado correctamente");
         onDone();
       },
       onError: (err: Error) =>
-        toast.error(err.message || "Error al actualizar"),
+        toast.error(err.message || "Error al actualizar usuario"),
     });
   };
 
@@ -4137,6 +4305,13 @@ function UsuarioEditForm({
             />
           </Field>
         </div>
+
+        {rol ? (
+          <div className="space-y-1.5 border-t border-border/40 pt-3 mt-1">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preview de accesos</span>
+            <RoleAccessCompact rol={rol} />
+          </div>
+        ) : null}
 
         <div className="flex justify-end gap-2 pt-1">
           <Button

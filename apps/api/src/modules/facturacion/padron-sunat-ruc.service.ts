@@ -135,7 +135,9 @@ export class PadronSunatRucService {
     await this.recoverInterruptedRunningJob();
 
     if (this.runningImport) {
-      throw new ConflictException('Ya hay una sincronización del padrón en curso');
+      throw new ConflictException(
+        'Ya hay una sincronización del padrón en curso',
+      );
     }
 
     const activeJob = await this.prisma.padronSunatRucImportJob.findFirst({
@@ -144,7 +146,9 @@ export class PadronSunatRucService {
     });
 
     if (activeJob) {
-      throw new ConflictException('Ya hay una sincronización del padrón en curso');
+      throw new ConflictException(
+        'Ya hay una sincronización del padrón en curso',
+      );
     }
 
     const sourceUrl = this.config.get<string>(
@@ -162,7 +166,11 @@ export class PadronSunatRucService {
       },
     });
 
-    this.emitStage('RUNNING', 'DOWNLOADING', 'Descargando ZIP del padrón reducido RUC desde SUNAT.');
+    this.emitStage(
+      'RUNNING',
+      'DOWNLOADING',
+      'Descargando ZIP del padrón reducido RUC desde SUNAT.',
+    );
 
     this.abortController = new AbortController();
     this.runningImport = this.importFromSunatUrl(
@@ -202,7 +210,9 @@ export class PadronSunatRucService {
     this.abortController?.abort();
     this.emitStage(
       'CANCEL_REQUESTED',
-      this.asStage(activeJob.stage) as PadronSunatRucImportStagePayload['stage'],
+      this.asStage(
+        activeJob.stage,
+      ) as PadronSunatRucImportStagePayload['stage'],
       'Cancelación solicitada. Se conservará el padrón publicado.',
     );
 
@@ -260,7 +270,11 @@ export class PadronSunatRucService {
       stage: 'DECOMPRESSING',
       message: 'Descomprimiendo archivo del padrón SUNAT.',
     });
-    this.emitStage('RUNNING', 'DECOMPRESSING', 'Descomprimiendo archivo del padrón SUNAT.');
+    this.emitStage(
+      'RUNNING',
+      'DECOMPRESSING',
+      'Descomprimiendo archivo del padrón SUNAT.',
+    );
     await this.ensureNotCancelled(jobId);
 
     const zip = new AdmZip(zipBuffer);
@@ -288,7 +302,11 @@ export class PadronSunatRucService {
       totalLines: null,
       importedAt,
     });
-    this.emitStage('RUNNING', 'CLEANING', 'Preparando staging para validar el padrón actualizado.');
+    this.emitStage(
+      'RUNNING',
+      'CLEANING',
+      'Preparando staging para validar el padrón actualizado.',
+    );
 
     await this.updateJob(jobId, {
       stage: 'IMPORTING',
@@ -299,7 +317,11 @@ export class PadronSunatRucService {
       totalLines: null,
       importedAt,
     });
-    this.emitStage('RUNNING', 'IMPORTING', 'Insertando contribuyentes en staging.');
+    this.emitStage(
+      'RUNNING',
+      'IMPORTING',
+      'Insertando contribuyentes en staging.',
+    );
 
     const flushLine = async (line: string) => {
       await this.ensureNotCancelled(jobId);
@@ -377,9 +399,14 @@ export class PadronSunatRucService {
   private async publishStaging(jobId: string) {
     await this.updateJob(jobId, {
       stage: 'PUBLISHING',
-      message: 'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.',
+      message:
+        'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.',
     });
-    this.emitStage('RUNNING', 'PUBLISHING', 'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.');
+    this.emitStage(
+      'RUNNING',
+      'PUBLISHING',
+      'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.',
+    );
 
     await this.prisma.$transaction(async (tx) => {
       await tx.padronSunatRuc.deleteMany({});
@@ -450,7 +477,11 @@ export class PadronSunatRucService {
     const decoder = new StringDecoder('latin1');
     let pendingLine = '';
 
-    for (let offset = 0; offset < buffer.length; offset += DEFAULT_TEXT_CHUNK_SIZE) {
+    for (
+      let offset = 0;
+      offset < buffer.length;
+      offset += DEFAULT_TEXT_CHUNK_SIZE
+    ) {
       const chunk = buffer.subarray(
         offset,
         Math.min(offset + DEFAULT_TEXT_CHUNK_SIZE, buffer.length),
@@ -571,7 +602,10 @@ export class PadronSunatRucService {
     await this.prisma.padronSunatRucStaging.deleteMany({ where: { jobId } });
 
     if (!isCancelled) {
-      this.logger.error(message, error instanceof Error ? error.stack : undefined);
+      this.logger.error(
+        message,
+        error instanceof Error ? error.stack : undefined,
+      );
     }
   }
 
@@ -598,10 +632,7 @@ export class PadronSunatRucService {
     });
   }
 
-  private updateJob(
-    jobId: string,
-    data: Partial<Omit<ImportJob, 'id'>>,
-  ) {
+  private updateJob(jobId: string, data: Partial<Omit<ImportJob, 'id'>>) {
     return this.prisma.padronSunatRucImportJob.update({
       where: { id: jobId },
       data,

@@ -66,6 +66,7 @@ import {
 } from "@/hooks/use-productos";
 import { useAlmacenes } from "@/hooks/use-inventario";
 import {
+  SearchableMultiSelect,
   SearchableSelect,
   type SearchableSelectOption,
 } from "@/components/searchable-select";
@@ -376,6 +377,9 @@ export function ProductoForm({
       ...defaultValues,
       // Si el formulario está bloqueado a un tipo específico, forzar siempre.
       ...(lockedTipo ? { tipo: lockedTipo } : {}),
+      modeloIds:
+        defaultValues?.modeloIds ??
+        (defaultValues?.modeloId ? [defaultValues.modeloId] : []),
       imagenes: normalizeInitialImages(defaultValues),
     },
   });
@@ -386,6 +390,11 @@ export function ProductoForm({
   const categoriaId = useWatch({ control, name: "categoriaId" });
   const marcaId = useWatch({ control, name: "marcaId" });
   const modeloId = useWatch({ control, name: "modeloId" });
+  const watchedModeloIds = useWatch({ control, name: "modeloIds" });
+  const modeloIds = useMemo(
+    () => [...new Set(watchedModeloIds ?? [])],
+    [watchedModeloIds],
+  );
   const watchedImagenes = useWatch({ control, name: "imagenes" });
   const watchedAtributos = useWatch({ control, name: "atributos" });
   const imagenes = useMemo(() => watchedImagenes ?? [], [watchedImagenes]);
@@ -403,13 +412,17 @@ export function ProductoForm({
   const activo = watch("activo");
   const isServicio = tipo === TipoProducto.SERVICIO;
   const isEquipo = tipo === TipoProducto.EQUIPO;
+  const modeloCatalogoTipo = isEquipo ? tipo : TipoProducto.EQUIPO;
   const attributeUi = ATTRIBUTE_UI_BY_TIPO[tipo];
   const descripcion = useWatch({ control, name: "descripcion" }) ?? "";
   const canViewServicioCostoReferencial = !isServicio || canViewInternalCosts;
 
   const { data: categoriasRes } = useCategorias(tipo);
   const { data: marcasRes } = useMarcas(tipo);
-  const { data: modelosRes } = useModelosCatalogo({ tipo, activo: true });
+  const { data: modelosRes } = useModelosCatalogo({
+    tipo: modeloCatalogoTipo,
+    activo: true,
+  });
   const { data: unidadesMedidaRes } = useUnidadesMedida();
   const { data: almacenesRes } = useAlmacenes();
   const {
@@ -455,16 +468,23 @@ export function ProductoForm({
       modelos
         .filter(
           (modeloItem) =>
-            !marcaId || !modeloItem.marca || modeloItem.marca.id === marcaId,
+            !isEquipo ||
+            !marcaId ||
+            !modeloItem.marca ||
+            modeloItem.marca.id === marcaId,
         )
         .map((modeloItem) => ({
           value: modeloItem.id,
           label:
-            !marcaId && modeloItem.marca
+            (!marcaId || !isEquipo) && modeloItem.marca
               ? `${modeloItem.marca.nombre} · ${modeloItem.nombre}`
               : modeloItem.nombre,
         })),
-    [marcaId, modelos],
+    [isEquipo, marcaId, modelos],
+  );
+  const selectedModeloOptions = useMemo(
+    () => modeloOptions.filter((option) => modeloIds.includes(option.value)),
+    [modeloIds, modeloOptions],
   );
 
   useEffect(() => {
@@ -494,7 +514,7 @@ export function ProductoForm({
   const isReallyDirty = useMemo(() => {
     if (nombreWatch && nombreWatch.trim() !== "") return true;
     if (categoriaIdWatch && categoriaIdWatch !== "") return true;
-    if (marcaId || modeloId) return true;
+    if (marcaId || modeloId || modeloIds.length > 0) return true;
     if ((precioVentaWatch ?? 0) > 0 || (precioCompraWatch ?? 0) > 0 || (precioMinimoWatch ?? 0) > 0) return true;
     if ((stockMinimoWatch ?? 0) > 0 || (tiempoEstimadoMinWatch ?? 0) > 0) return true;
     if (mesesGarantiaWatch !== 12 && mesesGarantiaWatch !== undefined) return true;
@@ -510,6 +530,7 @@ export function ProductoForm({
     categoriaIdWatch,
     marcaId,
     modeloId,
+    modeloIds,
     precioVentaWatch,
     precioCompraWatch,
     precioMinimoWatch,
@@ -675,26 +696,91 @@ export function ProductoForm({
   }, [marcaId, marcas, marcasRes, setValue]);
 
   useEffect(() => {
-    if (!modelosRes || !modeloId) {
+    if (!modelosRes) {
       return;
     }
 
-    const modelExistsForContext = modeloOptions.some(
-      (option) => option.value === modeloId,
-    );
-    if (!modelExistsForContext) {
-      setValue("modeloId", null, {
-        shouldDirty: true,
-        shouldTouch: false,
-        shouldValidate: false,
-      });
-      setValue("modelo", "", {
+    const optionIds = new Set(modeloOptions.map((option) => option.value));
+    const nextModeloIds = modeloIds.filter((id) => optionIds.has(id));
+
+    if (nextModeloIds.length !== modeloIds.length) {
+      setValue("modeloIds", nextModeloIds, {
         shouldDirty: true,
         shouldTouch: false,
         shouldValidate: false,
       });
     }
-  }, [modeloId, modeloOptions, modelosRes, setValue]);
+
+    if (!modeloId) {
+      return;
+    }
+
+    const modelExistsForContext = optionIds.has(modeloId);
+    if (!modelExistsForContext) {
+      const nextModeloId = nextModeloIds[0] ?? null;
+      const selectedModelo =
+        modelos.find((modeloItem) => modeloItem.id === nextModeloId) ?? null;
+      setValue("modeloId", nextModeloId, {
+        shouldDirty: true,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+      setValue("modelo", selectedModelo?.nombre ?? "", {
+        shouldDirty: true,
+        shouldTouch: false,
+        shouldValidate: false,
+      });
+    }
+  }, [modeloId, modeloIds, modeloOptions, modelos, modelosRes, setValue]);
+
+  useEffect(() => {
+    if (isEquipo || modeloIds.length > 0 || !modeloId) {
+      return;
+    }
+
+    setValue("modeloIds", [modeloId], {
+      shouldDirty: false,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [isEquipo, modeloId, modeloIds.length, setValue]);
+
+  useEffect(() => {
+    if (isEquipo || modeloId === (modeloIds[0] ?? null)) {
+      return;
+    }
+
+    const nextModeloId = modeloIds[0] ?? null;
+    const selectedModelo =
+      modelos.find((modeloItem) => modeloItem.id === nextModeloId) ?? null;
+
+    setValue("modeloId", nextModeloId, {
+      shouldDirty: true,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+    setValue("modelo", selectedModelo?.nombre ?? "", {
+      shouldDirty: true,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [isEquipo, modeloId, modeloIds, modelos, setValue]);
+
+  useEffect(() => {
+    if (!isEquipo || !modeloId) {
+      return;
+    }
+
+    if (modeloIds.length === 1 && modeloIds[0] === modeloId) {
+      return;
+    }
+
+    setValue("modeloIds", [modeloId], {
+      shouldDirty: true,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }, [isEquipo, modeloId, modeloIds, setValue]);
 
   useEffect(() => {
     const suggestedSku = suggestedSkuRes?.data.sku;
@@ -875,13 +961,40 @@ export function ProductoForm({
       shouldValidate: false,
     });
 
-    if (!marcaId && selectedModelo?.marca?.id) {
+    if (isEquipo && !marcaId && selectedModelo?.marca?.id) {
       setValue("marcaId", selectedModelo.marca.id, {
         shouldDirty: true,
         shouldTouch: false,
         shouldValidate: false,
       });
     }
+  }
+
+  function handleModelosChange(nextModeloIds: string[]) {
+    const uniqueModeloIds = [...new Set(nextModeloIds)];
+    const selectedModelo =
+      modelos.find((modeloItem) => modeloItem.id === uniqueModeloIds[0]) ??
+      null;
+
+    setValue("modeloIds", uniqueModeloIds, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: false,
+    });
+    setValue("modeloId", uniqueModeloIds[0] ?? null, {
+      shouldDirty: true,
+      shouldTouch: true,
+      shouldValidate: false,
+    });
+    setValue("modelo", selectedModelo?.nombre ?? "", {
+      shouldDirty: true,
+      shouldTouch: false,
+      shouldValidate: false,
+    });
+  }
+
+  function handleRemoveModelo(nextModeloId: string) {
+    handleModelosChange(modeloIds.filter((id) => id !== nextModeloId));
   }
 
   async function handleGenerateSku() {
@@ -945,8 +1058,8 @@ export function ProductoForm({
     try {
       const response = await createModeloMutation.mutateAsync({
         nombre,
-        tipo,
-        marcaId: marcaId ?? null,
+        tipo: modeloCatalogoTipo,
+        marcaId: isEquipo ? (marcaId ?? null) : null,
         activo: true,
       });
       const createdModelo = response.data;
@@ -962,7 +1075,7 @@ export function ProductoForm({
         shouldValidate: false,
       });
 
-      if (!marcaId && createdModelo.marca?.id) {
+      if (isEquipo && !marcaId && createdModelo.marca?.id) {
         setValue("marcaId", createdModelo.marca.id, {
           shouldDirty: true,
           shouldTouch: false,
@@ -971,6 +1084,7 @@ export function ProductoForm({
       }
 
       toast.success("Modelo creado y seleccionado");
+      return createdModelo.id;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "No se pudo crear el modelo",
@@ -1179,7 +1293,8 @@ export function ProductoForm({
       tipo,
       sku: data.sku?.trim() || undefined,
       marcaId: data.marcaId ?? null,
-      modeloId: data.modeloId ?? null,
+      modeloIds: isEquipoSubmit ? (data.modeloId ? [data.modeloId] : []) : modeloIds,
+      modeloId: isEquipoSubmit ? (data.modeloId ?? null) : (modeloIds[0] ?? null),
       modelo: data.modelo?.trim() ?? "",
       codigoBarras: data.codigoBarras || undefined,
       codigoQr: isEquipoSubmit ? undefined : data.codigoQr || undefined,
@@ -1254,7 +1369,7 @@ export function ProductoForm({
       className="w-full"
     >
       {lockedTipo ? null : (
-        <div className="mb-6 flex w-full gap-1 p-1 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/40">
+        <div className="mb-6 flex w-full gap-1 p-1 bg-muted/40 dark:bg-muted/20 rounded-xl border border-border/40 overflow-x-auto scrollbar-none">
           {Object.values(TipoProducto)
             .filter(
               (tipoOption) =>
@@ -1269,7 +1384,7 @@ export function ProductoForm({
                   key={tipoOption}
                   type="button"
                   className={cn(
-                    "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all duration-300 relative select-none",
+                    "flex flex-1 sm:flex-initial shrink-0 items-center justify-center gap-2 rounded-lg py-2 px-3 text-xs font-semibold transition-all duration-300 relative select-none",
                     isActive
                       ? "bg-background text-primary shadow-xs border border-border/80 font-bold scale-[1.01]"
                       : "text-muted-foreground hover:bg-muted/50 hover:text-foreground active:scale-[0.99]"
@@ -1284,10 +1399,10 @@ export function ProductoForm({
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-xs">
+      <div className="sm:overflow-hidden sm:rounded-xl sm:border sm:border-border/80 sm:bg-card sm:shadow-xs">
         <div className="grid grid-cols-1 lg:grid-cols-12">
           <div className="lg:col-span-6">
-          <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-4 p-3 sm:p-5">
             <div className="flex items-center gap-2 border-b border-border/40 pb-3">
               <Package className="size-4 text-primary" />
               <h3 className="text-sm font-semibold text-foreground">Clasificación y Datos Base</h3>
@@ -1317,8 +1432,29 @@ export function ProductoForm({
               </Field>
               {!isServicio ? (
                 <Field data-invalid={errors.modeloId || errors.modelo ? true : undefined}>
-                  <FieldLabel>{isEquipo ? "Modelo" : "Modelo / compatibilidad"}</FieldLabel>
-                  <SearchableSelect value={modeloId ?? undefined} onChange={handleModeloChange} options={modeloOptions} placeholder={isEquipo ? "Seleccionar modelo" : "Seleccionar modelo base"} searchPlaceholder={isEquipo ? "Buscar o crear modelo..." : "Buscar o crear compatibilidad base..."} emptyLabel="No hay modelos todavía para este tipo." ariaLabel={isEquipo ? "Seleccionar modelo" : "Seleccionar modelo o compatibilidad"} disabled={createModeloMutation.isPending} invalid={!!errors.modeloId || !!errors.modelo} clearable clearLabel="Quitar modelo" onCreateOption={handleCreateModelo} createLabel="Crear modelo" />
+                  <FieldLabel>{isEquipo ? "Modelo" : "Modelos compatibles"}</FieldLabel>
+                  {isEquipo ? (
+                    <SearchableSelect value={modeloId ?? undefined} onChange={handleModeloChange} options={modeloOptions} placeholder="Seleccionar modelo" searchPlaceholder="Buscar o crear modelo..." emptyLabel="No hay modelos todavía para este tipo." ariaLabel="Seleccionar modelo" disabled={createModeloMutation.isPending} invalid={!!errors.modeloId || !!errors.modelo} clearable clearLabel="Quitar modelo" onCreateOption={async (nombre) => { await handleCreateModelo(nombre); }} createLabel="Crear modelo" />
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      <SearchableMultiSelect values={modeloIds} onChange={handleModelosChange} options={modeloOptions} placeholder="Seleccionar modelos de equipo" searchPlaceholder="Buscar modelos de equipo..." emptyLabel="No hay modelos de equipo todavía." ariaLabel="Seleccionar modelos de equipo compatibles" disabled={createModeloMutation.isPending} invalid={!!errors.modeloId || !!errors.modelo} onCreateOption={handleCreateModelo} createLabel="Crear modelo" />
+                      {selectedModeloOptions.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 max-h-[120px] overflow-y-auto rounded-xl border border-border bg-muted/20 p-2 scrollbar-thin">
+                          {selectedModeloOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-medium text-foreground shadow-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:border-destructive/40 hover:text-destructive hover:scale-[1.02] active:scale-95"
+                              onClick={() => handleRemoveModelo(option.value)}
+                            >
+                              <span className="truncate">{option.label}</span>
+                              <X className="size-3 shrink-0" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
                   <FieldError>{errors.modeloId?.message || errors.modelo?.message}</FieldError>
                 </Field>
               ) : null}
@@ -1335,7 +1471,7 @@ export function ProductoForm({
             </div>
           </div>
           <div className="border-t border-border/40" />
-          <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-4 p-3 sm:p-5">
             <div className="flex items-center gap-2 border-b border-border/40 pb-3"><DollarSign className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Precios y Finanzas</h3></div>
             <div className="space-y-4">
               {canViewServicioCostoReferencial ? (<Field data-invalid={errors.precioCompra ? true : undefined}><FieldLabel>{isServicio ? "Costo referencial (S/) *" : "Precio compra (S/) *"}</FieldLabel><Input type="number" step="0.01" min="0" startIcon={DollarSign} {...register("precioCompra", { valueAsNumber: true })} aria-invalid={!!errors.precioCompra} /><FieldError>{errors.precioCompra?.message}</FieldError></Field>) : null}
@@ -1344,7 +1480,7 @@ export function ProductoForm({
             </div>
           </div>
           <div className="border-t border-border/40" />
-          <div className="space-y-4 p-4 sm:p-5">
+          <div className="space-y-4 p-3 sm:p-5">
             <div className="flex items-center gap-2 border-b border-border/40 pb-3"><Boxes className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Inventario y Códigos</h3></div>
             <div className="space-y-4">
               {!isServicio ? (<Field data-invalid={errors.sku ? true : undefined}><FieldLabel>SKU</FieldLabel><div className="relative"><Input startIcon={Hash} {...register("sku", { onChange: () => setSkuManuallyEdited(true) })} className="pr-10 text-left font-mono text-xs sm:text-sm" placeholder="Auto: SKU-0001" aria-invalid={!!errors.sku} /><Button type="button" variant="ghost" size="icon" className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-lg text-muted-foreground hover:text-foreground" title="Autogenerar SKU" disabled={isFetchingSuggestedSku} onClick={() => void handleGenerateSku()}>{isFetchingSuggestedSku ? <Loader2 className="size-4 animate-spin" /> : <RefreshCcw className="size-4" />}</Button></div><FieldError>{errors.sku?.message}</FieldError></Field>) : null}
@@ -1357,15 +1493,15 @@ export function ProductoForm({
           </div>
         </div>
           <div className="border-t border-border/40 lg:col-span-6 lg:border-l lg:border-t-0">
-          {!isServicio && (<div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Imágenes del producto</h3></div><div className="space-y-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-muted/10">{selectedImageUrl ? (<><img src={imagePreviewUrls[selectedImageUrl] ?? getApiAssetUrl(selectedImageUrl)} alt={selectedImage?.nombre ?? "Vista previa"} className="size-full object-contain mix-blend-multiply" referrerPolicy="no-referrer" /><div className="absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-black/50 to-transparent p-2"><span className="rounded-md bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">{selectedImage?.esPrincipal ? "Principal" : "Secundaria"}</span><Button type="button" variant="destructive" size="icon" className="size-6 rounded-lg bg-red-600 text-white hover:bg-red-700" onClick={() => selectedImageIndex >= 0 && removeImageAt(selectedImageIndex)}><Trash2 className="size-3" /></Button></div>{!selectedImage?.esPrincipal && (<div className="absolute bottom-2 left-2"><Button type="button" variant="secondary" size="sm" className="h-6 rounded-lg bg-white/95 text-[9px] font-bold text-foreground hover:bg-white" onClick={() => { setTimeout(() => markSelectedImageAsPrincipal(), 0); }}>Principal</Button></div>)}</>) : (<div className="flex flex-col items-center justify-center p-4 text-center text-muted-foreground/60"><ImagePlus className="mb-2 size-8 stroke-[1.5]" /><p className="text-xs font-semibold text-foreground">Sin imágenes</p><p className="text-[10px] text-muted-foreground">Sube archivos a la galería</p></div>)}</div><Field><label className={cn("flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-all duration-300 hover:border-primary/50", isDraggingImages ? "scale-[1.01] border-primary bg-primary/5" : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/30")} onDragOver={(event) => { event.preventDefault(); setIsDraggingImages(true); }} onDragLeave={(event) => { event.preventDefault(); setIsDraggingImages(false); }} onDrop={(event) => void handleImageDrop(event)}><div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">{isUploadingImages ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}</div><div className="space-y-0.5"><p className="text-xs font-semibold text-foreground">{isUploadingImages ? "Subiendo..." : "Arrastra o haz clic"}</p><p className="text-[9px] text-muted-foreground">Formatos: JPG, PNG, WEBP.</p></div><Input type="file" accept={getUploadAcceptAttr("image")} multiple className="hidden" disabled={isUploadingImages || isLoading} onChange={(event) => void handleImageFiles(event.target.files)} /></label></Field></div>{imagenes.length > 0 && (<div className="space-y-1.5"><span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Galería ({imagenes.length})</span><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">{imagenes.map((image, index) => (<div key={image.url + "-" + index} onClick={() => setManualSelectedImageUrl(image.url)} className={cn("relative size-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border bg-card transition-all", image.url === selectedImageUrl ? "scale-95 border-primary ring-2 ring-primary/20" : "border-border/70 hover:border-primary/40")}><img src={imagePreviewUrls[image.url] ?? getApiAssetUrl(image.url)} alt={image.nombre ?? "Imagen"} className="size-full object-cover mix-blend-multiply" referrerPolicy="no-referrer" />{image.esPrincipal && (<div className="absolute right-1 top-1 size-2 rounded-full bg-primary" />)}</div>))}</div></div>)}<div className="border-t border-border/40 pt-2">{!showUrlInput ? (<button type="button" className="text-[10px] font-bold text-primary hover:underline" onClick={() => setShowUrlInput(true)}>+ Agregar imagen por URL</button>) : (<div className="space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-foreground">Agregar imagen por URL</span><button type="button" className="text-[10px] text-muted-foreground hover:text-foreground" onClick={() => { setShowUrlInput(false); setManualImageUrl(""); }}>Ocultar</button></div><div className="flex gap-2"><Input value={manualImageUrl} onChange={(event) => setManualImageUrl(event.target.value)} placeholder="https://ejemplo.com/imagen.jpg" className="h-8 flex-1 text-xs" /><Button type="button" variant="secondary" size="sm" className="h-8 shrink-0 px-3 text-xs font-semibold" onClick={() => void addManualImage()}>Añadir</Button></div></div>)}</div></div></div>)}
+          {!isServicio && (<div className="space-y-4 p-3 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Imágenes del producto</h3></div><div className="space-y-4"><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-muted/10">{selectedImageUrl ? (<><img src={imagePreviewUrls[selectedImageUrl] ?? getApiAssetUrl(selectedImageUrl)} alt={selectedImage?.nombre ?? "Vista previa"} className="size-full object-contain mix-blend-multiply" referrerPolicy="no-referrer" /><div className="absolute inset-x-0 top-0 flex justify-between bg-gradient-to-b from-black/50 to-transparent p-2"><span className="rounded-md bg-black/40 px-2 py-0.5 text-[10px] font-bold text-white backdrop-blur-xs">{selectedImage?.esPrincipal ? "Principal" : "Secundaria"}</span><Button type="button" variant="destructive" size="icon" className="size-6 rounded-lg bg-red-600 text-white hover:bg-red-700" onClick={() => selectedImageIndex >= 0 && removeImageAt(selectedImageIndex)}><Trash2 className="size-3" /></Button></div>{!selectedImage?.esPrincipal && (<div className="absolute bottom-2 left-2"><Button type="button" variant="secondary" size="sm" className="h-6 rounded-lg bg-white/95 text-[9px] font-bold text-foreground hover:bg-white" onClick={() => { setTimeout(() => markSelectedImageAsPrincipal(), 0); }}>Principal</Button></div>)}</>) : (<div className="flex flex-col items-center justify-center p-4 text-center text-muted-foreground/60"><ImagePlus className="mb-2 size-8 stroke-[1.5]" /><p className="text-xs font-semibold text-foreground">Sin imágenes</p><p className="text-[10px] text-muted-foreground">Sube archivos a la galería</p></div>)}</div><Field><label className={cn("flex aspect-[4/3] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-4 text-center transition-all duration-300 hover:border-primary/50", isDraggingImages ? "scale-[1.01] border-primary bg-primary/5" : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/30")} onDragOver={(event) => { event.preventDefault(); setIsDraggingImages(true); }} onDragLeave={(event) => { event.preventDefault(); setIsDraggingImages(false); }} onDrop={(event) => void handleImageDrop(event)}><div className="flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">{isUploadingImages ? <Loader2 className="size-4 animate-spin" /> : <Upload className="size-4" />}</div><div className="space-y-0.5"><p className="text-xs font-semibold text-foreground">{isUploadingImages ? "Subiendo..." : "Arrastra o haz clic"}</p><p className="text-[9px] text-muted-foreground">Formatos: JPG, PNG, WEBP.</p></div><Input type="file" accept={getUploadAcceptAttr("image")} multiple className="hidden" disabled={isUploadingImages || isLoading} onChange={(event) => void handleImageFiles(event.target.files)} /></label></Field></div>{imagenes.length > 0 && (<div className="space-y-1.5"><span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Galería ({imagenes.length})</span><div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">{imagenes.map((image, index) => (<div key={image.url + "-" + index} onClick={() => setManualSelectedImageUrl(image.url)} className={cn("relative size-14 shrink-0 cursor-pointer overflow-hidden rounded-lg border bg-card transition-all", image.url === selectedImageUrl ? "scale-95 border-primary ring-2 ring-primary/20" : "border-border/70 hover:border-primary/40")}><img src={imagePreviewUrls[image.url] ?? getApiAssetUrl(image.url)} alt={image.nombre ?? "Imagen"} className="size-full object-cover mix-blend-multiply" referrerPolicy="no-referrer" />{image.esPrincipal && (<div className="absolute right-1 top-1 size-2 rounded-full bg-primary" />)}</div>))}</div></div>)}<div className="border-t border-border/40 pt-2">{!showUrlInput ? (<button type="button" className="text-[10px] font-bold text-primary hover:underline" onClick={() => setShowUrlInput(true)}>+ Agregar imagen por URL</button>) : (<div className="space-y-2"><div className="flex items-center justify-between"><span className="text-[10px] font-bold text-foreground">Agregar imagen por URL</span><button type="button" className="text-[10px] text-muted-foreground hover:text-foreground" onClick={() => { setShowUrlInput(false); setManualImageUrl(""); }}>Ocultar</button></div><div className="flex gap-2"><Input value={manualImageUrl} onChange={(event) => setManualImageUrl(event.target.value)} placeholder="https://ejemplo.com/imagen.jpg" className="h-8 flex-1 text-xs" /><Button type="button" variant="secondary" size="sm" className="h-8 shrink-0 px-3 text-xs font-semibold" onClick={() => void addManualImage()}>Añadir</Button></div></div>)}</div></div></div>)}
           {!isServicio && <div className="border-t border-border/40" />}
-          <div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Descripción comercial</h3></div><Field data-invalid={errors.descripcion ? true : undefined}>{(() => { const { ref: registeredRef, onBlur, name } = register("descripcion"); return (<RichDescriptionEditor ref={registeredRef} name={name} value={descripcion} onBlur={onBlur} onValueChange={(nextValue) => setValue("descripcion", nextValue, { shouldDirty: true, shouldTouch: true, shouldValidate: false })} aria-invalid={!!errors.descripcion} />); })()}<FieldError>{errors.descripcion?.message}</FieldError></Field></div>
-          {!isServicio && (<><div className="border-t border-border/40" /><div className="space-y-4 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Sparkles className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">{attributeUi.title}</h3></div><div className="space-y-4"><div className="rounded-xl border border-border/70 bg-muted/15 p-3.5"><p className="text-xs font-semibold text-foreground">{TIPO_LABELS[tipo]}</p><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{attributeUi.description}</p><div className="mt-2.5 flex flex-wrap gap-1.5">{attributeUi.presets.map((preset) => (<Button key={preset.clave} type="button" variant="outline" size="sm" className="h-7 rounded-full px-2.5 text-[10px]" onClick={() => handleAppendAttributePreset(preset)} disabled={atributoFields.length >= 30}><Plus className="size-3" />{preset.clave}</Button>))}</div></div><div className="space-y-2">{atributoFields.length === 0 ? (<div className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-center"><Sparkles className="size-4 text-muted-foreground/50" /><p className="text-xs font-semibold text-foreground">Sin datos adicionales</p><p className="max-w-md text-[10px] text-muted-foreground">{attributeUi.emptyText}</p></div>) : (atributoFields.map((field, index) => { const claveError = errors.atributos?.[index]?.clave?.message; const valorError = errors.atributos?.[index]?.valor?.message; const claveName = `atributos.${index}.clave` as const; const valorName = `atributos.${index}.valor` as const; return (<div key={field.id} className="group flex items-start gap-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,2fr)_auto]"><div className="flex flex-col gap-0.5 pt-1.5 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index - 1)} disabled={index <= 0}><ArrowUp className="size-3" /></button><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index + 1)} disabled={index >= atributoFields.length - 1}><ArrowDown className="size-3" /></button></div><div className="min-w-0 flex-1"><Input {...register(claveName)} placeholder={attributeUi.keyPlaceholder} />{claveError ? (<p className="mt-1 text-[10px] text-destructive">{claveError}</p>) : null}</div><div className="min-w-0 flex-[2]"><Input {...register(valorName)} placeholder={attributeUi.valuePlaceholder} />{valorError ? (<p className="mt-1 text-[10px] text-destructive">{valorError}</p>) : null}</div><Button type="button" variant="ghost" size="icon" onClick={() => removeAtributo(index)} className="size-9 shrink-0 self-start text-muted-foreground hover:text-destructive"><X className="size-4" /></Button></div>); }))}</div><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => appendAtributo({ clave: "", valor: "" })} disabled={atributoFields.length >= 30}><Plus className="size-3.5" />{attributeUi.buttonLabel}</Button></div></div></>)}
+          <div className="space-y-4 p-3 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><ImagePlus className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Descripción comercial</h3></div><Field data-invalid={errors.descripcion ? true : undefined}>{(() => { const { ref: registeredRef, onBlur, name } = register("descripcion"); return (<RichDescriptionEditor ref={registeredRef} name={name} value={descripcion} onBlur={onBlur} onValueChange={(nextValue) => setValue("descripcion", nextValue, { shouldDirty: true, shouldTouch: true, shouldValidate: false })} aria-invalid={!!errors.descripcion} />); })()}<FieldError>{errors.descripcion?.message}</FieldError></Field></div>
+          {!isServicio && (<><div className="border-t border-border/40" /><div className="space-y-4 p-3 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Sparkles className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">{attributeUi.title}</h3></div><div className="space-y-4"><div className="rounded-xl border border-border/70 bg-muted/15 p-3.5"><p className="text-xs font-semibold text-foreground">{TIPO_LABELS[tipo]}</p><p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{attributeUi.description}</p><div className="mt-2.5 flex flex-wrap gap-1.5">{attributeUi.presets.map((preset) => (<Button key={preset.clave} type="button" variant="outline" size="sm" className="h-7 rounded-full px-2.5 text-[10px]" onClick={() => handleAppendAttributePreset(preset)} disabled={atributoFields.length >= 30}><Plus className="size-3" />{preset.clave}</Button>))}</div></div><div className="space-y-2">{atributoFields.length === 0 ? (<div className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/70 bg-muted/10 p-4 text-center"><Sparkles className="size-4 text-muted-foreground/50" /><p className="text-xs font-semibold text-foreground">Sin datos adicionales</p><p className="max-w-md text-[10px] text-muted-foreground">{attributeUi.emptyText}</p></div>) : (atributoFields.map((field, index) => { const claveError = errors.atributos?.[index]?.clave?.message; const valorError = errors.atributos?.[index]?.valor?.message; const claveName = `atributos.${index}.clave` as const; const valorName = `atributos.${index}.valor` as const; return (<div key={field.id} className="group flex items-start gap-2 sm:grid sm:grid-cols-[auto_minmax(0,1fr)_minmax(0,2fr)_auto]"><div className="flex flex-col gap-0.5 pt-1.5 opacity-0 transition-opacity group-hover:opacity-100"><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index - 1)} disabled={index <= 0}><ArrowUp className="size-3" /></button><button type="button" className="flex size-4 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30" onClick={() => moveAtributo(index, index + 1)} disabled={index >= atributoFields.length - 1}><ArrowDown className="size-3" /></button></div><div className="min-w-0 flex-1"><Input {...register(claveName)} placeholder={attributeUi.keyPlaceholder} />{claveError ? (<p className="mt-1 text-[10px] text-destructive">{claveError}</p>) : null}</div><div className="min-w-0 flex-[2]"><Input {...register(valorName)} placeholder={attributeUi.valuePlaceholder} />{valorError ? (<p className="mt-1 text-[10px] text-destructive">{valorError}</p>) : null}</div><Button type="button" variant="ghost" size="icon" onClick={() => removeAtributo(index)} className="size-9 shrink-0 self-start text-muted-foreground hover:text-destructive"><X className="size-4" /></Button></div>); }))}</div><Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => appendAtributo({ clave: "", valor: "" })} disabled={atributoFields.length >= 30}><Plus className="size-3.5" />{attributeUi.buttonLabel}</Button></div></div></>)}
           <div className="border-t border-border/40" />
-          <div className="space-y-3 p-4 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Settings2 className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Ficha activa</h3></div><div className="space-y-2"><Field orientation="horizontal" className="justify-between"><FieldLabel>Ficha activa</FieldLabel><Switch checked={Boolean(activo)} onCheckedChange={(value) => setValue("activo", value, { shouldValidate: true, shouldDirty: true })} /></Field>{isServicio && (<Field orientation="horizontal" className="justify-between"><FieldLabel>Requiere repuestos</FieldLabel><Switch checked={Boolean(requiereRepuestos)} onCheckedChange={(value) => setValue("requiereRepuestos", value, { shouldValidate: true })} /></Field>)}</div></div>
+          <div className="space-y-3 p-3 sm:p-5"><div className="flex items-center gap-2 border-b border-border/40 pb-3"><Settings2 className="size-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Ficha activa</h3></div><div className="space-y-2"><Field orientation="horizontal" className="justify-between"><FieldLabel>Ficha activa</FieldLabel><Switch checked={Boolean(activo)} onCheckedChange={(value) => setValue("activo", value, { shouldValidate: true, shouldDirty: true })} /></Field>{isServicio && (<Field orientation="horizontal" className="justify-between"><FieldLabel>Requiere repuestos</FieldLabel><Switch checked={Boolean(requiereRepuestos)} onCheckedChange={(value) => setValue("requiereRepuestos", value, { shouldValidate: true })} /></Field>)}</div></div>
         </div>
         </div>
-        {!hideBottomActions && (<div className="flex w-full flex-wrap justify-end gap-2.5 border-t border-border/40 p-4 sm:p-5">{onCancel ? (<Button type="button" variant="outline" onClick={onCancel} disabled={isLoading || isUploadingImages} className="h-9 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150">Cancelar</Button>) : null}<Button type="submit" disabled={isLoading || isUploadingImages} className="h-9 min-w-36 gap-2 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150">{isLoading || isUploadingImages ? (<><Loader2 className="size-4 animate-spin" />{mode === "create" ? "Creando..." : "Guardando..."}</>) : mode === "create" ? (<><Boxes className="size-4" />Crear registro</>) : (<><Settings2 className="size-4" />Guardar cambios</>)}</Button></div>)}
+        {!hideBottomActions && (<div className="flex w-full flex-wrap justify-end gap-2.5 border-t border-border/40 p-3 sm:p-5">{onCancel ? (<Button type="button" variant="outline" onClick={onCancel} disabled={isLoading || isUploadingImages} className="h-9 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150">Cancelar</Button>) : null}<Button type="submit" disabled={isLoading || isUploadingImages} className="h-9 min-w-36 gap-2 rounded-xl px-4 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150">{isLoading || isUploadingImages ? (<><Loader2 className="size-4 animate-spin" />{mode === "create" ? "Creando..." : "Guardando..."}</>) : mode === "create" ? (<><Boxes className="size-4" />Crear registro</>) : (<><Settings2 className="size-4" />Guardar cambios</>)}</Button></div>)}
       </div>
 
       <Dialog open={unidadDialogOpen} onOpenChange={setUnidadDialogOpen}>

@@ -78,9 +78,9 @@ import {
   useProveedores,
   useUpdateProveedor,
 } from "@/hooks/use-proveedores";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+
 import { cn } from "@/lib/utils";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -92,7 +92,7 @@ const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const VIEW_MODE_STORAGE_KEY = "erp:proveedores:view-mode";
 
-const PROVEEDORES_REFRESH_TOAST_ID = "proveedores-refresh";
+
 
 type ActivoFilter = "all" | "activos" | "inactivos";
 
@@ -417,13 +417,7 @@ export default function ProveedoresPage() {
   const createMutation = useCreateProveedor();
   const updateMutation = useUpdateProveedor(editItem?.id || "");
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "proveedores",
-    toastLabel: "Proveedores",
-    manualToastMessage: "Lista actualizada",
-    toastId: PROVEEDORES_REFRESH_TOAST_ID,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleCreate = useCallback(
     (formData: ProveedorFormPayload) => {
@@ -780,13 +774,13 @@ export default function ProveedoresPage() {
         hideTitleVisually
         actions={
           <>
-            <PageAutoRefreshControl autoRefresh={autoRefresh} />
+            <RealtimeStatus />
             <PageActionsMenu
               items={[
                 {
                   label: "Actualizar lista",
                   icon: RefreshCcw,
-                  onSelect: handleManualRefresh,
+                  onSelect: () => void refetch(),
                 },
                 {
                   label: "Exportar CSV",

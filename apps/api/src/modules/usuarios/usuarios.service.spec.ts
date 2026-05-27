@@ -17,6 +17,7 @@ const mockPrismaService = {
   },
   refreshToken: {
     updateMany: jest.fn(),
+    deleteMany: jest.fn(),
   },
 };
 
@@ -193,7 +194,7 @@ describe('UsuariosService', () => {
     it('should soft delete a user', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue({ id: 'uuid-1' });
       mockPrismaService.usuario.update.mockResolvedValue({});
-      mockPrismaService.refreshToken.updateMany.mockResolvedValue({});
+      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
 
       await service.remove('uuid-1');
 
@@ -201,10 +202,9 @@ describe('UsuariosService', () => {
         where: { id: 'uuid-1' },
         data: expect.objectContaining({ activo: false }),
       });
-      // Should revoke all refresh tokens
-      expect(mockPrismaService.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { usuarioId: 'uuid-1', revoked: false },
-        data: { revoked: true },
+      // Should delete all refresh tokens
+      expect(mockPrismaService.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { usuarioId: 'uuid-1' },
       });
     });
   });
@@ -213,16 +213,19 @@ describe('UsuariosService', () => {
     it('should hash password and revoke tokens', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue({ id: 'uuid-1' });
       mockPrismaService.usuario.update.mockResolvedValue({});
-      mockPrismaService.refreshToken.updateMany.mockResolvedValue({});
+      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
 
       await service.changePassword('uuid-1', { password: 'NewPass123!' });
 
       const updateCall = mockPrismaService.usuario.update.mock.calls[0][0];
       expect(updateCall.data.mustChangePassword).toBe(false);
+      expect(updateCall.data.sessionVersion).toEqual({ increment: 1 });
       expect(bcrypt.compareSync('NewPass123!', updateCall.data.password)).toBe(
         true,
       );
-      expect(mockPrismaService.refreshToken.updateMany).toHaveBeenCalled();
+      expect(mockPrismaService.refreshToken.deleteMany).toHaveBeenCalledWith({
+        where: { usuarioId: 'uuid-1' },
+      });
     });
   });
 });

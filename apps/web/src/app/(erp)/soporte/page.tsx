@@ -4,20 +4,28 @@ import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
+  AlertCircle,
+  AlertOctagon,
   AlertTriangle,
+  Ban,
+  CheckCircle2,
   Clock,
   Download,
   Eye,
+  FileText,
   Headphones,
+  Home,
+  Loader2,
   MessageSquare,
+  Monitor,
   MoreHorizontal,
   Pencil,
   Plus,
-  Ban,
+  ShieldAlert,
   Trash2,
+  UserRound,
+  Wrench,
   X,
-  FileText,
-  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -148,6 +156,9 @@ export default function SoportePage() {
   const [draftTipo, setDraftTipo] = useState<string>("all");
 
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [bulkDeleteIds, setBulkDeleteIds] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedTickets, setSelectedTickets] = useState<Set<string>>(new Set());
 
   const { data: empresaRes } = useConfigEmpresa();
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null);
@@ -241,6 +252,75 @@ export default function SoportePage() {
       },
     });
   }, [deleteId, deleteMutation]);
+
+  const handleBulkDelete = useCallback(() => {
+    if (!bulkDeleteIds.length) return;
+    let done = 0;
+    const totalToDestroy = bulkDeleteIds.length;
+    bulkDeleteIds.forEach((id) => {
+      deleteMutation.mutate(id, {
+        onSuccess: () => {
+          done++;
+          if (done === totalToDestroy) {
+            toast.success(`${done} tickets eliminados correctamente`);
+            setBulkDeleteIds([]);
+            setSelectedTickets(new Set());
+          }
+        },
+        onError: () => {
+          toast.error("Error al eliminar ticket");
+        },
+      });
+    });
+  }, [bulkDeleteIds, deleteMutation]);
+
+  const handleSelectionModeToggle = useCallback(() => {
+    if (selectionMode) {
+      setSelectedTickets(new Set());
+    }
+    setSelectionMode((prev) => !prev);
+  }, [selectionMode]);
+
+  const handleBulkExportCSV = useCallback((rows: TicketListItem[]) => {
+    if (!rows.length) {
+      toast.error("No hay datos para exportar");
+      return;
+    }
+
+    const headers = [
+      "Código",
+      "Estado",
+      "Prioridad",
+      "Tipo de servicio",
+      "Cliente",
+      "Título",
+      "Técnico",
+      "Fecha",
+    ];
+    const lines = rows.map((ticket) =>
+      [
+        ticket.codigo,
+        ESTADO_LABELS[ticket.estado],
+        PRIORIDAD_LABELS[ticket.prioridad],
+        TIPO_LABELS[ticket.tipoServicio],
+        formatClienteNombre(ticket.cliente),
+        ticket.titulo,
+        ticket.tecnico?.nombre ?? "Sin asignar",
+        ticket.createdAt ? formatDate(ticket.createdAt) : "",
+      ]
+        .map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `tickets-seleccionados-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${rows.length} tickets exportados correctamente`);
+  }, []);
 
   const handleCancelTicket = useCallback(
     (ticketId: string) => {
@@ -343,6 +423,40 @@ export default function SoportePage() {
     (prioridadFilter !== "all" ? 1 : 0) +
     (tipoFilter !== "all" ? 1 : 0);
 
+// ── Highlighted Text helper ──────────────────────────────────────────────────
+
+interface HighlightedTextProps {
+  text: string;
+  search: string;
+}
+
+function HighlightedText({ text, search }: HighlightedTextProps) {
+  if (!search || !search.trim()) {
+    return <>{text}</>;
+  }
+
+  const escapedSearch = search.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const regex = new RegExp(`(${escapedSearch})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark
+            key={i}
+            className="rounded bg-[var(--accent)]/18 px-0.5 font-semibold text-foreground dark:bg-[var(--accent)]/24"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
   /* ── Columns ──────────────────────────────────────── */
 
   const columns = useMemo<ColumnDef<TicketListItem>[]>(
@@ -351,8 +465,8 @@ export default function SoportePage() {
         accessorKey: "codigo",
         header: "Código",
         cell: ({ row }) => (
-          <span className="font-mono text-sm font-medium whitespace-nowrap">
-            {row.original.codigo}
+          <span className="font-mono text-sm font-semibold whitespace-nowrap text-muted-foreground">
+            <HighlightedText text={row.original.codigo} search={search} />
           </span>
         ),
       },
@@ -363,10 +477,17 @@ export default function SoportePage() {
           const nombre = formatClienteNombre(row.original.cliente);
           return (
             <span
-              className="text-sm truncate max-w-40 block"
+              className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground truncate max-w-40"
               title={nombre ?? ""}
             >
-              {nombre ?? <span className="text-muted-foreground/50">—</span>}
+              <UserRound className="size-3.5 shrink-0 text-muted-foreground/60" />
+              <span className="truncate">
+                {nombre ? (
+                  <HighlightedText text={nombre} search={search} />
+                ) : (
+                  <span className="text-muted-foreground/50">—</span>
+                )}
+              </span>
             </span>
           );
         },
@@ -390,14 +511,18 @@ export default function SoportePage() {
             );
           }
 
+          const badgeStyle = equipo
+            ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-500/10 dark:text-sky-400 dark:border-sky-500/20"
+            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20";
+
           return (
-            <div className="flex max-w-44 flex-col gap-1">
-              <span className="truncate font-mono text-xs" title={label}>
-                {label}
+            <div className="flex max-w-44 flex-col gap-1.5">
+              <span className="truncate font-mono text-xs font-semibold text-muted-foreground" title={label}>
+                <HighlightedText text={label} search={search} />
               </span>
-              <Badge variant="outline" className="w-fit text-[10px]">
+              <span className={cn("inline-flex items-center w-fit rounded-full border px-2 py-0.5 text-[10px] font-semibold tracking-[0.01em] shadow-none", badgeStyle)}>
                 {tipo}
-              </Badge>
+              </span>
             </div>
           );
         },
@@ -408,8 +533,8 @@ export default function SoportePage() {
         cell: ({ row }) => {
           const text = row.original.titulo;
           return (
-            <span className="block max-w-50 truncate text-sm" title={text}>
-              {text}
+            <span className="block max-w-50 truncate text-sm font-semibold text-foreground" title={text}>
+              <HighlightedText text={text} search={search} />
             </span>
           );
         },
@@ -432,33 +557,74 @@ export default function SoportePage() {
         header: "Prioridad",
         cell: ({ row }) => {
           const p = row.original.prioridad;
+          const styles = {
+            [PrioridadTicket.BAJA]: {
+              bg: "bg-slate-500 shadow-slate-500/30",
+              icon: Clock,
+            },
+            [PrioridadTicket.MEDIA]: {
+              bg: "bg-sky-500 shadow-sky-500/30",
+              icon: AlertCircle,
+            },
+            [PrioridadTicket.ALTA]: {
+              bg: "bg-orange-500 shadow-orange-500/30",
+              icon: AlertTriangle,
+            },
+            [PrioridadTicket.CRITICA]: {
+              bg: "bg-red-500 shadow-red-500/30",
+              icon: ShieldAlert,
+            },
+          }[p];
+
+          const Icon = styles.icon;
+
           return (
-            <Badge
-              variant="outline"
-              className={cn("whitespace-nowrap text-xs", {
-                "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900/40 dark:text-slate-300":
-                  p === PrioridadTicket.BAJA,
-                "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/40 dark:text-blue-300":
-                  p === PrioridadTicket.MEDIA,
-                "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/40 dark:text-orange-300":
-                  p === PrioridadTicket.ALTA,
-                "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/40 dark:text-red-300":
-                  p === PrioridadTicket.CRITICA,
-              })}
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm transition-all duration-200",
+                styles.bg
+              )}
             >
+              <Icon className="size-3 shrink-0" />
               {PRIORIDAD_LABELS[p]}
-            </Badge>
+            </span>
           );
         },
       },
       {
         accessorKey: "tipoServicio",
         header: "Tipo",
-        cell: ({ row }) => (
-          <Badge variant="secondary" className="whitespace-nowrap text-xs">
-            {TIPO_LABELS[row.original.tipoServicio]}
-          </Badge>
-        ),
+        cell: ({ row }) => {
+          const t = row.original.tipoServicio;
+          const styles = {
+            [TipoServicio.TALLER]: {
+              bg: "bg-indigo-500 shadow-indigo-500/30",
+              icon: Wrench,
+            },
+            [TipoServicio.VISITA]: {
+              bg: "bg-emerald-500 shadow-emerald-500/30",
+              icon: Home,
+            },
+            [TipoServicio.REMOTO]: {
+              bg: "bg-violet-500 shadow-violet-500/30",
+              icon: Monitor,
+            },
+          }[t];
+
+          const Icon = styles.icon;
+
+          return (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm transition-all duration-200",
+                styles.bg
+              )}
+            >
+              <Icon className="size-3 shrink-0" />
+              {TIPO_LABELS[t]}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "tecnico",
@@ -466,8 +632,15 @@ export default function SoportePage() {
         cell: ({ row }) => {
           const nombre = row.original.tecnico?.nombre;
           return (
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
-              {nombre ?? <span className="italic opacity-60">Sin asignar</span>}
+            <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
+              <UserRound className="size-3.5 shrink-0 text-muted-foreground/60" />
+              <span>
+                {nombre ? (
+                  <HighlightedText text={nombre} search={search} />
+                ) : (
+                  <span className="italic opacity-60">Sin asignar</span>
+                )}
+              </span>
             </span>
           );
         },
@@ -478,7 +651,7 @@ export default function SoportePage() {
         cell: ({ row }) => {
           const fecha = row.original.createdAt;
           return (
-            <span className="text-sm text-muted-foreground whitespace-nowrap">
+            <span className="text-sm text-muted-foreground whitespace-nowrap font-medium font-medium">
               {fecha ? formatDate(fecha) : "—"}
             </span>
           );
@@ -496,55 +669,55 @@ export default function SoportePage() {
           const hasRowActions = (canEdit && canModifyRow) || canRemoveRow;
 
           return (
-          <div className="flex items-center justify-end gap-1.5">
-            <Button
-              asChild
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
-            >
-              <Link href={`/soporte/${row.original.id}`}>
-                <Eye className="size-3.5" />
-                Ver
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
-              onClick={() => void handleRowPdfPreview(row.original)}
-              disabled={pdfLoadingId === row.original.id}
-              title="Vista previa PDF"
-            >
-              {pdfLoadingId === row.original.id ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <FileText className="size-3.5" />
-              )}
-              PDF
-            </Button>
-            {hasRowActions && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted"
-                  >
-                    <MoreHorizontal className="size-4" />
-                    <span className="sr-only">Acciones</span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                  <DropdownMenuGroup>
-                    {canEdit && canModifyRow && (
-                      <DropdownMenuItem asChild>
-                        <Link href={`/soporte/${row.original.id}/editar`}>
-                          <Pencil className="size-4" /> Editar
-                        </Link>
-                      </DropdownMenuItem>
-                    )}
-                    {canEdit && canModifyRow && (
+            <div className="flex items-center justify-end gap-1.5">
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Link href={`/soporte/${row.original.id}`}>
+                  <Eye className="size-3.5" />
+                  Ver
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5 rounded-lg px-2.5 text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                onClick={() => void handleRowPdfPreview(row.original)}
+                disabled={pdfLoadingId === row.original.id}
+                title="Vista previa PDF"
+              >
+                {pdfLoadingId === row.original.id ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <FileText className="size-3.5" />
+                )}
+                PDF
+              </Button>
+              {hasRowActions && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+                    >
+                      <MoreHorizontal className="size-4" />
+                      <span className="sr-only">Acciones</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuGroup>
+                      {canEdit && canModifyRow && (
+                        <DropdownMenuItem asChild>
+                          <Link href={`/soporte/${row.original.id}/editar`}>
+                            <Pencil className="size-4" /> Editar
+                          </Link>
+                        </DropdownMenuItem>
+                      )}
+                      {canEdit && canModifyRow && (
                         <DropdownMenuItem
                           variant="destructive"
                           disabled={statusMutation.isPending}
@@ -553,19 +726,19 @@ export default function SoportePage() {
                           <Ban className="size-4" /> Anular
                         </DropdownMenuItem>
                       )}
-                    {canRemoveRow && (
-                      <DropdownMenuItem
-                        variant="destructive"
-                        onClick={() => setDeleteId(row.original.id)}
-                      >
-                        <Trash2 className="size-4" /> Eliminar
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </div>
+                      {canRemoveRow && (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => setDeleteId(row.original.id)}
+                        >
+                          <Trash2 className="size-4" /> Eliminar
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           );
         },
       },
@@ -577,6 +750,7 @@ export default function SoportePage() {
       statusMutation.isPending,
       pdfLoadingId,
       handleRowPdfPreview,
+      search,
     ],
   );
 
@@ -630,59 +804,68 @@ export default function SoportePage() {
         />
       </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      {/* ── Toolbar ── */}
+      <div className="flex flex-col gap-2.5 w-full min-w-0">
+        <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between w-full">
+          {/* Search */}
           <ToolbarSearchInput
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por código, título, cliente…"
-            className="sm:w-72 lg:w-80"
+            className="w-full lg:w-72 xl:w-80 shrink-0"
             inputClassName="border-border bg-background hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 dark:focus-visible:ring-indigo-500/25 shadow-sm"
           />
 
-          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:ml-auto sm:justify-end w-full sm:w-auto">
+          {/* Controls: Tabs & Popover Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto justify-end shrink-0 min-w-0">
             {/* Estado tabs */}
-            <Tabs value={estadoFilter} onValueChange={handleEstadoChange} className="w-full sm:w-auto min-w-0">
-              <TabsList className="scrollbar-none h-9 w-full justify-start gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 flex flex-nowrap sm:w-auto">
+            <Tabs
+              value={estadoFilter}
+              onValueChange={handleEstadoChange}
+              className="w-full sm:w-auto min-w-0 shrink"
+            >
+              <TabsList className="flex w-full h-9 gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap sm:w-auto shrink">
                 <TabsTrigger
                   value="all"
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Headphones className="size-3.5" />
-                  <span className="hidden sm:inline">Todos</span>
+                  <span>Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.ABIERTO}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <MessageSquare className="size-3.5" />
-                  <span className="hidden sm:inline">Abierto</span>
+                  <span>Abierto</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.EN_PROCESO}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Clock className="size-3.5" />
-                  <span className="hidden sm:inline">En proceso</span>
+                  <span>En proceso</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.EN_ESPERA}
-                  className="h-8 shrink-0 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 dark:data-[state=active]:bg-violet-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
-                  <span className="hidden sm:inline">En espera</span>
+                  <AlertCircle className="size-3.5" />
+                  <span>En espera</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.CERRADO}
-                  className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
-                  Cerrado
+                  <CheckCircle2 className="size-3.5" />
+                  <span>Cerrado</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={EstadoTicket.CANCELADO}
-                  className="h-8 shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
+                  className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
-                  Cancelado
+                  <Ban className="size-3.5" />
+                  <span>Cancelado</span>
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -693,20 +876,21 @@ export default function SoportePage() {
                 <ToolbarFiltersButton
                   open={filtrosOpen}
                   activeCount={activeFilterCount}
+                  className="w-full sm:w-auto"
                 />
               </PopoverTrigger>
               <PopoverContent
                 align="end"
                 sideOffset={10}
-                className="w-[calc(100vw-2rem)] sm:w-70 max-w-xs rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+                className="w-[calc(100vw-2rem)] sm:w-[480px] sm:max-w-md rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)] flex flex-col max-h-[min(calc(100vh-4rem),540px)]"
               >
-                <div className="border-b border-border/60 px-4 py-3">
+                <div className="border-b border-border/60 px-4 py-3 shrink-0">
                   <p className="text-sm font-semibold">Filtros</p>
                   <p className="text-xs text-muted-foreground">
                     Refina la lista visible
                   </p>
                 </div>
-                <div className="space-y-4 px-4 py-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 px-5 py-5 overflow-y-auto min-h-0 flex-1 scrollbar-thin">
                   {/* Prioridad */}
                   <div className="space-y-2">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
@@ -724,9 +908,9 @@ export default function SoportePage() {
                           key={opt.value}
                           type="button"
                           className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
                             draftPrioridad === opt.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
+                              ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
                               : "border-border/60 bg-background hover:bg-muted/40",
                           )}
                           onClick={() => setDraftPrioridad(opt.value)}
@@ -735,7 +919,7 @@ export default function SoportePage() {
                             className={cn(
                               "flex size-4 items-center justify-center rounded-full border transition-colors",
                               draftPrioridad === opt.value
-                                ? "border-primary"
+                                ? "border-[var(--accent)]"
                                 : "border-muted-foreground/40",
                             )}
                           >
@@ -743,7 +927,7 @@ export default function SoportePage() {
                               className={cn(
                                 "size-2 rounded-full transition-colors",
                                 draftPrioridad === opt.value
-                                  ? "bg-primary"
+                                  ? "bg-[var(--accent)]"
                                   : "bg-transparent",
                               )}
                             />
@@ -770,9 +954,9 @@ export default function SoportePage() {
                           key={opt.value}
                           type="button"
                           className={cn(
-                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
                             draftTipo === opt.value
-                              ? "border-primary/40 bg-primary/5 text-foreground"
+                              ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
                               : "border-border/60 bg-background hover:bg-muted/40",
                           )}
                           onClick={() => setDraftTipo(opt.value)}
@@ -781,7 +965,7 @@ export default function SoportePage() {
                             className={cn(
                               "flex size-4 items-center justify-center rounded-full border transition-colors",
                               draftTipo === opt.value
-                                ? "border-primary"
+                                ? "border-[var(--accent)]"
                                 : "border-muted-foreground/40",
                             )}
                           >
@@ -789,7 +973,7 @@ export default function SoportePage() {
                               className={cn(
                                 "size-2 rounded-full transition-colors",
                                 draftTipo === opt.value
-                                  ? "bg-primary"
+                                  ? "bg-[var(--accent)]"
                                   : "bg-transparent",
                               )}
                             />
@@ -799,28 +983,47 @@ export default function SoportePage() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs text-muted-foreground"
-                      onClick={clearFiltros}
-                    >
-                      Limpiar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 rounded-lg text-xs"
-                      onClick={applyFiltros}
-                    >
-                      Aplicar filtros
-                    </Button>
-                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3 shrink-0 bg-background/50">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+                    onClick={clearFiltros}
+                  >
+                    Limpiar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                    onClick={applyFiltros}
+                  >
+                    Aplicar filtros
+                  </Button>
                 </div>
               </PopoverContent>
             </Popover>
+
+            {canDelete && (
+              <Button
+                variant={selectionMode ? "secondary" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150",
+                  selectionMode
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40 dark:hover:bg-emerald-500/30"
+                    : "border-border/80 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300",
+                )}
+                onClick={handleSelectionModeToggle}
+              >
+                <CheckCircle2 className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">
+                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                </span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -841,6 +1044,41 @@ export default function SoportePage() {
         enableColumnVisibility
         columnVisibilityStorageKey="erp:soporte:table-columns"
         fillAvailableHeight={!isMobile}
+        enableRowSelection={canDelete && selectionMode}
+        bulkActionsBar={
+          canDelete
+            ? (selectedRows, clearSelection) => (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                    title="Exportar"
+                    onClick={() => {
+                      const rows = selectedRows as TicketListItem[];
+                      handleBulkExportCSV(rows);
+                      clearSelection();
+                    }}
+                  >
+                    <Download className="size-3.5" />
+                    <span className="hidden sm:inline">Exportar</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                    title="Eliminar"
+                    onClick={() => {
+                      const ids = (selectedRows as TicketListItem[]).map((row) => row.id);
+                      if (!ids.length) return;
+                      setBulkDeleteIds(ids);
+                    }}
+                  >
+                    <Trash2 className="size-3.5" />
+                    <span className="hidden sm:inline">Eliminar</span>
+                  </Button>
+                </div>
+              )
+            : undefined
+        }
       />
 
       {/* AlertDialog: Eliminar */}
@@ -882,6 +1120,63 @@ export default function SoportePage() {
               disabled={deleteMutation.isPending}
             >
               {deleteMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ── Bulk delete confirm ── */}
+      <AlertDialog
+        open={bulkDeleteIds.length > 0}
+        onOpenChange={(o) => (!o ? setBulkDeleteIds([]) : null)}
+      >
+        <AlertDialogContent className="w-full sm:max-w-md rounded-3xl border-l-4 border-l-red-500 p-6 data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+          <AlertDialogHeader className="flex flex-row items-start gap-4 space-y-0">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-red-500 text-white shadow-sm shadow-red-500/30">
+              <Trash2 className="size-5" />
+            </div>
+            <div className="flex flex-col gap-1.5 text-left">
+              <AlertDialogTitle className="text-xl font-semibold inline-flex items-center gap-2 flex-wrap">
+                ¿Eliminar
+                <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold px-2 py-0.5 shadow-sm shadow-red-500/30">
+                  {bulkDeleteIds.length}
+                </span>
+                tickets?
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-1.5 text-sm text-muted-foreground">
+                  <p>
+                    Se eliminarán{" "}
+                    <span className="font-semibold text-foreground">
+                      {bulkDeleteIds.length} tickets seleccionados
+                    </span>
+                    . Esta action no se puede deshacer.
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </div>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 flex-col gap-2 sm:flex-row sm:justify-end w-full">
+            <AlertDialogCancel
+              className="w-full sm:w-auto rounded-xl mt-0 border-border/80 hover:bg-muted transition-all duration-200 ease-out active:scale-95"
+              onClick={() => setBulkDeleteIds([])}
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              className="w-full sm:w-auto rounded-xl bg-red-500 text-white shadow-sm shadow-red-500/30 hover:bg-red-600 dark:bg-red-500 dark:hover:bg-red-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95 disabled:opacity-60"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" /> Eliminando…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="size-3.5" /> Sí, eliminar {bulkDeleteIds.length}
+                </>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

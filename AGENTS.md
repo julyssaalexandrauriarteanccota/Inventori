@@ -80,12 +80,23 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
   - Supporting docs index: [`docs/README.md`](docs/README.md)
   - SUNAT docs index: [`comprobantes sunat/README.md`](comprobantes%20sunat/README.md)
 - Historical sprint/archive index: [`otros no uties/README.md`](otros%20no%20uties/README.md) — planning context only.
-- Historical agent/planning rules: [`otros no uties/00-REGLAS-AGENTS.md`](otros%20no%20uties/00-REGLAS-AGENTS.md) — useful context, not executable truth.
 - Per-sprint API contracts: [`docs/contracts/`](docs/contracts/) — freeze payloads, filters, and frontend fields.
 - Historical table ownership map: [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md) — verify against `schema.prisma` before editing data models.
 - Scoped instructions (auto-applied): [`.github/instructions/`](.github/instructions/) — NestJS (`apps/api/src/**`), FastAPI (`apps/ai/**/*.py`), Prisma (`apps/api/prisma/**`), and Next.js (`apps/web/**`).
 - Frontend conventions: [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 - CI pipeline (lint -> type-check -> tests -> build, with Postgres + Redis services): [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+  ## Agent Customization Map
+
+  - Path-scoped instructions live in [`.github/instructions/`](.github/instructions/); check each file header for its `applyTo`.
+  - Skills live in [`.github/skills/`](.github/skills/) (full set) and [`.agents/skills/`](.agents/skills/) (subset).
+
+  ## Remote Agent Workflow (GitHub)
+
+  - Push current work before granting remote agent access; never include secrets/credentials.
+  - The agent commits on its own branch; review and merge as usual.
+  - Sync locally with `git pull origin <branch>` instead of downloading a zip.
+  - Do not delete or overwrite unrelated files without explicit approval.
 
 ## Instruction Hygiene
 

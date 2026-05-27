@@ -8,16 +8,23 @@ import {
   type CotizacionPdfData,
 } from "@/components/pdf/cotizacion-pdf";
 
+export async function generateCotizacionPdfBlobUrl(
+  data: CotizacionPdfData,
+  empresa: ConfigEmpresaPayload,
+  igvPercent = 18,
+): Promise<string> {
+  const blob = await pdf(
+    <CotizacionPDF data={data} empresa={empresa} igvPercent={igvPercent} />,
+  ).toBlob();
+  return URL.createObjectURL(blob);
+}
+
 export async function downloadCotizacionPdf(
   data: CotizacionPdfData,
   empresa: ConfigEmpresaPayload,
   igvPercent = 18,
 ) {
-  const blob = await pdf(
-    <CotizacionPDF data={data} empresa={empresa} igvPercent={igvPercent} />,
-  ).toBlob();
-
-  const url = URL.createObjectURL(blob);
+  const url = await generateCotizacionPdfBlobUrl(data, empresa, igvPercent);
   const a = document.createElement("a");
   a.href = url;
   a.download = `cotizacion-${data.numero}.pdf`;

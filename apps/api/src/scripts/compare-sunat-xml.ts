@@ -13,7 +13,8 @@ const ids = process.argv.slice(2);
 function text(xml: string, tagName: string) {
   const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return (
-    xml.match(new RegExp(`<${escaped}\\b[^>]*>(.*?)</${escaped}>`, 's'))?.[1]
+    xml
+      .match(new RegExp(`<${escaped}\\b[^>]*>(.*?)</${escaped}>`, 's'))?.[1]
       ?.trim() ?? null
   );
 }
@@ -24,13 +25,17 @@ function count(xml: string, pattern: RegExp) {
 
 function attrs(xml: string, tagName: string) {
   const escaped = tagName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return xml.match(new RegExp(`<${escaped}\\b([^>]*)>`, 's'))?.[1]?.trim() ?? '';
+  return (
+    xml.match(new RegExp(`<${escaped}\\b([^>]*)>`, 's'))?.[1]?.trim() ?? ''
+  );
 }
 
 function describe(xml: string) {
   const signatureTag = xml.match(/<ds:Signature\b[^>]*>/)?.[0] ?? null;
   return {
-    sha256: createHash('sha256').update(Buffer.from(xml, 'latin1')).digest('hex'),
+    sha256: createHash('sha256')
+      .update(Buffer.from(xml, 'latin1'))
+      .digest('hex'),
     length: xml.length,
     firstLine: xml.split(/\r?\n/, 1)[0],
     rootTag: xml.match(/<([A-Za-z]+)\b/)?.[1] ?? null,
@@ -55,9 +60,9 @@ function describe(xml: string) {
     unitCodes: [...xml.matchAll(/\bunitCode=["']([^"']+)["']/g)].map(
       (match) => match[1],
     ),
-    taxSchemeIds: [...xml.matchAll(/<cac:TaxScheme>[\s\S]*?<cbc:ID[^>]*>(.*?)<\/cbc:ID>/g)].map(
-      (match) => match[1].trim(),
-    ),
+    taxSchemeIds: [
+      ...xml.matchAll(/<cac:TaxScheme>[\s\S]*?<cbc:ID[^>]*>(.*?)<\/cbc:ID>/g),
+    ].map((match) => match[1].trim()),
   };
 }
 

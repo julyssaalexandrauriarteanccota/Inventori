@@ -28,12 +28,15 @@ async function main() {
     where: { numero: ORIGEN_NUMERO },
     include: { detallesFiscales: { orderBy: { item: 'asc' } } },
   });
-  if (!origen) throw new Error(`No existe comprobante origen ${ORIGEN_NUMERO}.`);
+  if (!origen)
+    throw new Error(`No existe comprobante origen ${ORIGEN_NUMERO}.`);
   if (
     origen.estado !== EstadoComprobante.ACEPTADO &&
     origen.estado !== EstadoComprobante.ACEPTADO_CON_OBSERVACIONES
   ) {
-    throw new Error(`El origen ${origen.numero} no está aceptado: ${origen.estado}.`);
+    throw new Error(
+      `El origen ${origen.numero} no está aceptado: ${origen.estado}.`,
+    );
   }
   if (!origen.detallesFiscales.length) {
     throw new Error(`El origen ${origen.numero} no tiene detalles fiscales.`);
@@ -49,7 +52,11 @@ async function main() {
     orderBy: { correlativo: 'desc' },
   });
   if (existing) {
-    console.log('Nota de débito de prueba ya existe:', existing.id, existing.numero);
+    console.log(
+      'Nota de débito de prueba ya existe:',
+      existing.id,
+      existing.numero,
+    );
     await prisma.$disconnect();
     return;
   }

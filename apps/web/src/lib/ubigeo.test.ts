@@ -6,6 +6,7 @@ import {
   getDepartamentos,
   getDistritosByDepartamentoAndProvinciaName,
   getProvinciasByDepartamentoName,
+  inferUbigeoSelectionFromText,
 } from '@/lib/ubigeo'
 
 describe('ubigeo helpers', () => {
@@ -42,5 +43,17 @@ describe('ubigeo helpers', () => {
 
   it('incluye el catalogo completo de departamentos del Peru', () => {
     expect(getDepartamentos()).toHaveLength(25)
+  })
+
+  it('infiere provincia y distrito desde una direccion devuelta por el mapa', () => {
+    expect(
+      inferUbigeoSelectionFromText('Jecchata, Arapa, Azángaro, Puno, Perú', {
+        departamento: 'Puno',
+      }),
+    ).toEqual({
+      departamento: 'Puno',
+      provincia: 'Azangaro',
+      distrito: 'Arapa',
+    })
   })
 })

@@ -34,7 +34,7 @@ export class ClientesController {
   ) {}
 
   @Post()
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Crear cliente' })
   create(@Body() dto: CreateClienteDto) {
     return this.clientesService.create(dto);
@@ -48,7 +48,7 @@ export class ClientesController {
   }
 
   @Post('consulta-documento')
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Consultar DNI/RUC con proveedor documental' })
   consultarDocumento(@Body() dto: ConsultaDocumentoClienteDto) {
     return this.consultaDocumentoService.consultar(dto);

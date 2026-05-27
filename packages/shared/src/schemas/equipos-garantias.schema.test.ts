@@ -26,9 +26,29 @@ describe('equipos y garantias schemas', () => {
       fechaFin: '2027-01-01T00:00:00.000Z',
       cobertura: 'Cobertura total',
       estado: EstadoGarantia.ACTIVA,
+      fechaInstalacion: '2026-01-02',
+      direccionInstalacion: 'Oficina principal',
+      ubigeoInstalacion: '150101',
+      departamentoInstalacion: 'Lima',
+      provinciaInstalacion: 'Lima',
+      distritoInstalacion: 'Lima',
+      latitudInstalacion: -12.0464,
+      longitudInstalacion: -77.0428,
     })
 
     expect(parsed.estado).toBe(EstadoGarantia.ACTIVA)
+  })
+
+  it('requiere instalación para activar garantía', () => {
+    const result = garantiaFormSchema.safeParse({
+      equipoId: '11111111-1111-1111-1111-111111111111',
+      fechaInicio: '2026-01-01T00:00:00.000Z',
+      fechaFin: '2027-01-01T00:00:00.000Z',
+      cobertura: 'Cobertura total',
+      estado: EstadoGarantia.ACTIVA,
+    })
+
+    expect(result.success).toBe(false)
   })
 
   it('valida respuesta publica de garantia', () => {

@@ -105,6 +105,40 @@ async function main() {
     });
     logger.log('Default caja seeded');
 
+    const almacenPrincipal = await prisma.almacen.findFirst({
+      where: { esPrincipal: true, activo: true, deletedAt: null },
+      select: { id: true },
+    });
+    if (!almacenPrincipal) {
+      const firstActiveAlmacen = await prisma.almacen.findFirst({
+        where: { activo: true, deletedAt: null },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+
+      await prisma.almacen.updateMany({
+        where: { esPrincipal: true, deletedAt: null },
+        data: { esPrincipal: false },
+      });
+
+      if (firstActiveAlmacen) {
+        await prisma.almacen.update({
+          where: { id: firstActiveAlmacen.id },
+          data: { esPrincipal: true, activo: true },
+        });
+      } else {
+        await prisma.almacen.create({
+          data: {
+            nombre: 'Almacén Principal',
+            descripcion: 'Almacén principal del sistema',
+            esPrincipal: true,
+            activo: true,
+          },
+        });
+      }
+    }
+    logger.log('Default principal almacen ensured');
+
     // Doc 10 §9 — feriados nacionales del Perú. Necesarios para calcular
     // los 10 días hábiles del plazo NC excepcional (Doc 08 §3).
     const feriados: Array<{ fecha: string; nombre: string; anio: number }> = [

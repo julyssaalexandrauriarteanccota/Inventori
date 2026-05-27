@@ -6,7 +6,10 @@ import { resolve } from 'path';
 dotenv.config({ path: path.join(__dirname, '../../../../.env') });
 
 import { PrismaService } from '../database/prisma.service';
-import { FiscalSecretsService, EncryptedPayload } from '../modules/facturacion/fiscal-secrets.service';
+import {
+  FiscalSecretsService,
+  EncryptedPayload,
+} from '../modules/facturacion/fiscal-secrets.service';
 import { SunatXmlSigner } from '../modules/facturacion/sunat-xml.signer';
 import * as forge from 'node-forge';
 
@@ -25,9 +28,8 @@ async function extractP12KeyMaterial(buffer: Buffer, password: string) {
     ] ?? []),
   ];
   const certBags =
-    p12.getBags({ bagType: forge.pki.oids.certBag })[
-      forge.pki.oids.certBag
-    ] ?? [];
+    p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ??
+    [];
   const privateKey = keyBags[0]?.key;
   const certificate = certBags[0]?.cert;
 
@@ -50,13 +52,13 @@ function resolvePrivateStoragePath(storageKey: string) {
 
 async function main() {
   console.log('Testing XML signer via isolated script...');
-  
+
   const prisma = new PrismaService();
   await prisma.$connect();
   console.log('Connected to PostgreSQL successfully!');
-  
+
   const fiscalSecrets = new FiscalSecretsService(prisma);
-  
+
   const certificate = await prisma.certificadoDigital.findFirst({
     where: { activo: true, revokedAt: null, deletedAt: null },
     orderBy: { createdAt: 'desc' },
@@ -64,9 +66,9 @@ async function main() {
   if (!certificate) {
     throw new Error('No active certificate found in database.');
   }
-  
+
   console.log('Active Certificate:', certificate.nombre);
-  
+
   const encryptedRaw = await fs.readFile(
     resolvePrivateStoragePath(certificate.storageKey),
     'utf8',
@@ -77,10 +79,10 @@ async function main() {
     certificate.passwordSecretRef!,
     CERTIFICATE_SECRET_NAME,
   );
-  
+
   const extracted = await extractP12KeyMaterial(p12Buffer, password);
   console.log('Certificate Key Material successfully extracted and decrypted!');
-  
+
   const mockCertService = {
     getActiveKeyMaterial: async () => ({
       p12Buffer,
@@ -93,10 +95,10 @@ async function main() {
         fingerprintSha256: certificate.fingerprintSha256,
         validoDesde: certificate.validoDesde,
         validoHasta: certificate.validoHasta,
-      }
-    })
+      },
+    }),
   } as any;
-  
+
   const signer = new SunatXmlSigner(mockCertService);
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -117,11 +119,12 @@ async function main() {
   if (result.signedXml.includes('Id="SignatureSP"')) {
     console.log('\nSUCCESS: Signature block has Id="SignatureSP" attribute!');
   } else {
-    console.error('\nFAILURE: Signature block is missing Id="SignatureSP" attribute!');
+    console.error(
+      '\nFAILURE: Signature block is missing Id="SignatureSP" attribute!',
+    );
   }
 
   await prisma.$disconnect();
 }
 
 main().catch(console.error);
-

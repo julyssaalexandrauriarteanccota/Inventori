@@ -30,6 +30,8 @@ const mockPrismaService = {
     create: jest.fn(),
     update: jest.fn(),
     updateMany: jest.fn(),
+    delete: jest.fn(),
+    deleteMany: jest.fn(),
   },
   emailVerificationOtp: {
     findFirst: jest.fn(),
@@ -111,7 +113,8 @@ describe('AuthService', () => {
 
     it('should login successfully with valid credentials', async () => {
       mockPrismaService.usuario.findFirst.mockResolvedValue(mockUsuario);
-      mockPrismaService.usuario.update.mockResolvedValue(mockUsuario);
+      mockPrismaService.usuario.update.mockResolvedValue({ sessionVersion: 2 });
+      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
       const result = await service.login(loginDto);
@@ -161,19 +164,20 @@ describe('AuthService', () => {
           rol: 'ADMIN',
           activo: true,
           deletedAt: null,
+          sessionVersion: 1,
         },
       });
-      mockPrismaService.refreshToken.update.mockResolvedValue({});
+      mockPrismaService.refreshToken.delete.mockResolvedValue({});
+      mockPrismaService.refreshToken.deleteMany.mockResolvedValue({});
       mockPrismaService.refreshToken.create.mockResolvedValue({});
 
       const result = await service.refresh('valid-refresh');
 
       expect(result.accessToken).toBe('mock-access-token');
       expect(result.refreshToken).toBeDefined();
-      // Old token should be revoked
-      expect(mockPrismaService.refreshToken.update).toHaveBeenCalledWith({
+      // Old token should be deleted physically
+      expect(mockPrismaService.refreshToken.delete).toHaveBeenCalledWith({
         where: { id: 'token-1' },
-        data: { revoked: true },
       });
     });
 
@@ -192,13 +196,12 @@ describe('AuthService', () => {
         id: 'token-1',
         token: 'some-token',
       });
-      mockPrismaService.refreshToken.update.mockResolvedValue({});
+      mockPrismaService.refreshToken.delete.mockResolvedValue({});
 
       await service.logout('some-token');
 
-      expect(mockPrismaService.refreshToken.update).toHaveBeenCalledWith({
+      expect(mockPrismaService.refreshToken.delete).toHaveBeenCalledWith({
         where: { id: 'token-1' },
-        data: { revoked: true },
       });
     });
 

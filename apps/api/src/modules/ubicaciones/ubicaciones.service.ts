@@ -10,11 +10,17 @@ import type { LocationSearchResult } from '@erp/shared';
 import { BuscarUbicacionDto, ReverseGeocodeDto } from './dto';
 
 type NominatimAddress = {
+  borough?: string;
   city?: string;
   city_district?: string;
   county?: string;
+  district?: string;
+  hamlet?: string;
   municipality?: string;
   neighbourhood?: string;
+  province?: string;
+  quarter?: string;
+  region?: string;
   state?: string;
   state_district?: string;
   suburb?: string;
@@ -76,19 +82,25 @@ export class UbicacionesService {
     return {
       distrito:
         address?.city_district ??
+        address?.district ??
         address?.suburb ??
         address?.neighbourhood ??
+        address?.quarter ??
+        address?.borough ??
         address?.town ??
         address?.village ??
+        address?.hamlet ??
         address?.city ??
+        address?.municipality ??
         null,
       provincia:
         address?.state_district ??
+        address?.province ??
         address?.county ??
         address?.municipality ??
         address?.city ??
         null,
-      departamento: address?.state ?? null,
+      departamento: address?.state ?? address?.region ?? null,
     };
   }
 

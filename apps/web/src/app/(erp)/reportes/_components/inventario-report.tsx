@@ -22,8 +22,8 @@ import { toast } from "sonner";
 import { useStock, useAlmacenes } from "@/hooks/use-inventario";
 import { useReporteStock } from "@/hooks/use-configuracion";
 import { useDebounce } from "@/hooks/use-debounce";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ import { cn } from "@/lib/utils";
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const REPORTE_INVENTARIO_REFRESH_TOAST_ID = "reporte-inventario-refresh";
+
 
 function exportToCSV(rows: StockListItem[], filename: string) {
   const header = [
@@ -174,14 +174,7 @@ export default function ReporteInventarioTab() {
     await Promise.all([refetchStock(), refetchReporte(), refetchAlmacenes()]);
   }, [refetchStock, refetchReporte, refetchAlmacenes]);
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "reporte-inventario",
-    toastLabel: "Reporte de inventario",
-    manualToastMessage: "Reporte actualizado",
-    toastId: REPORTE_INVENTARIO_REFRESH_TOAST_ID,
-    onRefresh: refetchAll,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleExportCSV = useCallback(() => {
     if (rows.length === 0) {
@@ -324,10 +317,7 @@ export default function ReporteInventarioTab() {
         </div>
 
         <div className="ml-auto flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-end">
-          <PageAutoRefreshControl
-            autoRefresh={autoRefresh}
-            isRefreshing={isRefreshing}
-          />
+          <RealtimeStatus />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -337,7 +327,7 @@ export default function ReporteInventarioTab() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleManualRefresh}>
+              <DropdownMenuItem onClick={() => void refetchAll()}>
                 <RefreshCcw className="size-4" />
                 Actualizar lista
               </DropdownMenuItem>

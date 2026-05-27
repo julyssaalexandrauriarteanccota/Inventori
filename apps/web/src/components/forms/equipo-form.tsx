@@ -90,6 +90,11 @@ const ESTADO_COMERCIAL_LABELS: Record<EstadoComercialEquipo, string> = {
   [EstadoComercialEquipo.BAJA]: "Baja",
 };
 
+const ESTADOS_COMERCIALES_MANUALES: EstadoComercialEquipo[] = [
+  EstadoComercialEquipo.DISPONIBLE,
+  EstadoComercialEquipo.USO_INTERNO,
+];
+
 const CONDICION_LABELS: Record<CondicionProducto, string> = {
   [CondicionProducto.NUEVO]: "Nuevo",
   [CondicionProducto.SEMINUEVO]: "Seminuevo",
@@ -157,6 +162,21 @@ export function EquipoForm({
   const almacenId = useWatch({ control, name: "almacenId" });
   const contadorInicial = useWatch({ control, name: "contadorInicial" });
   const fueraDeAlmacen = isEquipoFueraDeAlmacen(estadoComercial);
+  const estadoComercialOptions = useMemo(() => {
+    if (
+      estadoComercial &&
+      !ESTADOS_COMERCIALES_MANUALES.includes(estadoComercial)
+    ) {
+      return [estadoComercial, ...ESTADOS_COMERCIALES_MANUALES];
+    }
+
+    return ESTADOS_COMERCIALES_MANUALES;
+  }, [estadoComercial]);
+  const estadoComercialGestionadoPorAccion = Boolean(
+    estadoComercial &&
+      !ESTADOS_COMERCIALES_MANUALES.includes(estadoComercial),
+  );
+  const bloqueadoPorAsignacionCliente = mode === "edit" && fueraDeAlmacen;
   const [contadorActualEditado, setContadorActualEditado] = useState(
     mode === "edit" && defaultValues?.contadorActual != null,
   );
@@ -316,8 +336,36 @@ export function EquipoForm({
     valueAsNumber: true,
   });
 
+  function handleValidSubmit(data: EquipoFormPayload) {
+    const payload: EquipoFormPayload = { ...data };
+
+    if (mode === "create") {
+      if (!payload.almacenId) {
+        toast.error("Selecciona un almacén interno para ingresar el equipo.");
+        return;
+      }
+
+      payload.estado = EstadoEquipo.ACTIVO;
+      payload.estadoComercial =
+        payload.estadoComercial ?? EstadoComercialEquipo.DISPONIBLE;
+      payload.fechaIngreso = undefined;
+    }
+
+    if (mode === "edit" && estadoComercialGestionadoPorAccion) {
+      delete payload.estado;
+      delete payload.estadoComercial;
+    }
+
+    if (mode === "edit" && bloqueadoPorAsignacionCliente) {
+      delete payload.almacenId;
+      delete payload.ubicacion;
+    }
+
+    onSubmit(payload);
+  }
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form onSubmit={handleSubmit(handleValidSubmit)} noValidate>
       <FieldGroup className="gap-4 sm:gap-8">
         {/* Banner: explicar la relación catálogo ↔ instancia */}
         <div className="flex gap-3.5 rounded-xl border border-blue-500/15 bg-blue-500/[0.03] dark:border-blue-400/10 dark:bg-blue-400/[0.03] p-4 text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.5)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-sm">
@@ -610,21 +658,28 @@ export function EquipoForm({
               <FieldError>{errors.firmware?.message}</FieldError>
             </Field>
 
-            <Field data-invalid={errors.fechaIngreso ? true : undefined}>
-              <FieldLabel>Fecha de ingreso</FieldLabel>
-              <DatePicker
-                value={fechaIngresoStr}
-                onChange={(v) =>
-                  setValue("fechaIngreso", v, {
-                    shouldDirty: true,
-                    shouldValidate: true,
-                  })
-                }
-                placeholder="Seleccionar fecha de ingreso"
-                aria-invalid={!!errors.fechaIngreso}
-              />
-              <FieldError>{errors.fechaIngreso?.message}</FieldError>
-            </Field>
+            {mode === "edit" ? (
+              <Field data-invalid={errors.fechaIngreso ? true : undefined}>
+                <FieldLabel>Fecha de ingreso</FieldLabel>
+                <DatePicker
+                  value={fechaIngresoStr}
+                  onChange={(v) =>
+                    setValue("fechaIngreso", v, {
+                      shouldDirty: true,
+                      shouldValidate: true,
+                    })
+                  }
+                  placeholder="Seleccionar fecha de ingreso"
+                  aria-invalid={!!errors.fechaIngreso}
+                />
+                <FieldError>{errors.fechaIngreso?.message}</FieldError>
+              </Field>
+            ) : (
+              <Field>
+                <FieldLabel>Fecha de ingreso</FieldLabel>
+                <Input value="Automática al guardar" disabled />
+              </Field>
+            )}
 
             <Field
               data-invalid={errors.procedencia ? true : undefined}
@@ -666,13 +721,21 @@ export function EquipoForm({
                     shouldDirty: true,
                   })
                 }
+                disabled={
+                  mode === "create" ||
+                  estadoComercialGestionadoPorAccion ||
+                  isLoading
+                }
               >
                 <SelectTrigger aria-invalid={!!errors.estado}>
                   <SelectValue placeholder="Seleccionar estado" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {Object.values(EstadoEquipo).map((est) => (
+                    {(mode === "create"
+                      ? [EstadoEquipo.ACTIVO]
+                      : Object.values(EstadoEquipo)
+                    ).map((est) => (
                       <SelectItem key={est} value={est}>
                         {ESTADO_LABELS[est]}
                       </SelectItem>
@@ -680,6 +743,17 @@ export function EquipoForm({
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              {mode === "create" ? (
+                <FieldDescription>
+                  El alta inicia como activo. Reparación y baja se gestionan
+                  después desde soporte o acciones del equipo.
+                </FieldDescription>
+              ) : estadoComercialGestionadoPorAccion ? (
+                <FieldDescription>
+                  Este estado se gestiona desde soporte o desde el flujo
+                  comercial, no desde edición manual.
+                </FieldDescription>
+              ) : null}
               <FieldError>{errors.estado?.message}</FieldError>
             </Field>
 
@@ -693,13 +767,14 @@ export function EquipoForm({
                     shouldDirty: true,
                   })
                 }
+                disabled={estadoComercialGestionadoPorAccion || isLoading}
               >
                 <SelectTrigger aria-invalid={!!errors.estadoComercial}>
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {Object.values(EstadoComercialEquipo).map((est) => (
+                    {estadoComercialOptions.map((est) => (
                       <SelectItem key={est} value={est}>
                         {ESTADO_COMERCIAL_LABELS[est]}
                       </SelectItem>
@@ -707,6 +782,17 @@ export function EquipoForm({
                   </SelectGroup>
                 </SelectContent>
               </Select>
+              {estadoComercialGestionadoPorAccion ? (
+                <FieldDescription>
+                  Este estado se cambia desde las acciones del equipo, no desde
+                  edición manual.
+                </FieldDescription>
+              ) : (
+                <FieldDescription>
+                  Venta, alquiler, reserva y baja se gestionan con acciones del
+                  equipo.
+                </FieldDescription>
+              )}
               <FieldError>{errors.estadoComercial?.message}</FieldError>
             </Field>
 
@@ -763,10 +849,13 @@ export function EquipoForm({
                 <MapPin className="size-3.5 text-amber-600 dark:text-amber-400" />
               </div>
               <h3 className="text-sm font-semibold text-foreground truncate tracking-tight">
-                Ubicación física
+                {fueraDeAlmacen
+                  ? "Instalación en cliente"
+                  : "Ubicación interna"}
               </h3>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {fueraDeAlmacen && !bloqueadoPorAsignacionCliente ? (
+              <div className="flex flex-wrap items-center gap-2">
               {locationPickerValue.latitud != null &&
               locationPickerValue.longitud != null ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/[0.05] dark:border-amber-400/15 dark:bg-amber-400/[0.05] px-2.5 py-0.5 font-mono text-[10px] font-medium text-amber-700 dark:text-amber-300 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
@@ -785,6 +874,7 @@ export function EquipoForm({
                 {showLocationTools ? "Ocultar mapa" : "Mapa y coordenadas"}
               </Button>
             </div>
+            ) : null}
           </div>
 
           <div className={cn("grid gap-4 sm:gap-6")}>
@@ -814,7 +904,7 @@ export function EquipoForm({
                     <SelectItem value="__none">
                       {fueraDeAlmacen
                         ? "Fuera de almacén interno"
-                        : "Sin almacén definido"}
+                        : "Seleccionar almacén interno"}
                     </SelectItem>
                     {almacenesActivos.map((almacen) => (
                       <SelectItem key={almacen.id} value={almacen.id}>
@@ -835,17 +925,34 @@ export function EquipoForm({
             </Field>
 
             <Field data-invalid={errors.ubicacion ? true : undefined}>
-              <FieldLabel>Dirección / lugar de instalación</FieldLabel>
+              <FieldLabel>
+                {fueraDeAlmacen
+                  ? "Dirección de instalación del cliente"
+                  : "Referencia interna opcional"}
+              </FieldLabel>
               <Input
                 {...register("ubicacion")}
-                placeholder="Ej: Oficina Lima, Piso 3"
+                placeholder={
+                  fueraDeAlmacen
+                    ? "Ej: Oficina Lima, Piso 3"
+                    : "Ej: Pasillo A, rack 2, sala técnica"
+                }
                 startIcon={MapPin}
+                disabled={bloqueadoPorAsignacionCliente || isLoading}
                 aria-invalid={!!errors.ubicacion}
               />
+              {bloqueadoPorAsignacionCliente ? (
+                <FieldDescription>
+                  La instalación de un equipo vendido o alquilado se modifica
+                  desde su venta, alquiler o ticket de soporte.
+                </FieldDescription>
+              ) : null}
               <FieldError>{errors.ubicacion?.message}</FieldError>
             </Field>
 
-            {showLocationTools ? (
+            {fueraDeAlmacen &&
+            !bloqueadoPorAsignacionCliente &&
+            showLocationTools ? (
               <div className="rounded-xl border border-border/40 dark:border-border/20 p-1.5 bg-muted/10">
                 <LocationPicker
                   value={locationPickerValue}

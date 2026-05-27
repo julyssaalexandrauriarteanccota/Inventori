@@ -122,10 +122,10 @@ export function VentaCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up",
+        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 animate-fade-up",
         isSelected
           ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md ring-2 ring-[var(--accent)]/20"
-          : "border-border hover:border-ring/50 hover:shadow-md",
+          : "border-border/80 hover:border-primary/20 hover:shadow-md",
         onToggleSelect && "cursor-pointer"
       )}
       onClick={onToggleSelect}

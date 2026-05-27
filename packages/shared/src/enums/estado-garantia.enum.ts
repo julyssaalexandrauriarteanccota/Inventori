@@ -1,4 +1,5 @@
 export enum EstadoGarantia {
+  PENDIENTE_COMPLETAR = 'PENDIENTE_COMPLETAR',
   ACTIVA = 'ACTIVA',
   VENCIDA = 'VENCIDA',
   ANULADA = 'ANULADA',

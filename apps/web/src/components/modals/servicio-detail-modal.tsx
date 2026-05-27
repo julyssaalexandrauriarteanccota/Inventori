@@ -59,8 +59,8 @@ export function ServicioDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto p-0 sm:max-w-2xl rounded-3xl border border-border/60 shadow-2xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
-        <DialogHeader className="border-b border-border/60 px-5 py-4 pr-12">
+      <DialogContent className="flex h-[88vh] max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl md:max-w-4xl lg:max-w-5xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+        <DialogHeader className="shrink-0 border-b border-border/60 px-5 py-4 pr-12">
           <div className="flex items-center gap-3">
             <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[var(--semantic-primary-soft)] text-[var(--semantic-primary)] transition-all duration-300">
               <Wrench className="size-5" />
@@ -76,7 +76,7 @@ export function ServicioDetailModal({
           </div>
         </DialogHeader>
 
-        <div className="grid gap-4 px-5 pb-5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-5 py-5 space-y-4">
           {isLoading ? (
             <div className="grid gap-3 py-2">
               {Array.from({ length: 5 }).map((_, i) => (

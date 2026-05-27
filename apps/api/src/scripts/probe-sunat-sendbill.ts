@@ -12,8 +12,7 @@ import { SunatCredentialsService } from '../modules/facturacion/sunat-credential
 import { SunatPayloadBuilder } from '../modules/facturacion/sunat-payload.builder';
 import { SunatXmlSigner } from '../modules/facturacion/sunat-xml.signer';
 
-const comprobanteId =
-  process.argv[2] ?? 'a6999772-c566-4a17-bc7a-03339011b063';
+const comprobanteId = process.argv[2] ?? 'a6999772-c566-4a17-bc7a-03339011b063';
 const onlyVariant = process.argv[3];
 
 interface ProbeVariant {
@@ -42,7 +41,12 @@ function replaceHeaderIdentity(
     );
 }
 
-function fileNames(ruc: string, tipo: string, serie: string, correlativo: number) {
+function fileNames(
+  ruc: string,
+  tipo: string,
+  serie: string,
+  correlativo: number,
+) {
   const padded = String(correlativo).padStart(8, '0');
   const fileName = `${ruc}-${tipo}-${serie}-${padded}`;
   return { fileName, xmlFileName: `${fileName}.xml` };
@@ -94,7 +98,8 @@ async function main() {
         },
       },
     });
-    if (!comprobante) throw new Error(`Comprobante ${comprobanteId} no encontrado`);
+    if (!comprobante)
+      throw new Error(`Comprobante ${comprobanteId} no encontrado`);
 
     const built = builder.buildInvoice(comprobante);
     const variants: ProbeVariant[] = [
@@ -115,10 +120,7 @@ async function main() {
       {
         name: 'cac-uri-empty',
         mutate: (xml) =>
-          xml.replace(
-            '<cbc:URI>#SignatureSP</cbc:URI>',
-            '<cbc:URI></cbc:URI>',
-          ),
+          xml.replace('<cbc:URI>#SignatureSP</cbc:URI>', '<cbc:URI></cbc:URI>'),
       },
       {
         name: 'cac-uri-ruc',
@@ -178,7 +180,7 @@ async function main() {
         name: 'no-payment-terms',
         mutate: (xml) =>
           xml.replace(
-            /\n  <cac:PaymentTerms>[\s\S]*?<\/cac:PaymentTerms>/,
+            /\n {2}<cac:PaymentTerms>[\s\S]*?<\/cac:PaymentTerms>/,
             '',
           ),
       },

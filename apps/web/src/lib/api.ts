@@ -33,6 +33,24 @@ export class ApiError extends Error {
   }
 }
 
+export function isApiConnectionError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    (error.code === 'API_CONNECTION_ERROR' || error.statusCode === 0)
+  )
+}
+
+function toConnectionError(error: unknown) {
+  if (error instanceof ApiError) return error
+
+  return new ApiError(
+    'No se pudo conectar con el servidor API. Revisa que el backend este levantado.',
+    0,
+    'API_CONNECTION_ERROR',
+    { cause: error instanceof Error ? error.message : String(error) },
+  )
+}
+
 let isRefreshing = false
 let refreshPromise: Promise<boolean> | null = null
 
@@ -78,8 +96,8 @@ async function attemptRefresh(): Promise<boolean> {
       return true
     }
     return false
-  } catch {
-    return false
+  } catch (error) {
+    throw toConnectionError(error)
   }
 }
 
@@ -102,30 +120,40 @@ async function fetchApi<T>(endpoint: string, options: FetchOptions = {}): Promis
 
   const authToken = token || (!skipAuth ? getToken() : null)
 
-  const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(headers as Record<string, string>),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    ...rest,
-  })
+  let res: Response
+  try {
+    res = await fetch(`${API_BASE_URL}${endpoint}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(headers as Record<string, string>),
+      },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+      ...rest,
+    })
+  } catch (error) {
+    throw toConnectionError(error)
+  }
 
   if (res.status === 401 && !skipAuth && !endpoint.includes('/auth/')) {
     const refreshed = await handleRefresh()
 
     if (refreshed) {
       const newToken = getToken()
-      const retryRes = await fetch(`${API_BASE_URL}${endpoint}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...(newToken ? { Authorization: `Bearer ${newToken}` } : {}),
-          ...(headers as Record<string, string>),
-        },
-        ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-        ...rest,
-      })
+      let retryRes: Response
+      try {
+        retryRes = await fetch(`${API_BASE_URL}${endpoint}`, {
+          headers: {
+            'Content-Type': 'application/json',
+            ...(newToken ? { Authorization: `Bearer ${newToken}` } : {}),
+            ...(headers as Record<string, string>),
+          },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+          ...rest,
+        })
+      } catch (error) {
+        throw toConnectionError(error)
+      }
 
       if (!retryRes.ok) {
         const errorData: ApiErrorResponse = await retryRes.json().catch(() => ({}))
@@ -164,14 +192,19 @@ async function fetchApiBlob(endpoint: string, options: FetchOptions = {}) {
   const { token, headers, body: _body, skipAuth, ...rest } = options
   const authToken = token || (!skipAuth ? getToken() : null)
 
-  const request = (currentToken: string | null) =>
-    fetch(`${API_BASE_URL}${endpoint}`, {
-      headers: {
-        ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
-        ...(headers as Record<string, string>),
-      },
-      ...rest,
-    })
+  const request = async (currentToken: string | null) => {
+    try {
+      return await fetch(`${API_BASE_URL}${endpoint}`, {
+        headers: {
+          ...(currentToken ? { Authorization: `Bearer ${currentToken}` } : {}),
+          ...(headers as Record<string, string>),
+        },
+        ...rest,
+      })
+    } catch (error) {
+      throw toConnectionError(error)
+    }
+  }
 
   let res = await request(authToken)
 
@@ -223,11 +256,16 @@ export const api = {
 
   upload: async <T>(endpoint: string, formData: FormData): Promise<T> => {
     const token = getToken()
-    const res = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: formData,
-    })
+    let res: Response
+    try {
+      res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      })
+    } catch (error) {
+      throw toConnectionError(error)
+    }
     if (!res.ok) {
       const errorData: ApiErrorResponse = await res.json().catch(() => ({}))
       throw new ApiError(

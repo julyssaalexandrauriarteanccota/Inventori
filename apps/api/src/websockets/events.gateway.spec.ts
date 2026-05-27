@@ -2,13 +2,18 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventsGateway } from './events.gateway';
 import { RolUsuario } from '@erp/shared';
+import { PrismaService } from '../database/prisma.service';
 
 describe('EventsGateway', () => {
   let gateway: EventsGateway;
   let mockJwtService: { verify: jest.Mock };
+  let mockPrismaService: {
+    usuario: { findFirst: jest.Mock };
+  };
 
   beforeEach(() => {
     mockJwtService = { verify: jest.fn() };
+    mockPrismaService = { usuario: { findFirst: jest.fn() } };
     const mockConfig = {
       getOrThrow: jest.fn().mockReturnValue('test-secret'),
     } as unknown as ConfigService;
@@ -16,6 +21,7 @@ describe('EventsGateway', () => {
     gateway = new EventsGateway(
       mockJwtService as unknown as JwtService,
       mockConfig,
+      mockPrismaService as unknown as PrismaService,
     );
   });
 
@@ -34,6 +40,10 @@ describe('EventsGateway', () => {
       sub: 'user-abc',
       email: 'test@mail.com',
       rol: RolUsuario.ADMIN,
+      sv: 1,
+    });
+    mockPrismaService.usuario.findFirst.mockResolvedValue({
+      sessionVersion: 1,
     });
 
     await gateway.handleConnection(client);
@@ -97,6 +107,10 @@ describe('EventsGateway', () => {
       sub: 'user-xyz',
       email: 'user@mail.com',
       rol: RolUsuario.TECNICO,
+      sv: 2,
+    });
+    mockPrismaService.usuario.findFirst.mockResolvedValue({
+      sessionVersion: 2,
     });
 
     await gateway.handleConnection(client);

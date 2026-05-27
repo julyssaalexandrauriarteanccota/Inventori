@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
 import { useReporteVentas } from "@/hooks/use-configuracion";
 import { useVentas } from "@/hooks/use-ventas";
 import { useDebounce } from "@/hooks/use-debounce";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
+
 import { StatCard } from "@/components/layout/stat-card";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -125,7 +125,7 @@ function exportToCSV(rows: VentaListItem[], filename: string) {
 
 const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const REPORTE_VENTAS_REFRESH_TOAST_ID = "reporte-ventas-refresh";
+
 
 /* ── Page ───────────────────────────────────────────── */
 
@@ -181,14 +181,7 @@ export default function ReporteVentasTab() {
     await Promise.all([refetch(), refetchReporte()]);
   }, [refetch, refetchReporte]);
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "reporte-ventas",
-    toastLabel: "Reporte de ventas",
-    manualToastMessage: "Reporte actualizado",
-    toastId: REPORTE_VENTAS_REFRESH_TOAST_ID,
-    onRefresh: refetchAll,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleSearchChange = (value: string) => {
     setSearch(value);
@@ -329,10 +322,7 @@ export default function ReporteVentasTab() {
         </div>
 
         <div className="ml-auto flex max-w-full items-center gap-2 shrink-0 flex-wrap justify-end">
-          <PageAutoRefreshControl
-            autoRefresh={autoRefresh}
-            isRefreshing={isRefreshing}
-          />
+          <RealtimeStatus />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -342,7 +332,7 @@ export default function ReporteVentasTab() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleManualRefresh}>
+              <DropdownMenuItem onClick={() => void refetchAll()}>
                 <RefreshCcw className="size-4" />
                 Actualizar lista
               </DropdownMenuItem>

@@ -1,6 +1,7 @@
 import { EstadoTicket } from '../enums/ticket-estado.enum'
 import { PrioridadTicket } from '../enums/prioridad-ticket.enum'
 import { TipoServicio } from '../enums/tipo-servicio.enum'
+import { EstadoGarantia } from '../enums/estado-garantia.enum'
 import { PaginatedResponse, QueryParams } from './pagination.type'
 
 export interface TicketDetallePayload {
@@ -14,7 +15,8 @@ export interface TicketDetallePayload {
 
 export interface TicketFormPayload {
   clienteId: string
-  equipoId?: string
+  equipoId?: string | null
+  clienteEquipoId?: string | null
   tecnicoId?: string
   titulo: string
   descripcion: string
@@ -70,9 +72,21 @@ export interface TicketListItem {
   estado: EstadoTicket
   prioridad: PrioridadTicket
   tipoServicio: TipoServicio
-  cliente?: { id: string; nombre: string } | null
+  cliente?: {
+    id: string
+    nombre: string | null
+    apellido?: string | null
+    razonSocial?: string | null
+  } | null
   tecnico?: { id: string; nombre: string } | null
   equipo?: { id: string; numeroSerie: string } | null
+  clienteEquipo?: {
+    id: string
+    numeroSerie: string
+    nombre: string | null
+    marca: string | null
+    modelo: string | null
+  } | null
   createdAt?: string
 }
 
@@ -95,6 +109,7 @@ export interface TicketHistorialEntry {
   valorAnterior: string | null
   valorNuevo: string | null
   creadoEn: string
+  notas?: string | null
   usuario?: { nombre: string } | null
 }
 
@@ -111,6 +126,7 @@ export interface TicketDetalleEntry {
     sku?: string
     tipo?: string
     requiereRepuestos?: boolean
+    precioVenta?: number
   }
 }
 
@@ -129,6 +145,17 @@ export interface TicketCasoGarantia {
     cobertura: string
     estado: string
   }
+}
+
+export interface TicketGarantiaActual {
+  id: string
+  codigoQR: string
+  fechaInicio: string
+  fechaFin: string
+  cobertura: string
+  exclusiones?: string | null
+  estado: EstadoGarantia
+  vigente?: boolean
 }
 
 export interface TicketAdjuntoEntry {
@@ -158,14 +185,41 @@ export interface TicketDetalle {
   montoManoObra: number | null
   montoRepuestos?: number | null
   montoTotal?: number | null
-  cliente: { id: string; nombre: string } | null
-  equipo: { id: string; numeroSerie: string; modelo: string } | null
+  cliente: {
+    id: string
+    nombre: string | null
+    apellido?: string | null
+    razonSocial?: string | null
+  } | null
+  equipo: {
+    id: string
+    numeroSerie: string
+    modelo?: string | null
+    producto?: {
+      id: string
+      nombre: string
+      modelo: string | null
+      modeloCatalogoId?: string | null
+      modeloCatalogo?: {
+        id: string
+        nombre: string
+      } | null
+    } | null
+  } | null
+  clienteEquipo?: {
+    id: string
+    numeroSerie: string
+    nombre: string | null
+    marca: string | null
+    modelo: string | null
+  } | null
   tecnico: { id: string; nombre: string } | null
   historial: TicketHistorialEntry[]
   /** @deprecated usar `detalles`. Se mantiene por compatibilidad. */
   repuestos: TicketRepuestoEntry[]
   detalles?: TicketRepuestoEntry[]
   casos?: TicketCasoGarantia[]
+  garantiaActual?: TicketGarantiaActual | null
   adjuntos?: TicketAdjuntoEntry[]
   creadoEn: string
   actualizadoEn: string

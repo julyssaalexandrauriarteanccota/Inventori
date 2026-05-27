@@ -14,8 +14,16 @@ describe('erp-navigation', () => {
     const ventas = navigation.find((item) => item.url === '/ventas')
     expect(ventas).toBeUndefined()
 
+    const equipos = navigation.find((item) => item.url === '/equipos')
+    expect(equipos).toBeUndefined()
+
     const soporte = navigation.find((item) => item.url === '/soporte')
     expect(soporte).toBeDefined()
+
+    const equiposExternos = navigation.find(
+      (item) => item.url === '/soporte/equipos-externos',
+    )
+    expect(equiposExternos).toBeDefined()
   })
 
   it('bloquea accesos directos que tecnico no debe abrir', () => {
@@ -25,7 +33,9 @@ describe('erp-navigation', () => {
 
   it('permite accesos operativos segun rol', () => {
     expect(canAccessErpPath('/ventas/cotizaciones', RolUsuario.TECNICO)).toBe(false)
+    expect(canAccessErpPath('/equipos', RolUsuario.TECNICO)).toBe(false)
     expect(canAccessErpPath('/soporte', RolUsuario.TECNICO)).toBe(true)
+    expect(canAccessErpPath('/soporte/equipos-externos', RolUsuario.TECNICO)).toBe(true)
     expect(canAccessErpPath('/reportes/ventas', RolUsuario.ENCARGADO)).toBe(true)
     expect(canAccessErpPath('/dashboard', RolUsuario.TECNICO)).toBe(true)
   })

@@ -36,6 +36,7 @@ function buildRemotePatterns(): NonNullable<NonNullable<NextConfig['images']>['r
 }
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ['172.28.64.1'],
   // NOTE: turbopack.root removed — apuntaba al monorepo root (../../) lo que
   // hacía que Turbopack observara demasiados archivos en Windows y rompía HMR.
   // @erp/shared se resuelve via node_modules symlink de pnpm workspaces.

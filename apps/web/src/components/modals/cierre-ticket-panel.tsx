@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ImagePlus, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@erp/shared";
 
 import { useProductos } from "@/hooks/use-productos";
-import { useGarantias } from "@/hooks/use-garantias";
+import { useAlmacenes, useStockByProducto } from "@/hooks/use-inventario";
 import {
   useAgregarDetalleTicket,
   useUpdateDetalleTicket,
@@ -28,6 +28,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import { CerrarTicketForm } from "@/components/forms/cerrar-ticket-form";
 import { cn } from "@/lib/utils";
 
@@ -42,6 +43,7 @@ type DetalleLine = {
     sku?: string;
     tipo?: string;
     requiereRepuestos?: boolean;
+    precioVenta?: number;
   };
 };
 
@@ -52,7 +54,6 @@ interface CierreTicketPanelProps {
 
 export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
   const ticketId = ticket.id;
-  const equipoId = (ticket.equipo as { id?: string } | undefined)?.id;
   const tecnicoAsignadoId = ticket.tecnico?.id ?? null;
   const { user } = useAuth();
   const esTecnicoAsignado =
@@ -62,16 +63,27 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
     (d) => !!d.id,
   );
   const serviciosDelTicket = detalles.filter(
-    (d) => d.producto?.tipo === TipoProducto.SERVICIO,
+    (detalle) => detalle.producto?.tipo === TipoProducto.SERVICIO,
   );
-  const permiteRepuestos = serviciosDelTicket.some(
-    (d) => d.producto?.requiereRepuestos === true,
+  const serviciosQuePermitenRepuestos = serviciosDelTicket.filter(
+    (detalle) => detalle.producto?.requiereRepuestos,
   );
+  const equipoModeloCatalogoId =
+    ticket.equipo?.producto?.modeloCatalogoId ??
+    ticket.equipo?.producto?.modeloCatalogo?.id ??
+    null;
 
-  const { data: garantiasRes } = useGarantias(
-    equipoId ? { equipoId, estado: EstadoGarantia.ACTIVA } : {},
+  const tieneCasoAceptado = (ticket.casos ?? []).some(
+    (caso) => caso.aceptada !== false,
   );
-  const tieneGarantiaActiva = (garantiasRes?.data ?? []).length > 0;
+  const garantiaActual = ticket.garantiaActual ?? null;
+  const garantiaOperativa =
+    tieneCasoAceptado ||
+    (garantiaActual?.estado === EstadoGarantia.ACTIVA &&
+      garantiaActual.vigente !== false);
+  const garantiaPendiente =
+    !garantiaOperativa &&
+    garantiaActual?.estado === EstadoGarantia.PENDIENTE_COMPLETAR;
 
   const agregar = useAgregarDetalleTicket(ticketId);
   const updateDetalle = useUpdateDetalleTicket(ticketId);
@@ -81,13 +93,26 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
   const totales = useMemo(() => {
     let manoObra = 0;
     let repuestos = 0;
+    let serviciosCount = 0;
+    let repuestosCount = 0;
     for (const d of detalles) {
       if (d.cubiertoGarantia) continue;
       const subtotal = Number(d.cantidad) * Number(d.precioUnitario);
-      if (d.producto?.tipo === TipoProducto.SERVICIO) manoObra += subtotal;
-      else repuestos += subtotal;
+      if (d.producto?.tipo === TipoProducto.SERVICIO) {
+        manoObra += subtotal;
+        serviciosCount += 1;
+      } else {
+        repuestos += subtotal;
+        repuestosCount += 1;
+      }
     }
-    return { manoObra, repuestos, total: manoObra + repuestos };
+    return {
+      manoObra,
+      repuestos,
+      total: manoObra + repuestos,
+      serviciosCount,
+      repuestosCount,
+    };
   }, [detalles]);
 
   return (
@@ -104,12 +129,22 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
         adding={agregar.isPending}
         productoFilter={{ tipo: TipoProducto.SERVICIO }}
         itemLabel="servicio"
+        resetOnAdd={false}
+        defaultCubiertoGarantia={garantiaOperativa}
       />
 
-      {permiteRepuestos ? (
+      {garantiaPendiente ? (
+        <GarantiaPendienteNotice />
+      ) : null}
+
+      {serviciosQuePermitenRepuestos.length > 0 ? (
         <AgregarLinea
           title="Repuestos utilizados"
-          helper="Descuenta stock automáticamente."
+          helper={
+            equipoModeloCatalogoId
+              ? "Muestra repuestos compatibles con el modelo del equipo."
+              : "Selecciona repuestos utilizados en el trabajo."
+          }
           onAdd={(payload) =>
             agregar.mutate(payload, {
               onSuccess: () => toast.success("Repuesto agregado"),
@@ -119,6 +154,8 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
           adding={agregar.isPending}
           productoFilter={{ tipo: TipoProducto.REPUESTO }}
           itemLabel="repuesto"
+          compatibleModeloId={equipoModeloCatalogoId}
+          defaultCubiertoGarantia={garantiaOperativa}
         />
       ) : (
         <RepuestosBloqueadosNotice hasServicios={serviciosDelTicket.length > 0} />
@@ -126,11 +163,20 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
 
       <DetallesEditableTable
         rows={detalles}
-        tieneGarantiaActiva={tieneGarantiaActiva}
+        garantiaOperativa={garantiaOperativa}
         onToggleGarantia={(detalleId, value) =>
           updateDetalle.mutate(
             { detalleId, data: { cubiertoGarantia: value } },
             { onError: (e: Error) => toast.error(e.message) },
+          )
+        }
+        onUpdate={(detalleId, data) =>
+          updateDetalle.mutate(
+            { detalleId, data },
+            {
+              onSuccess: () => toast.success("Línea actualizada"),
+              onError: (e: Error) => toast.error(e.message),
+            },
           )
         }
         onRemove={(detalleId) =>
@@ -146,7 +192,9 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
         manoObra={totales.manoObra}
         repuestos={totales.repuestos}
         total={totales.total}
-        tieneGarantiaActiva={tieneGarantiaActiva}
+        serviciosCount={totales.serviciosCount}
+        repuestosCount={totales.repuestosCount}
+        garantiaOperativa={garantiaOperativa}
       />
 
       {esTecnicoAsignado && (
@@ -166,14 +214,29 @@ export function CierreTicketPanel({ ticket, onClose }: CierreTicketPanelProps) {
 
 /* ── Sub-components ─────────────────────────────────── */
 
+function GarantiaPendienteNotice() {
+  return (
+    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+      <h4 className="font-semibold text-amber-800">
+        Garantía pendiente de activar
+      </h4>
+      <p className="mt-1 text-xs text-muted-foreground">
+        El equipo tiene una garantía registrada por la venta, pero aún no se
+        usa para cubrir servicios o repuestos. Completa y activa la garantía
+        para habilitar la columna de cobertura.
+      </p>
+    </div>
+  );
+}
+
 function RepuestosBloqueadosNotice({ hasServicios }: { hasServicios: boolean }) {
   return (
     <div className="rounded-2xl border border-dashed border-border/60 bg-muted/20 p-4">
       <h4 className="text-sm font-semibold mb-1">Repuestos no disponibles</h4>
       <p className="text-xs text-muted-foreground">
         {hasServicios
-          ? "Los servicios registrados en este ticket no requieren repuestos. Si el trabajo sí consumió piezas, agrega o cambia a un servicio que permita repuestos."
-          : "Agrega primero el servicio realizado. Los repuestos se habilitan solo cuando el servicio seleccionado los requiere."}
+          ? "Los servicios registrados en este ticket no requieren repuestos. Agrega o cambia a un servicio que tenga activado Requiere repuestos."
+          : "Agrega primero un servicio realizado que tenga activado Requiere repuestos."}
       </p>
     </div>
   );
@@ -186,11 +249,15 @@ function AgregarLinea({
   adding,
   productoFilter,
   itemLabel,
+  resetOnAdd = true,
+  compatibleModeloId,
+  defaultCubiertoGarantia = false,
 }: {
   title: string;
   helper: string;
   onAdd: (p: {
     productoId: string;
+    almacenId?: string;
     cantidad: number;
     precioUnitario: number;
     cubiertoGarantia?: boolean;
@@ -198,10 +265,12 @@ function AgregarLinea({
   adding: boolean;
   productoFilter: { tipo?: TipoProducto; excluirTipos?: TipoProducto[] };
   itemLabel: "servicio" | "repuesto";
+  resetOnAdd?: boolean;
+  compatibleModeloId?: string | null;
+  defaultCubiertoGarantia?: boolean;
 }) {
   const [productoId, setProductoId] = useState("");
-  const [cantidad, setCantidad] = useState<number>(1);
-  const [precio, setPrecio] = useState<number>(0);
+  const [almacenId, setAlmacenId] = useState("");
 
   const { data: productosRes, isLoading } = useProductos({
     page: 1,
@@ -209,16 +278,95 @@ function AgregarLinea({
     activo: true,
     ...productoFilter,
   });
-  const productos = productosRes?.data ?? [];
+  const productosBase = productosRes?.data ?? [];
+  const productos =
+    itemLabel === "repuesto" && compatibleModeloId
+      ? productosBase.filter((producto) => {
+          const modeloIds = new Set(producto.modeloIds ?? []);
+          for (const item of producto.modelosCompatibles ?? []) {
+            modeloIds.add(item.modeloCatalogo.id);
+          }
+          return modeloIds.has(compatibleModeloId);
+        })
+      : productosBase;
+  const selectedProducto = productos.find((p) => p.id === productoId);
+  const { data: almacenesRes } = useAlmacenes();
+  const { data: stockRes, isFetching: isLoadingStock } =
+    useStockByProducto(
+      itemLabel === "repuesto" ? productoId || undefined : undefined,
+    );
+  const almacenesActivos = useMemo(
+    () => (almacenesRes?.data ?? []).filter((almacen) => almacen.activo),
+    [almacenesRes?.data],
+  );
+  const stockRows = useMemo(() => stockRes?.data ?? [], [stockRes?.data]);
+  const stockByAlmacen = useMemo(
+    () =>
+      new Map(
+        stockRows.map((row) => [row.almacen.id, Number(row.cantidad)]),
+      ),
+    [stockRows],
+  );
+  const almacenOptions: SearchableSelectOption[] = almacenesActivos.map(
+    (almacen) => {
+      const cantidad = stockByAlmacen.get(almacen.id) ?? 0;
+      const stockLabel =
+        itemLabel === "repuesto" ? ` · Stock: ${cantidad}` : "";
+      const principalLabel = almacen.esPrincipal ? " · principal" : "";
+
+      return {
+        value: almacen.id,
+        label: `${almacen.nombre}${stockLabel}${principalLabel}`,
+      };
+    },
+  );
+  const stockSeleccionado = almacenId
+    ? (stockByAlmacen.get(almacenId) ?? 0)
+    : 0;
   const opciones: SearchableSelectOption[] = productos.map((p) => ({
     value: p.id,
     label: `${p.sku} · ${p.nombre}`,
   }));
 
+  useEffect(() => {
+    if (itemLabel !== "repuesto") return;
+    if (!productoId || almacenesActivos.length === 0) {
+      setAlmacenId("");
+      return;
+    }
+
+    const currentIsActive =
+      !!almacenId &&
+      almacenesActivos.some((almacen) => almacen.id === almacenId);
+    const primeroConStock = almacenesActivos.find(
+      (almacen) => (stockByAlmacen.get(almacen.id) ?? 0) > 0,
+    );
+
+    if (
+      currentIsActive &&
+      ((stockByAlmacen.get(almacenId) ?? 0) > 0 || !primeroConStock)
+    ) {
+      return;
+    }
+
+    const principalConStock = almacenesActivos.find(
+      (almacen) =>
+        almacen.esPrincipal && (stockByAlmacen.get(almacen.id) ?? 0) > 0,
+    );
+    const principal = almacenesActivos.find((almacen) => almacen.esPrincipal);
+
+    setAlmacenId(
+      principalConStock?.id ??
+        primeroConStock?.id ??
+        principal?.id ??
+        almacenesActivos[0]?.id ??
+        "",
+    );
+  }, [almacenId, almacenesActivos, itemLabel, productoId, stockByAlmacen]);
+
   const handleSelect = (value: string) => {
     setProductoId(value);
-    const found = productos.find((p) => p.id === value);
-    if (found) setPrecio(Number(found.precioVenta) || 0);
+    setAlmacenId("");
   };
 
   const submit = () => {
@@ -226,62 +374,120 @@ function AgregarLinea({
       toast.error(`Selecciona un ${itemLabel}`);
       return;
     }
-    if (cantidad <= 0) {
-      toast.error("Cantidad debe ser mayor a 0");
+    if (itemLabel === "repuesto" && !almacenId) {
+      toast.error("Selecciona el almacén de origen del repuesto");
       return;
     }
+    if (itemLabel === "repuesto" && stockSeleccionado <= 0) {
+      toast.error("El almacén seleccionado no tiene stock disponible");
+      return;
+    }
+    const precioBase = Number(selectedProducto?.precioVenta) || 0;
     onAdd({
       productoId,
-      cantidad,
-      precioUnitario: precio,
-      cubiertoGarantia: false,
+      ...(itemLabel === "repuesto" ? { almacenId } : {}),
+      cantidad: 1,
+      precioUnitario: precioBase,
+      cubiertoGarantia: defaultCubiertoGarantia,
     });
-    setProductoId("");
-    setCantidad(1);
-    setPrecio(0);
+    if (resetOnAdd) {
+      setProductoId("");
+    }
   };
 
   return (
     <div className="rounded-2xl border border-border/40 bg-card/50 p-4">
       <h4 className="text-sm font-semibold mb-1">{title}</h4>
-      <p className="text-xs text-muted-foreground mb-3">{helper}</p>
-      <div className="grid gap-2 sm:grid-cols-[1fr_90px_110px_auto]">
-        <SearchableSelect
-          value={productoId}
-          onChange={handleSelect}
-          options={opciones}
-          placeholder={isLoading ? "Cargando..." : `Selecciona ${itemLabel}`}
-          searchPlaceholder="Buscar por SKU o nombre"
-          emptyLabel="Sin resultados"
-          ariaLabel={itemLabel === "servicio" ? "Servicio" : "Repuesto"}
-          disabled={isLoading}
-        />
-        <Input
-          type="number"
-          min={1}
-          step={1}
-          value={cantidad}
-          onChange={(e) => setCantidad(Number(e.target.value))}
-          aria-label="Cantidad"
-        />
-        <Input
-          type="number"
-          min={0}
-          step={0.01}
-          value={precio}
-          onChange={(e) => setPrecio(Number(e.target.value))}
-          aria-label="Precio unitario"
-        />
-        <Button
-          type="button"
-          size="sm"
-          className="gap-1"
-          onClick={submit}
-          disabled={adding}
-        >
-          {adding ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+      <p className="text-xs text-muted-foreground mb-3">
+        {helper}
+      </p>
+      <div className="grid gap-3">
+        <div className="grid gap-1.5">
+          <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {itemLabel === "servicio" ? "Servicio" : "Repuesto"}
+          </label>
+          <SearchableSelect
+            value={productoId}
+            onChange={handleSelect}
+            options={opciones}
+            placeholder={isLoading ? "Cargando..." : `Selecciona ${itemLabel}`}
+            searchPlaceholder="Buscar por SKU o nombre"
+            emptyLabel={
+              compatibleModeloId && itemLabel === "repuesto"
+                ? "No hay repuestos compatibles con este modelo."
+                : "Sin resultados"
+            }
+            ariaLabel={itemLabel === "servicio" ? "Servicio" : "Repuesto"}
+            disabled={isLoading}
+            clearable
+            clearLabel={`Quitar ${itemLabel}`}
+          />
+          {selectedProducto && itemLabel === "servicio" ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline" className="text-[10px]">
+                Precio base: S/ {Number(selectedProducto.precioVenta ?? 0).toFixed(2)}
+              </Badge>
+              <Badge variant="outline" className="text-[10px]">
+                {selectedProducto.requiereRepuestos
+                  ? "Habilita repuestos"
+                  : "No usa repuestos"}
+              </Badge>
+            </div>
+          ) : null}
+        </div>
+
+        {itemLabel === "repuesto" ? (
+          <div className="grid gap-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Almacén origen
+            </label>
+            <SearchableSelect
+              value={almacenId}
+              onChange={(value) => setAlmacenId(value || "")}
+              options={almacenOptions}
+              placeholder={
+                !productoId
+                  ? "Selecciona primero un repuesto"
+                  : isLoadingStock
+                    ? "Cargando stock..."
+                    : "Selecciona almacén"
+              }
+              searchPlaceholder="Buscar almacén..."
+              emptyLabel="No hay almacenes activos"
+              ariaLabel="Almacén origen del repuesto"
+              disabled={!productoId || almacenesActivos.length === 0}
+              clearable
+              clearLabel="Quitar almacén"
+            />
+            {productoId && almacenId ? (
+              <p className="text-xs text-muted-foreground">
+                Stock disponible en este almacén: {stockSeleccionado}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1"
+            onClick={submit}
+            disabled={
+              adding ||
+              !productoId ||
+              (itemLabel === "repuesto" &&
+                (!almacenId || stockSeleccionado <= 0))
+            }
+          >
+            {adding ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
             Agregar
-        </Button>
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -289,13 +495,18 @@ function AgregarLinea({
 
 function DetallesEditableTable({
   rows,
-  tieneGarantiaActiva,
+  garantiaOperativa,
+  onUpdate,
   onToggleGarantia,
   onRemove,
   removing,
 }: {
   rows: DetalleLine[];
-  tieneGarantiaActiva: boolean;
+  garantiaOperativa: boolean;
+  onUpdate: (
+    detalleId: string,
+    data: { precioUnitario?: number },
+  ) => void;
   onToggleGarantia: (detalleId: string, value: boolean) => void;
   onRemove: (detalleId: string) => void;
   removing: boolean;
@@ -312,12 +523,11 @@ function DetallesEditableTable({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-border/40 bg-muted/30">
-            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Linea</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Cant.</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">P. Unit.</th>
-            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Subtotal</th>
-            {tieneGarantiaActiva && (
-              <th className="px-3 py-2 text-center font-medium text-muted-foreground">Garantía</th>
+            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Línea</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Precio base</th>
+            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Precio a cobrar</th>
+            {garantiaOperativa && (
+              <th className="px-3 py-2 text-center font-medium text-muted-foreground">Cubierto</th>
             )}
             <th className="px-3 py-2"></th>
           </tr>
@@ -325,8 +535,10 @@ function DetallesEditableTable({
         <tbody>
           {rows.map((d) => {
             const cantidad = Number(d.cantidad);
-            const precio = Number(d.precioUnitario);
-            const subtotal = cantidad * precio;
+            const precioCobro = Number(d.precioUnitario);
+            const subtotal = cantidad * precioCobro;
+            const precioBase = Number(d.producto?.precioVenta ?? precioCobro);
+            const subtotalBase = cantidad * precioBase;
             const tipo = d.producto?.tipo === TipoProducto.SERVICIO ? "Servicio" : "Repuesto";
             return (
               <tr key={d.id} className="border-b border-border/20 last:border-0">
@@ -334,16 +546,32 @@ function DetallesEditableTable({
                   <div className="font-medium truncate max-w-60">{d.producto?.nombre ?? "—"}</div>
                   <div className="text-xs text-muted-foreground">{tipo}</div>
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{cantidad}</td>
-                <td className="px-3 py-2 text-right tabular-nums">S/ {precio.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                  S/ {subtotalBase.toFixed(2)}
+                </td>
                 <td className="px-3 py-2 text-right tabular-nums font-medium">
                   {d.cubiertoGarantia ? (
                     <span className="text-green-600 line-through">S/ {subtotal.toFixed(2)}</span>
                   ) : (
-                    <>S/ {subtotal.toFixed(2)}</>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      defaultValue={subtotal.toFixed(2)}
+                      className="ml-auto h-8 w-24 text-right font-medium"
+                      aria-label="Total de línea"
+                      onBlur={(event) => {
+                        const nextTotal = Number(event.target.value);
+                        if (nextTotal >= 0 && nextTotal !== subtotal) {
+                          onUpdate(d.id, {
+                            precioUnitario: cantidad > 0 ? nextTotal / cantidad : 0,
+                          });
+                        }
+                      }}
+                    />
                   )}
                 </td>
-                {tieneGarantiaActiva && (
+                {garantiaOperativa && (
                   <td className="px-3 py-2 text-center">
                     <Checkbox
                       checked={!!d.cubiertoGarantia}
@@ -377,26 +605,30 @@ function TotalesAuto({
   manoObra,
   repuestos,
   total,
-  tieneGarantiaActiva,
+  serviciosCount,
+  repuestosCount,
+  garantiaOperativa,
 }: {
   manoObra: number;
   repuestos: number;
   total: number;
-  tieneGarantiaActiva: boolean;
+  serviciosCount: number;
+  repuestosCount: number;
+  garantiaOperativa: boolean;
 }) {
   return (
     <div className="rounded-2xl border border-border/40 bg-card/50 p-4">
       <div className="flex items-baseline justify-between mb-2">
         <h4 className="text-sm font-semibold">Totales (calculados)</h4>
-        {tieneGarantiaActiva && (
+        {garantiaOperativa && (
           <span className="text-[11px] text-muted-foreground">
             Las líneas cubiertas por garantía no suman.
           </span>
         )}
       </div>
       <div className="grid gap-2 sm:grid-cols-3 text-sm">
-        <Row label="Mano de obra" value={manoObra} />
-        <Row label="Repuestos" value={repuestos} />
+        <Row label={`Mano de obra (${serviciosCount})`} value={manoObra} />
+        <Row label={`Repuestos (${repuestosCount})`} value={repuestos} />
         <Row label="Total" value={total} bold />
       </div>
     </div>
@@ -447,8 +679,7 @@ function FotosTrabajoPanel({
     }
   };
 
-  const handleDelete = async (adjuntoId: string, nombre: string) => {
-    if (!confirm(`¿Eliminar "${nombre}"?`)) return;
+  const handleDelete = async (adjuntoId: string) => {
     try {
       await remove.mutateAsync(adjuntoId);
       toast.success("Foto eliminada");
@@ -536,7 +767,7 @@ function FotosTrabajoPanel({
               />
               <button
                 type="button"
-                onClick={() => handleDelete(foto.id, foto.nombre)}
+                onClick={() => handleDelete(foto.id)}
                 disabled={remove.isPending}
                 className="absolute right-1 top-1 rounded-md bg-destructive/90 p-1 text-destructive-foreground opacity-0 transition group-hover:opacity-100 disabled:opacity-50"
                 aria-label={`Eliminar ${foto.nombre}`}
@@ -565,7 +796,7 @@ function FotosTrabajoPanel({
               </a>
               <button
                 type="button"
-                onClick={() => handleDelete(adj.id, adj.nombre)}
+                onClick={() => handleDelete(adj.id)}
                 disabled={remove.isPending}
                 className="text-destructive hover:underline disabled:opacity-50"
               >

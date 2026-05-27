@@ -24,7 +24,7 @@ export class ModelosController {
   constructor(private readonly modelosService: ModelosService) {}
 
   @Post()
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Crear modelo de catálogo' })
   create(@Body() dto: CreateModeloDto) {
     return this.modelosService.create(dto);

@@ -22,7 +22,6 @@ import { RolUsuario } from '@erp/shared';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { ComprasService } from './compras.service';
-import { AiService } from '../ai/ai.service';
 import {
   CreateOrdenCompraDto,
   UpdateOrdenCompraDto,
@@ -35,23 +34,7 @@ import {
 @ApiBearerAuth()
 @Controller('compras')
 export class ComprasController {
-  constructor(
-    private readonly comprasService: ComprasService,
-    private readonly aiService: AiService,
-  ) {}
-
-  @Post('ocr-factura')
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
-  @ApiOperation({ summary: 'Extraer datos de factura con OCR (AI)' })
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(FileInterceptor('file'))
-  ocrFactura(@UploadedFile() file: Express.Multer.File) {
-    return this.aiService.extractInvoiceData(
-      file.buffer,
-      file.originalname,
-      file.mimetype,
-    );
-  }
+  constructor(private readonly comprasService: ComprasService) {}
 
   @Post()
   @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)

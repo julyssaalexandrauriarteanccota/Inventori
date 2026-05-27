@@ -37,9 +37,8 @@ async function extractP12KeyMaterial(buffer: Buffer, password: string) {
     ] ?? []),
   ];
   const certBags =
-    p12.getBags({ bagType: forge.pki.oids.certBag })[
-      forge.pki.oids.certBag
-    ] ?? [];
+    p12.getBags({ bagType: forge.pki.oids.certBag })[forge.pki.oids.certBag] ??
+    [];
   const privateKey = keyBags[0]?.key;
   const certificate = certBags[0]?.cert;
   if (!privateKey || !certificate)
@@ -84,8 +83,9 @@ async function main() {
   );
   console.log('Certificate extracted');
 
-  const today = new Date()
-    .toLocaleDateString('en-CA', { timeZone: 'America/Lima' });
+  const today = new Date().toLocaleDateString('en-CA', {
+    timeZone: 'America/Lima',
+  });
   const time = new Date().toLocaleTimeString('en-GB', {
     timeZone: 'America/Lima',
     hour12: false,
@@ -246,7 +246,9 @@ async function main() {
   const signedXml = signer.getSignedXml();
   console.log(`Signed XML length: ${signedXml.length}`);
   console.log(`Signature tag: ${signedXml.match(/<ds:Signature[^>]*>/)?.[0]}`);
-  console.log(`UBLVersionID: ${signedXml.match(/<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/)?.[1]}`);
+  console.log(
+    `UBLVersionID: ${signedXml.match(/<cbc:UBLVersionID>(.*?)<\/cbc:UBLVersionID>/)?.[1]}`,
+  );
 
   // Build ZIP and send
   const zip = new AdmZip();
@@ -287,20 +289,28 @@ async function main() {
   const responseText = await response.text();
 
   const faultCode = responseText.match(/<faultcode>(.*?)<\/faultcode>/)?.[1];
-  const faultString = responseText.match(/<faultstring>(.*?)<\/faultstring>/)?.[1];
+  const faultString = responseText.match(
+    /<faultstring>(.*?)<\/faultstring>/,
+  )?.[1];
 
   if (faultCode) {
     console.log(`FAULT: ${faultCode}`);
     console.log(`MSG: ${faultString}`);
   } else {
-    const appResponse = responseText.match(/<applicationResponse>(.*?)<\/applicationResponse>/s)?.[1];
+    const appResponse = responseText.match(
+      /<applicationResponse>(.*?)<\/applicationResponse>/s,
+    )?.[1];
     if (appResponse) {
       console.log('SUCCESS! Got CDR!');
       const cdrZip = new AdmZip(Buffer.from(appResponse, 'base64'));
       for (const entry of cdrZip.getEntries()) {
         const cdrXml = entry.getData().toString('utf-8');
-        const responseCode = cdrXml.match(/<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/)?.[1];
-        const description = cdrXml.match(/<cbc:Description>(.*?)<\/cbc:Description>/)?.[1];
+        const responseCode = cdrXml.match(
+          /<cbc:ResponseCode>(.*?)<\/cbc:ResponseCode>/,
+        )?.[1];
+        const description = cdrXml.match(
+          /<cbc:Description>(.*?)<\/cbc:Description>/,
+        )?.[1];
         console.log(`CDR ResponseCode: ${responseCode}`);
         console.log(`CDR Description: ${description}`);
         // Print first 500 chars of CDR

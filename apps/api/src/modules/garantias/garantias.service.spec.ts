@@ -19,6 +19,7 @@ const mockPrismaService = {
     findUnique: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
   },
 };
 
@@ -271,12 +272,18 @@ describe('GarantiasService', () => {
       mockPrismaService.casoGarantia.create.mockResolvedValue({
         id: 'caso-1',
         descripcion: 'Falla fusor',
+        aceptada: null,
       });
 
       const result = await service.createCaso('gar-1', {
         descripcion: 'Falla fusor',
       });
       expect(result.descripcion).toBe('Falla fusor');
+      expect(mockPrismaService.casoGarantia.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ aceptada: null }),
+        }),
+      );
     });
 
     it('should reject caso for non-active garantia', async () => {
@@ -377,6 +384,44 @@ describe('GarantiasService', () => {
       await expect(
         service.updateCaso('gar-1', 'caso-1', { aceptada: true }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('deleteCaso', () => {
+    it('should delete a caso belonging to garantia', async () => {
+      mockPrismaService.casoGarantia.findUnique.mockResolvedValue({
+        id: 'caso-1',
+        garantiaId: 'gar-1',
+      });
+      mockPrismaService.casoGarantia.delete.mockResolvedValue({
+        id: 'caso-1',
+      });
+
+      const result = await service.deleteCaso('gar-1', 'caso-1');
+
+      expect(result.id).toBe('caso-1');
+      expect(mockPrismaService.casoGarantia.delete).toHaveBeenCalledWith({
+        where: { id: 'caso-1' },
+      });
+    });
+
+    it('should throw NotFoundException for missing caso', async () => {
+      mockPrismaService.casoGarantia.findUnique.mockResolvedValue(null);
+
+      await expect(service.deleteCaso('gar-1', 'missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw BadRequestException if caso does not belong to garantia', async () => {
+      mockPrismaService.casoGarantia.findUnique.mockResolvedValue({
+        id: 'caso-1',
+        garantiaId: 'gar-OTHER',
+      });
+
+      await expect(service.deleteCaso('gar-1', 'caso-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

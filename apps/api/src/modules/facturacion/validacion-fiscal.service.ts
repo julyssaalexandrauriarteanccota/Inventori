@@ -456,7 +456,7 @@ export class ValidacionFiscalService {
   }
 
   private enlaceCliente(clienteId: string): ItemValidacion['enlaceCorreccion'] {
-    return { label: 'Editar cliente', url: `/clientes/${clienteId}` };
+    return { label: 'Editar cliente', url: `/clientes/${clienteId}/editar` };
   }
 
   private diasDesde(fecha: Date): number {

@@ -62,7 +62,7 @@ export function PageHeader({
         <div
           data-page-header-actions
           className={cn(
-            'flex shrink-0 flex-wrap items-center justify-end gap-2',
+            'flex shrink-0 flex-wrap items-center justify-start sm:justify-end gap-2',
             actionsClassName,
           )}
         >

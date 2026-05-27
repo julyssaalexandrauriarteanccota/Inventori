@@ -20,6 +20,7 @@ import { EquiposModule } from './modules/equipos/equipos.module';
 import { GarantiasModule } from './modules/garantias/garantias.module';
 import { ComprasModule } from './modules/compras/compras.module';
 import { VentasModule } from './modules/ventas/ventas.module';
+import { AlquileresModule } from './modules/alquileres/alquileres.module';
 import { CajaModule } from './modules/caja/caja.module';
 import { FacturacionModule } from './modules/facturacion/facturacion.module';
 import { PortalClienteModule } from './modules/portal-cliente/portal-cliente.module';
@@ -31,7 +32,10 @@ import { WebsocketsModule } from './websockets';
 import { AiModule } from './modules/ai/ai.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
-import { AuditoriaInterceptor } from './common/interceptors';
+import {
+  AuditoriaInterceptor,
+  RealtimeInvalidateInterceptor,
+} from './common/interceptors';
 
 @Module({
   imports: [
@@ -62,6 +66,7 @@ import { AuditoriaInterceptor } from './common/interceptors';
     GarantiasModule,
     ComprasModule,
     VentasModule,
+    AlquileresModule,
     CajaModule,
     FacturacionModule,
     PortalClienteModule,
@@ -89,6 +94,10 @@ import { AuditoriaInterceptor } from './common/interceptors';
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditoriaInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: RealtimeInvalidateInterceptor,
     },
   ],
 })

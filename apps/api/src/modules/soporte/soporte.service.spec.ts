@@ -7,8 +7,10 @@ import {
 import { SoporteService } from './soporte.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EventsService } from '../../websockets/events.service';
+import { InventarioService } from '../inventario/inventario.service';
 import {
   EstadoTicket,
+  EstadoGarantia,
   RolUsuario,
   TipoMovimiento,
   TipoProducto,
@@ -20,20 +22,33 @@ describe('SoporteService', () => {
   const mockTx = {
     ticket: {
       update: jest.fn(),
+      delete: jest.fn(),
     },
     historialTicket: {
       create: jest.fn(),
       createMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     detalleTicket: {
       create: jest.fn(),
+      update: jest.fn(),
+      deleteMany: jest.fn(),
+      delete: jest.fn(),
+    },
+    adjuntoTicket: {
+      deleteMany: jest.fn(),
+    },
+    casoGarantia: {
+      deleteMany: jest.fn(),
     },
     movimientoStock: {
       create: jest.fn(),
+      findMany: jest.fn(),
     },
     almacenStock: {
       findUnique: jest.fn(),
       updateMany: jest.fn(),
+      update: jest.fn(),
     },
   };
 
@@ -42,7 +57,11 @@ describe('SoporteService', () => {
       findFirst: jest.fn(),
     },
     equipo: {
+      findFirst: jest.fn(),
       findUnique: jest.fn(),
+    },
+    equipoClienteActivo: {
+      findFirst: jest.fn(),
     },
     usuario: {
       findFirst: jest.fn(),
@@ -57,6 +76,9 @@ describe('SoporteService', () => {
     },
     historialTicket: {
       create: jest.fn(),
+    },
+    garantia: {
+      findMany: jest.fn(),
     },
     adjuntoTicket: {
       create: jest.fn(),
@@ -75,6 +97,8 @@ describe('SoporteService', () => {
     },
     detalleTicket: {
       create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
     },
     $transaction: jest.fn((cb) => cb(mockTx)),
   };
@@ -84,6 +108,18 @@ describe('SoporteService', () => {
       providers: [
         SoporteService,
         { provide: PrismaService, useValue: mockPrisma },
+        {
+          provide: InventarioService,
+          useValue: {
+            ensurePrincipalAlmacen: jest.fn().mockResolvedValue({
+              id: 'almacen-uuid',
+              nombre: 'Almacén Principal',
+              esPrincipal: true,
+              activo: true,
+              deletedAt: null,
+            }),
+          },
+        },
         {
           provide: EventsService,
           useValue: {
@@ -149,7 +185,7 @@ describe('SoporteService', () => {
 
     it('debe lanzar NotFoundException si el equipo no existe', async () => {
       mockPrisma.cliente.findFirst.mockResolvedValue({ id: 'client-uuid' });
-      mockPrisma.equipo.findUnique.mockResolvedValue(null);
+      mockPrisma.equipo.findFirst.mockResolvedValue(null);
 
       await expect(
         service.create(
@@ -288,7 +324,44 @@ describe('SoporteService', () => {
         RolUsuario.ADMIN,
       );
 
-      expect(result.data).toEqual(ticket);
+      expect(result.data).toEqual({ ...ticket, garantiaActual: null });
+    });
+
+    it('debe incluir garantía actual del equipo propio aunque no tenga casos', async () => {
+      const ticket = {
+        id: 'ticket-uuid',
+        tecnicoId: 'tec-uuid',
+        equipoId: 'equipo-uuid',
+        casosGarantia: [],
+      };
+      const garantia = {
+        id: 'garantia-uuid',
+        codigoQR: 'qr-uuid',
+        fechaInicio: new Date('2026-05-24T00:00:00.000Z'),
+        fechaFin: new Date('2027-05-24T00:00:00.000Z'),
+        cobertura: 'Garantía estándar de fábrica — 12 meses',
+        exclusiones: null,
+        estado: EstadoGarantia.PENDIENTE_COMPLETAR,
+      };
+      mockPrisma.ticket.findFirst.mockResolvedValue(ticket);
+      mockPrisma.garantia.findMany.mockResolvedValue([garantia]);
+
+      const result = await service.findOne(
+        'ticket-uuid',
+        'admin-uuid',
+        RolUsuario.ADMIN,
+      );
+
+      expect(result.data.casos).toEqual([]);
+      expect(result.data.garantiaActual).toEqual({
+        ...garantia,
+        vigente: false,
+      });
+      expect(mockPrisma.garantia.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ equipoId: 'equipo-uuid' }),
+        }),
+      );
     });
 
     it('debe lanzar NotFoundException si no existe', async () => {
@@ -319,9 +392,11 @@ describe('SoporteService', () => {
     it('debe actualizar ticket y registrar historial', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValue({
         id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
         estado: EstadoTicket.ABIERTO,
         prioridad: 'MEDIA',
         tecnicoId: 'tec-uuid',
+        detalles: [],
       });
       mockTx.ticket.update.mockResolvedValue({
         id: 'ticket-uuid',
@@ -345,6 +420,66 @@ describe('SoporteService', () => {
             valorDespues: EstadoTicket.EN_PROCESO,
           }),
         ]),
+      });
+    });
+
+    it('debe devolver stock al cancelar un ticket con repuestos consumidos', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
+        estado: EstadoTicket.EN_PROCESO,
+        prioridad: 'MEDIA',
+        tecnicoId: 'tec-uuid',
+        detalles: [
+          {
+            productoId: 'prod-uuid',
+            cantidad: 2,
+            producto: { tipo: TipoProducto.REPUESTO },
+          },
+        ],
+      });
+      mockTx.ticket.update.mockResolvedValue({
+        id: 'ticket-uuid',
+        estado: EstadoTicket.CANCELADO,
+      });
+      mockTx.movimientoStock.findMany.mockResolvedValue([
+        {
+          productoId: 'prod-uuid',
+          almacenOrigenId: 'almacen-uuid',
+          cantidad: 2,
+          costoUnitario: 50,
+        },
+      ]);
+      mockTx.almacenStock.update.mockResolvedValue({});
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 5 });
+      mockTx.historialTicket.createMany.mockResolvedValue({ count: 1 });
+
+      await service.update(
+        'ticket-uuid',
+        { estado: EstadoTicket.CANCELADO } as any,
+        'user-uuid',
+        RolUsuario.ADMIN,
+      );
+
+      expect(mockTx.almacenStock.update).toHaveBeenCalledWith({
+        where: {
+          almacenId_productoId: {
+            almacenId: 'almacen-uuid',
+            productoId: 'prod-uuid',
+          },
+        },
+        data: { cantidad: { increment: 2 } },
+      });
+      expect(mockTx.movimientoStock.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tipo: TipoMovimiento.AJUSTE_POSITIVO,
+          productoId: 'prod-uuid',
+          almacenDestinoId: 'almacen-uuid',
+          cantidad: 2,
+          cantidadAnterior: 3,
+          cantidadPosterior: 5,
+          justificacion: 'Anulación ticket TKT-2026-0001',
+        }),
       });
     });
 
@@ -404,6 +539,7 @@ describe('SoporteService', () => {
     it('debe agregar repuesto, crear movimiento CONSUMO_SOPORTE y actualizar stock', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValue({
         id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
         estado: EstadoTicket.EN_PROCESO,
         equipo: { productoId: 'modelo-uuid' },
         detalles: [
@@ -423,7 +559,6 @@ describe('SoporteService', () => {
       mockPrisma.compatibilidad.findUnique.mockResolvedValue({
         id: 'compat-uuid',
       });
-      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'almacen-uuid' });
       mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
       mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 8 });
 
@@ -449,6 +584,7 @@ describe('SoporteService', () => {
           cantidad: 2,
           cantidadAnterior: 10,
           cantidadPosterior: 8,
+          justificacion: 'Consumo soporte TKT-2026-0001: 2x Toner',
         }),
       });
       expect(mockTx.almacenStock.updateMany).toHaveBeenCalledWith({
@@ -458,6 +594,59 @@ describe('SoporteService', () => {
           cantidad: { gte: 2 },
         },
         data: { cantidad: { decrement: 2 } },
+      });
+    });
+
+    it('debe marcar el ticket abierto como EN_PROCESO al consumir repuesto', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
+        estado: EstadoTicket.ABIERTO,
+        equipo: null,
+        detalles: [
+          {
+            producto: {
+              tipo: TipoProducto.SERVICIO,
+              requiereRepuestos: true,
+            },
+          },
+        ],
+      });
+      mockPrisma.producto.findFirst.mockResolvedValue({
+        id: 'prod-uuid',
+        precioVenta: 50,
+        tipo: TipoProducto.REPUESTO,
+        modelosCompatibles: [],
+      });
+      mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 8 });
+      mockTx.detalleTicket.create.mockResolvedValue({
+        id: 'detalle-uuid',
+        productoId: 'prod-uuid',
+        cantidad: 2,
+        producto: { id: 'prod-uuid', nombre: 'Toner', sku: 'TN-123' },
+      });
+      mockTx.movimientoStock.create.mockResolvedValue({});
+      mockTx.historialTicket.create.mockResolvedValue({});
+      mockTx.ticket.update.mockResolvedValue({
+        id: 'ticket-uuid',
+        estado: EstadoTicket.EN_PROCESO,
+      });
+
+      await service.addRepuesto('ticket-uuid', dto as any, 'user-uuid');
+
+      expect(mockTx.ticket.update).toHaveBeenCalledWith({
+        where: { id: 'ticket-uuid' },
+        data: { estado: EstadoTicket.EN_PROCESO },
+      });
+      expect(mockTx.historialTicket.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          ticketId: 'ticket-uuid',
+          campo: 'estado',
+          valorAntes: EstadoTicket.ABIERTO,
+          valorDespues: EstadoTicket.EN_PROCESO,
+          notas: 'Ticket marcado en proceso por consumo de repuesto',
+        }),
       });
     });
 
@@ -511,6 +700,46 @@ describe('SoporteService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('debe validar repuesto con modelos compatibles de catálogo', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        estado: EstadoTicket.EN_PROCESO,
+        equipo: {
+          productoId: 'equipo-producto-uuid',
+          producto: { modeloCatalogoId: 'modelo-catalogo-uuid' },
+        },
+        detalles: [
+          {
+            producto: {
+              tipo: TipoProducto.SERVICIO,
+              requiereRepuestos: true,
+            },
+          },
+        ],
+      });
+      mockPrisma.producto.findFirst.mockResolvedValue({
+        id: 'prod-uuid',
+        precioVenta: 50,
+        tipo: TipoProducto.REPUESTO,
+        modelosCompatibles: [{ modeloCatalogoId: 'modelo-catalogo-uuid' }],
+      });
+      mockTx.almacenStock.updateMany.mockResolvedValue({ count: 1 });
+      mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 8 });
+      mockTx.detalleTicket.create.mockResolvedValue({
+        id: 'detalle-uuid',
+        productoId: 'prod-uuid',
+        cantidad: 2,
+        producto: { id: 'prod-uuid', nombre: 'Toner', sku: 'TN-123' },
+      });
+      mockTx.movimientoStock.create.mockResolvedValue({});
+      mockTx.historialTicket.create.mockResolvedValue({});
+
+      await service.addRepuesto('ticket-uuid', dto as any, 'user-uuid');
+
+      expect(mockPrisma.compatibilidad.findUnique).not.toHaveBeenCalled();
+      expect(mockTx.detalleTicket.create).toHaveBeenCalled();
+    });
+
     it('debe rechazar si stock insuficiente', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValue({
         id: 'ticket-uuid',
@@ -529,7 +758,6 @@ describe('SoporteService', () => {
         id: 'prod-uuid',
         tipo: TipoProducto.REPUESTO,
       });
-      mockPrisma.almacen.findFirst.mockResolvedValue({ id: 'almacen-uuid' });
       mockTx.almacenStock.updateMany.mockResolvedValue({ count: 0 });
       mockTx.almacenStock.findUnique.mockResolvedValue({ cantidad: 1 });
 
@@ -606,6 +834,73 @@ describe('SoporteService', () => {
           'user-uuid',
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ═══════════════════════════════════════════
+  //  UPDATE DETALLE
+  // ═══════════════════════════════════════════
+
+  describe('updateDetalle', () => {
+    it('debe impedir cambiar cantidad de un repuesto ya consumido', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        estado: EstadoTicket.EN_PROCESO,
+        tecnicoId: 'tec-uuid',
+      });
+      mockPrisma.detalleTicket.findFirst.mockResolvedValue({
+        id: 'detalle-uuid',
+        ticketId: 'ticket-uuid',
+        productoId: 'prod-uuid',
+        cantidad: 1,
+        producto: { tipo: TipoProducto.REPUESTO },
+      });
+
+      await expect(
+        service.updateDetalle(
+          'ticket-uuid',
+          'detalle-uuid',
+          { cantidad: 2 } as any,
+          'user-uuid',
+          RolUsuario.ADMIN,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockPrisma.detalleTicket.update).not.toHaveBeenCalled();
+    });
+
+    it('debe permitir cambiar cantidad de una línea de servicio', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        estado: EstadoTicket.EN_PROCESO,
+        tecnicoId: 'tec-uuid',
+      });
+      mockPrisma.detalleTicket.findFirst.mockResolvedValue({
+        id: 'detalle-uuid',
+        ticketId: 'ticket-uuid',
+        productoId: 'serv-uuid',
+        cantidad: 1,
+        producto: { tipo: TipoProducto.SERVICIO },
+      });
+      mockPrisma.detalleTicket.update.mockResolvedValue({
+        id: 'detalle-uuid',
+        cantidad: 2,
+      });
+
+      const result = await service.updateDetalle(
+        'ticket-uuid',
+        'detalle-uuid',
+        { cantidad: 2 } as any,
+        'user-uuid',
+        RolUsuario.ADMIN,
+      );
+
+      expect(result.data.cantidad).toBe(2);
+      expect(mockPrisma.detalleTicket.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ cantidad: 2 }),
+        }),
+      );
     });
   });
 
@@ -767,32 +1062,85 @@ describe('SoporteService', () => {
   });
 
   // ═══════════════════════════════════════════
-  //  REMOVE (SOFT DELETE)
+  //  REMOVE
   // ═══════════════════════════════════════════
 
   describe('remove', () => {
-    it('debe hacer soft delete del ticket', async () => {
+    it('debe eliminar definitivamente un ticket', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValue({
         id: 'ticket-uuid',
         codigo: 'TKT-2026-0001',
+        estado: EstadoTicket.CERRADO,
+        tecnicoId: 'tec-uuid',
+        detalles: [],
       });
-      mockPrisma.ticket.update.mockResolvedValue({});
+      mockTx.adjuntoTicket.deleteMany.mockResolvedValue({ count: 0 });
+      mockTx.casoGarantia.deleteMany.mockResolvedValue({ count: 0 });
+      mockTx.historialTicket.deleteMany.mockResolvedValue({ count: 1 });
+      mockTx.detalleTicket.deleteMany.mockResolvedValue({ count: 0 });
+      mockTx.ticket.delete.mockResolvedValue({});
 
-      const result = await service.remove('ticket-uuid');
+      const result = await service.remove(
+        'ticket-uuid',
+        'admin-uuid',
+        RolUsuario.ADMIN,
+      );
 
       expect(result.data.message).toContain('TKT-2026-0001');
-      expect(mockPrisma.ticket.update).toHaveBeenCalledWith({
+      expect(mockTx.ticket.delete).toHaveBeenCalledWith({
         where: { id: 'ticket-uuid' },
-        data: { deletedAt: expect.any(Date) },
       });
+    });
+
+    it('debe eliminar un ticket activo sin revertir repuestos consumidos', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
+        estado: EstadoTicket.EN_PROCESO,
+        tecnicoId: 'tec-uuid',
+        detalles: [
+          {
+            productoId: 'prod-uuid',
+            cantidad: 1,
+            producto: { tipo: TipoProducto.REPUESTO },
+          },
+        ],
+      });
+      mockTx.adjuntoTicket.deleteMany.mockResolvedValue({ count: 0 });
+      mockTx.casoGarantia.deleteMany.mockResolvedValue({ count: 0 });
+      mockTx.historialTicket.deleteMany.mockResolvedValue({ count: 1 });
+      mockTx.detalleTicket.deleteMany.mockResolvedValue({ count: 1 });
+      mockTx.ticket.delete.mockResolvedValue({});
+
+      await service.remove('ticket-uuid', 'admin-uuid', RolUsuario.ADMIN);
+
+      expect(mockTx.movimientoStock.findMany).not.toHaveBeenCalled();
+      expect(mockTx.almacenStock.update).not.toHaveBeenCalled();
+      expect(mockTx.movimientoStock.create).not.toHaveBeenCalled();
+      expect(mockTx.ticket.delete).toHaveBeenCalledWith({
+        where: { id: 'ticket-uuid' },
+      });
+    });
+
+    it('TECNICO no puede eliminar ticket de otro técnico', async () => {
+      mockPrisma.ticket.findFirst.mockResolvedValue({
+        id: 'ticket-uuid',
+        codigo: 'TKT-2026-0001',
+        estado: EstadoTicket.ABIERTO,
+        tecnicoId: 'otro-tec-uuid',
+      });
+
+      await expect(
+        service.remove('ticket-uuid', 'mi-tec-uuid', RolUsuario.TECNICO),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('debe lanzar NotFoundException si no existe', async () => {
       mockPrisma.ticket.findFirst.mockResolvedValue(null);
 
-      await expect(service.remove('fake-uuid')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.remove('fake-uuid', 'admin-uuid', RolUsuario.ADMIN),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

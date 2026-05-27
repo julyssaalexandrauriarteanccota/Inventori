@@ -4,14 +4,18 @@ import {
   AlertCircle,
   Calendar,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   Copy,
   FileText,
+  MapPin,
   MessageSquarePlus,
   Pencil,
+  Phone,
   QrCode,
   ScanSearch,
   ShieldCheck,
+  Trash2,
   User,
   Wrench,
 } from 'lucide-react'
@@ -22,6 +26,7 @@ import { useGarantia } from '@/hooks/use-garantias'
 import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { LocationMap } from '@/components/location/location-map'
 import {
   Dialog,
   DialogContent,
@@ -38,6 +43,7 @@ import {
 } from '@/components/ui/tabs'
 
 const ESTADO_LABELS: Record<EstadoGarantia, string> = {
+  [EstadoGarantia.PENDIENTE_COMPLETAR]: 'Pendiente',
   [EstadoGarantia.ACTIVA]: 'Activa',
   [EstadoGarantia.VENCIDA]: 'Vencida',
   [EstadoGarantia.ANULADA]: 'Anulada',
@@ -59,8 +65,23 @@ export interface GarantiaDetailRecord {
   fechaFin: string
   cobertura: string
   exclusiones?: string | null
+  fechaInstalacion?: string | null
+  direccionInstalacion?: string | null
+  ubigeoInstalacion?: string | null
+  departamentoInstalacion?: string | null
+  provinciaInstalacion?: string | null
+  distritoInstalacion?: string | null
+  latitudInstalacion?: number | null
+  longitudInstalacion?: number | null
+  contactoInstalacion?: string | null
+  telefonoInstalacion?: string | null
+  notasInstalacion?: string | null
   clienteNombre?: string | null
   codigoQR: string
+  contadorInicio?: number | null
+  contadorMaxCopias?: number | null
+  copiasUsadas?: number | null
+  vigentePorCopias?: boolean
   vigente?: boolean
   ventaId?: string | null
   createdAt?: string
@@ -193,6 +214,7 @@ interface GarantiaDetalleModalProps {
   onEdit?: (garantia: GarantiaDetailRecord) => void
   onCreateCaso?: (garantiaId: string) => void
   onUpdateCaso?: (garantiaId: string, caso: GarantiaCasoItem) => void
+  onDeleteCaso?: (garantiaId: string, caso: GarantiaCasoItem) => void
   canEdit?: boolean
   canManageCasos?: boolean
 }
@@ -203,6 +225,7 @@ export function GarantiaDetalleModal({
   onEdit,
   onCreateCaso,
   onUpdateCaso,
+  onDeleteCaso,
   canEdit,
   canManageCasos,
 }: GarantiaDetalleModalProps) {
@@ -256,14 +279,18 @@ export function GarantiaDetalleModal({
                     variant="outline"
                     className={cn(
                       'h-5 gap-1.5 text-xs',
-                      garantia.estado === EstadoGarantia.ACTIVA
+                      garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+                        ? 'border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-800 dark:bg-sky-900/30 dark:text-sky-400'
+                        : garantia.estado === EstadoGarantia.ACTIVA
                         ? 'border-green-200 bg-green-100 text-green-700 dark:border-green-800 dark:bg-green-900/30 dark:text-green-400'
                         : garantia.estado === EstadoGarantia.VENCIDA
                           ? 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400'
                           : 'border-destructive/20 bg-destructive/10 text-destructive',
                     )}
                   >
-                    {garantia.estado === EstadoGarantia.ACTIVA ? (
+                    {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+                      <FileText className="size-3" />
+                    ) : garantia.estado === EstadoGarantia.ACTIVA ? (
                       <span className="relative flex size-1.5 shrink-0">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
                         <span className="relative inline-flex size-1.5 rounded-full bg-green-500" />
@@ -303,8 +330,16 @@ export function GarantiaDetalleModal({
                 className="mr-8 h-8 shrink-0 gap-1.5 sm:mr-10"
                 onClick={() => onEdit?.(garantia)}
               >
-                <Pencil className="size-3.5" />
-                <span className="hidden text-xs sm:inline">Editar</span>
+                {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+                  <ClipboardCheck className="size-3.5" />
+                ) : (
+                  <Pencil className="size-3.5" />
+                )}
+                <span className="hidden text-xs sm:inline">
+                  {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR
+                    ? 'Completar'
+                    : 'Editar'}
+                </span>
               </Button>
             ) : null}
           </div>
@@ -319,6 +354,36 @@ export function GarantiaDetalleModal({
             </div>
           ) : (
             <Tabs defaultValue="informacion" className="flex h-full flex-col gap-4">
+              {garantia.estado === EstadoGarantia.PENDIENTE_COMPLETAR ? (
+                <div className="flex flex-col gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+                      <ClipboardCheck className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">
+                        Garantía pendiente de completar
+                      </p>
+                      <p className="text-xs text-sky-800/80 dark:text-sky-200/80">
+                        Falta completar fecha y lugar de instalación para activar la cobertura.
+                      </p>
+                    </div>
+                  </div>
+                  {canEdit ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 shrink-0 gap-1.5 rounded-lg border-sky-300 bg-background text-xs text-sky-800 hover:bg-sky-100 dark:border-sky-800 dark:text-sky-200 dark:hover:bg-sky-900/40"
+                      onClick={() => onEdit?.(garantia)}
+                    >
+                      <ClipboardCheck className="size-3.5" />
+                      Completar
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
               <TabsList className="mb-4 h-10 w-full shrink-0">
                 <TabsTrigger value="informacion" className="flex-1 gap-1.5 text-xs sm:text-sm">
                   <FileText className="size-3.5 shrink-0" />
@@ -403,10 +468,98 @@ export function GarantiaDetalleModal({
                     </div>
                   </section>
 
+                  <section className="rounded-xl border border-border/50 border-l-[3px] border-l-amber-400 bg-card p-4 sm:p-5 dark:border-l-amber-800">
+                    <div className="mb-4 flex items-center gap-2.5">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-600 ring-2 ring-amber-100 dark:bg-amber-900/40 dark:text-amber-400 dark:ring-amber-900/30">
+                        4
+                      </span>
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-amber-100 dark:bg-amber-900/40">
+                        <ScanSearch className="size-3.5 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Cobertura por copias</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+                      <InfoItem
+                        label="Contador inicio"
+                        value={
+                          garantia.contadorInicio != null
+                            ? String(garantia.contadorInicio)
+                            : null
+                        }
+                        icon={ScanSearch}
+                      />
+                      <InfoItem
+                        label="Máximo cubierto"
+                        value={
+                          garantia.contadorMaxCopias != null
+                            ? String(garantia.contadorMaxCopias)
+                            : 'Sin límite'
+                        }
+                        icon={ShieldCheck}
+                      />
+                      <InfoItem
+                        label="Copias usadas"
+                        value={
+                          garantia.copiasUsadas != null
+                            ? String(garantia.copiasUsadas)
+                            : null
+                        }
+                        icon={Clock}
+                      />
+                      <InfoItem
+                        label="Estado por copias"
+                        value={
+                          garantia.vigentePorCopias === false
+                            ? 'Consumida'
+                            : 'Dentro del límite'
+                        }
+                        icon={CheckCircle2}
+                      />
+                    </div>
+                  </section>
+
+                  <section className="rounded-xl border border-border/50 border-l-[3px] border-l-sky-400 bg-card p-4 sm:p-5 dark:border-l-sky-800">
+                    <div className="mb-4 flex items-center gap-2.5">
+                      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-sky-100 text-[11px] font-bold text-sky-600 ring-2 ring-sky-100 dark:bg-sky-900/40 dark:text-sky-400 dark:ring-sky-900/30">
+                        5
+                      </span>
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-sky-100 dark:bg-sky-900/40">
+                        <Calendar className="size-3.5 text-sky-600 dark:text-sky-400" />
+                      </div>
+                      <h3 className="text-sm font-semibold text-foreground">Instalación</h3>
+                    </div>
+
+                    <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+                      <InfoItem label="Fecha instalación" value={formatDate(garantia.fechaInstalacion)} icon={Calendar} />
+                      <InfoItem label="Lugar" value={garantia.direccionInstalacion} icon={MapPin} />
+                      <InfoItem label="Departamento" value={garantia.departamentoInstalacion} icon={ScanSearch} />
+                      <InfoItem label="Provincia" value={garantia.provinciaInstalacion} icon={ScanSearch} />
+                      <InfoItem label="Distrito" value={garantia.distritoInstalacion} icon={ScanSearch} />
+                      <InfoItem label="Ubigeo" value={garantia.ubigeoInstalacion} icon={QrCode} copyable />
+                      <InfoItem label="Contacto" value={garantia.contactoInstalacion} icon={User} />
+                      <InfoItem label="Teléfono" value={garantia.telefonoInstalacion} icon={Phone} />
+                      <InfoItem label="Notas" value={garantia.notasInstalacion} icon={FileText} />
+                    </div>
+                    {garantia.latitudInstalacion != null &&
+                    garantia.longitudInstalacion != null ? (
+                      <div className="mt-4">
+                        <LocationMap
+                          marker={{
+                            latitud: garantia.latitudInstalacion,
+                            longitud: garantia.longitudInstalacion,
+                          }}
+                          className="h-72"
+                          zoom={16}
+                        />
+                      </div>
+                    ) : null}
+                  </section>
+
                   <section className="rounded-xl border border-border/50 bg-card p-4 sm:p-5">
                     <div className="mb-4 flex items-center gap-2.5">
                       <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-bold text-muted-foreground">
-                        4
+                        6
                       </span>
                       <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-muted/70">
                         <Clock className="size-3.5 text-muted-foreground" />
@@ -473,15 +626,27 @@ export function GarantiaDetalleModal({
                                 )}
 
                                 {canManageCasos ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
-                                    onClick={() => onUpdateCaso?.(garantia.id, caso)}
-                                  >
-                                    <Pencil className="size-3.5" />
-                                    Editar
-                                  </Button>
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8 gap-1.5 rounded-lg px-2.5 text-xs"
+                                      onClick={() => onUpdateCaso?.(garantia.id, caso)}
+                                    >
+                                      <Pencil className="size-3.5" />
+                                      Editar
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="size-8 rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                      onClick={() => onDeleteCaso?.(garantia.id, caso)}
+                                      title="Eliminar caso"
+                                      aria-label="Eliminar caso"
+                                    >
+                                      <Trash2 className="size-3.5" />
+                                    </Button>
+                                  </>
                                 ) : null}
                               </div>
                             </div>

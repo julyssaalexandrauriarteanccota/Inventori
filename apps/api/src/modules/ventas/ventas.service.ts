@@ -11,6 +11,7 @@ import type { Prisma } from '../../../generated/prisma/client';
 import {
   EstadoComercialEquipo,
   EstadoFacturacionVenta,
+  EstadoGarantia,
   EstadoVenta,
   LIMITE_VENTA_INTERNA_LEGAL,
   ModalidadEnvioBoletas,
@@ -39,7 +40,26 @@ export class VentasService {
     private readonly facturacionService: FacturacionService,
   ) {}
 
-  private async validateVentaDetalles(detalles: CreateVentaDto['detalles']) {
+  private async findReservaEquipo(equipoSerie: string) {
+    return this.prisma.detalleVenta.findFirst({
+      where: {
+        equipoSerie,
+        venta: {
+          deletedAt: null,
+          estado: EstadoVenta.RESERVADA,
+        },
+      },
+      select: {
+        ventaId: true,
+        venta: { select: { numero: true } },
+      },
+    });
+  }
+
+  private async validateVentaDetalles(
+    detalles: CreateVentaDto['detalles'],
+    options: { ventaId?: string; requireEquipoSerie?: boolean } = {},
+  ) {
     const productoIds = detalles.map((detalle) => detalle.productoId);
     const uniqueProductoIds = new Set(productoIds);
 
@@ -72,17 +92,27 @@ export class VentasService {
         );
       }
 
-      if (producto.tieneNumeroSerie && !detalle.equipoSerie) {
+      if (
+        options.requireEquipoSerie !== false &&
+        producto.tieneNumeroSerie &&
+        !detalle.equipoSerie
+      ) {
         throw new BadRequestException(
           `Producto ${producto.sku} requiere número de serie`,
         );
       }
 
       if (detalle.equipoSerie) {
+        if (detalle.cantidad !== 1) {
+          throw new BadRequestException(
+            `Equipo ${detalle.equipoSerie}: la cantidad debe ser 1 para productos serializados`,
+          );
+        }
+
         const equipo = await this.prisma.equipo.findUnique({
           where: { numeroSerie: detalle.equipoSerie },
         });
-        if (!equipo) {
+        if (!equipo || equipo.deletedAt) {
           throw new NotFoundException(
             `Equipo con serie ${detalle.equipoSerie} no encontrado`,
           );
@@ -92,11 +122,15 @@ export class VentasService {
             `Equipo ${detalle.equipoSerie} no corresponde al producto ${producto.sku}`,
           );
         }
-        if (
-          equipo.estadoComercial &&
-          equipo.estadoComercial !== 'DISPONIBLE' &&
-          equipo.estadoComercial !== 'RESERVADO'
-        ) {
+        const estadoComercial = equipo.estadoComercial as EstadoComercialEquipo;
+        if (estadoComercial === EstadoComercialEquipo.RESERVADO) {
+          const reserva = await this.findReservaEquipo(detalle.equipoSerie);
+          if (!options.ventaId || reserva?.ventaId !== options.ventaId) {
+            throw new BadRequestException(
+              `Equipo ${detalle.equipoSerie} está reservado${reserva?.venta?.numero ? ` por cotización ${reserva.venta.numero}` : ''}`,
+            );
+          }
+        } else if (estadoComercial !== EstadoComercialEquipo.DISPONIBLE) {
           throw new BadRequestException(
             `Equipo ${detalle.equipoSerie} no está disponible para venta`,
           );
@@ -139,7 +173,9 @@ export class VentasService {
     const subtotal = this.roundMoney(
       detallesConTotales.reduce((acc, detalle) => acc + detalle.subtotal, 0),
     );
-    const descuentoGlobal = 0;
+    const descuentoGlobal = this.roundMoney(
+      detallesConTotales.reduce((acc, detalle) => acc + detalle.descuento, 0),
+    );
     const igv = this.roundMoney(
       detallesConTotales.reduce((acc, detalle) => acc + detalle.igv, 0),
     );
@@ -152,6 +188,50 @@ export class VentasService {
 
   private roundMoney(value: number) {
     return +value.toFixed(2);
+  }
+
+  private getDetalleSeries(detalles: Array<{ equipoSerie?: string | null }>) {
+    return [
+      ...new Set(
+        detalles
+          .map((detalle) => detalle.equipoSerie?.trim())
+          .filter((serie): serie is string => Boolean(serie)),
+      ),
+    ];
+  }
+
+  private async reservarEquiposCotizacionEnTx(
+    tx: Prisma.TransactionClient,
+    detalles: Array<{ equipoSerie?: string | null }>,
+  ) {
+    const series = this.getDetalleSeries(detalles);
+    if (series.length === 0) return;
+
+    await tx.equipo.updateMany({
+      where: {
+        numeroSerie: { in: series },
+        estadoComercial: EstadoComercialEquipo.DISPONIBLE,
+        deletedAt: null,
+      },
+      data: { estadoComercial: EstadoComercialEquipo.RESERVADO },
+    });
+  }
+
+  private async liberarReservasCotizacionEnTx(
+    tx: Prisma.TransactionClient,
+    detalles: Array<{ equipoSerie?: string | null }>,
+  ) {
+    const series = this.getDetalleSeries(detalles);
+    if (series.length === 0) return;
+
+    await tx.equipo.updateMany({
+      where: {
+        numeroSerie: { in: series },
+        estadoComercial: EstadoComercialEquipo.RESERVADO,
+        deletedAt: null,
+      },
+      data: { estadoComercial: EstadoComercialEquipo.DISPONIBLE },
+    });
   }
 
   // ═══════════════════════════════════════════
@@ -167,45 +247,56 @@ export class VentasService {
       throw new NotFoundException(`Cliente ${dto.clienteId} no encontrado`);
     }
 
-    await this.validateVentaDetalles(dto.detalles);
+    await this.validateVentaDetalles(dto.detalles, {
+      requireEquipoSerie: false,
+    });
 
     const { detallesCalc, subtotal, descuentoGlobal, igv, total } =
       this.buildTotales(dto.detalles);
 
     const numero = await this.generateNumeroVenta();
 
-    const venta = await this.prisma.venta.create({
-      data: {
-        numero,
-        clienteId: dto.clienteId,
-        usuarioId: userId,
-        subtotal,
-        descuento: descuentoGlobal,
-        igv,
-        total,
-        notas: dto.notas,
-        validoHasta: dto.validoHasta ? new Date(dto.validoHasta) : null,
-        detalles: {
-          create: detallesCalc.map((d) => ({
-            productoId: d.productoId,
-            cantidad: d.cantidad,
-            precioUnitario: d.precioUnitario,
-            descuento: d.descuento,
-            subtotal: d.subtotal,
-            equipoSerie: d.equipoSerie,
-          })),
-        },
-      },
-      include: {
-        detalles: {
-          include: {
-            producto: { select: { id: true, sku: true, nombre: true } },
+    const venta = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.venta.create({
+        data: {
+          numero,
+          clienteId: dto.clienteId,
+          usuarioId: userId,
+          subtotal,
+          descuento: descuentoGlobal,
+          igv,
+          total,
+          notas: dto.notas,
+          validoHasta: dto.validoHasta ? new Date(dto.validoHasta) : null,
+          detalles: {
+            create: detallesCalc.map((d) => ({
+              productoId: d.productoId,
+              cantidad: d.cantidad,
+              precioUnitario: d.precioUnitario,
+              descuento: d.descuento,
+              subtotal: d.subtotal,
+              equipoSerie: d.equipoSerie,
+            })),
           },
         },
-        cliente: {
-          select: { id: true, nombre: true, apellido: true, razonSocial: true },
+        include: {
+          detalles: {
+            include: {
+              producto: { select: { id: true, sku: true, nombre: true } },
+            },
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              razonSocial: true,
+            },
+          },
         },
-      },
+      });
+
+      return created;
     });
 
     this.logger.log(`Cotización creada: ${venta.numero}`);
@@ -217,11 +308,12 @@ export class VentasService {
   // ═══════════════════════════════════════════
 
   async findAll(query: QueryVentaDto) {
-    const { page = 1, limit = 20, estado, clienteId, search } = query;
+    const { page = 1, limit = 20, estado, estados, clienteId, search } = query;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = { deletedAt: null };
-    if (estado) where.estado = estado;
+    if (estados?.length) where.estado = { in: estados };
+    else if (estado) where.estado = estado;
     if (clienteId) where.clienteId = clienteId;
     if (search) {
       where.numero = { contains: search, mode: 'insensitive' };
@@ -310,6 +402,7 @@ export class VentasService {
                 garantiaMaxCopias: true,
                 marca: { select: { nombre: true } },
                 modeloCatalogo: { select: { nombre: true } },
+                atributos: true,
               },
             },
           },
@@ -351,6 +444,7 @@ export class VentasService {
   async update(id: string, dto: UpdateVentaDto) {
     const venta = await this.prisma.venta.findFirst({
       where: { id, deletedAt: null },
+      include: { detalles: true },
     });
     if (!venta) {
       throw new NotFoundException(`Venta ${id} no encontrada`);
@@ -392,7 +486,10 @@ export class VentasService {
     } = {};
 
     if (dto.detalles) {
-      await this.validateVentaDetalles(dto.detalles);
+      await this.validateVentaDetalles(dto.detalles, {
+        ventaId: id,
+        requireEquipoSerie: false,
+      });
       const { detallesCalc, subtotal, descuentoGlobal, igv, total } =
         this.buildTotales(dto.detalles);
 
@@ -409,17 +506,98 @@ export class VentasService {
       };
     }
 
-    const updated = await this.prisma.venta.update({
-      where: { id },
-      data: {
-        ...dto,
-        validoHasta: dto.validoHasta ? new Date(dto.validoHasta) : undefined,
-        ...totalsData,
-        detalles: detallesData,
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const saved = await tx.venta.update({
+        where: { id },
+        data: {
+          ...dto,
+          validoHasta: dto.validoHasta ? new Date(dto.validoHasta) : undefined,
+          ...totalsData,
+          detalles: detallesData,
+        },
+        include: { detalles: true },
+      });
+
+      return saved;
     });
 
     this.logger.log(`Venta actualizada: ${updated.numero}`);
+    return updated;
+  }
+
+  async reservar(id: string) {
+    const venta = await this.prisma.venta.findFirst({
+      where: { id, deletedAt: null },
+      include: { detalles: { include: { producto: true } } },
+    });
+    if (!venta) {
+      throw new NotFoundException(`Venta ${id} no encontrada`);
+    }
+
+    const ventaEstado = venta.estado as EstadoVenta;
+    if (ventaEstado !== EstadoVenta.COTIZACION) {
+      throw new BadRequestException(
+        'Solo se pueden reservar cotizaciones en estado COTIZACION',
+      );
+    }
+
+    const detallesConEquipo = venta.detalles.filter((detalle) =>
+      Boolean(detalle.equipoSerie),
+    );
+    if (detallesConEquipo.length === 0) {
+      throw new BadRequestException(
+        'La cotización debe incluir al menos un equipo con número de serie para reservar',
+      );
+    }
+
+    for (const detalle of detallesConEquipo) {
+      const equipo = await this.prisma.equipo.findUnique({
+        where: { numeroSerie: detalle.equipoSerie! },
+      });
+      if (!equipo || equipo.deletedAt) {
+        throw new NotFoundException(
+          `Equipo con serie ${detalle.equipoSerie} no encontrado`,
+        );
+      }
+      if (equipo.productoId !== detalle.productoId) {
+        throw new BadRequestException(
+          `Equipo ${detalle.equipoSerie} no corresponde al producto ${detalle.producto.sku}`,
+        );
+      }
+      if (
+        (equipo.estadoComercial as EstadoComercialEquipo) !==
+        EstadoComercialEquipo.DISPONIBLE
+      ) {
+        throw new BadRequestException(
+          `Equipo ${detalle.equipoSerie} no está disponible para reservar`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await this.reservarEquiposCotizacionEnTx(tx, detallesConEquipo);
+      return tx.venta.update({
+        where: { id },
+        data: { estado: EstadoVenta.RESERVADA },
+        include: {
+          detalles: {
+            include: {
+              producto: { select: { id: true, sku: true, nombre: true } },
+            },
+          },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              apellido: true,
+              razonSocial: true,
+            },
+          },
+        },
+      });
+    });
+
+    this.logger.log(`Cotización reservada: ${updated.numero}`);
     return updated;
   }
 
@@ -441,9 +619,12 @@ export class VentasService {
       throw new NotFoundException(`Venta ${id} no encontrada`);
     }
     const ventaEstado = venta.estado as EstadoVenta;
-    if (ventaEstado !== EstadoVenta.COTIZACION) {
+    if (
+      ventaEstado !== EstadoVenta.COTIZACION &&
+      ventaEstado !== EstadoVenta.RESERVADA
+    ) {
       throw new BadRequestException(
-        'Solo se pueden confirmar ventas en estado COTIZACION',
+        'Solo se pueden confirmar cotizaciones o reservas',
       );
     }
 
@@ -478,6 +659,19 @@ export class VentasService {
         total: Number(venta.total),
         cliente: venta.cliente,
       });
+    }
+
+    for (const detalle of venta.detalles) {
+      if (detalle.producto.tieneNumeroSerie && !detalle.equipoSerie) {
+        throw new BadRequestException(
+          `Producto ${detalle.producto.sku}: seleccione una serie antes de confirmar la venta`,
+        );
+      }
+      if (detalle.equipoSerie && detalle.cantidad !== 1) {
+        throw new BadRequestException(
+          `Equipo ${detalle.equipoSerie}: la cantidad debe ser 1 para productos serializados`,
+        );
+      }
     }
 
     // === TRANSACCIÓN ===
@@ -553,6 +747,11 @@ export class VentasService {
           const equipo = await tx.equipo.findUnique({
             where: { numeroSerie: detalle.equipoSerie },
           });
+          if (!equipo) {
+            throw new NotFoundException(
+              `Equipo con serie ${detalle.equipoSerie} no encontrado`,
+            );
+          }
 
           if (equipo?.almacenId && equipo.almacenId !== dto.almacenId) {
             throw new BadRequestException(
@@ -560,18 +759,39 @@ export class VentasService {
             );
           }
 
+          const equipoEstadoComercial =
+            equipo.estadoComercial as EstadoComercialEquipo;
+          if (ventaEstado === EstadoVenta.RESERVADA) {
+            if (equipoEstadoComercial !== EstadoComercialEquipo.RESERVADO) {
+              throw new BadRequestException(
+                `Equipo ${detalle.equipoSerie} debe estar reservado para vender`,
+              );
+            }
+            const reserva = await this.findReservaEquipo(detalle.equipoSerie);
+            if (reserva?.ventaId !== venta.id) {
+              throw new BadRequestException(
+                `Equipo ${detalle.equipoSerie} está reservado por otra cotización`,
+              );
+            }
+          } else if (
+            equipoEstadoComercial !== EstadoComercialEquipo.DISPONIBLE
+          ) {
+            throw new BadRequestException(
+              `Equipo ${detalle.equipoSerie} no está disponible para confirmar venta`,
+            );
+          }
+
           // Nueva asignación
           await tx.equipoCliente.create({
             data: {
-              equipoId: equipo!.id,
+              equipoId: equipo.id,
               clienteId: venta.clienteId,
               ventaId: venta.id,
               fechaInicio: new Date(),
             },
           });
-
           await tx.equipo.update({
-            where: { id: equipo!.id },
+            where: { id: equipo.id },
             data: {
               estadoComercial: EstadoComercialEquipo.VENDIDO,
               almacenId: null,
@@ -586,6 +806,11 @@ export class VentasService {
           const equipo = await tx.equipo.findUnique({
             where: { numeroSerie: detalle.equipoSerie },
           });
+          if (!equipo) {
+            throw new NotFoundException(
+              `Equipo con serie ${detalle.equipoSerie} no encontrado`,
+            );
+          }
 
           const meses = detalle.producto.mesesGarantia ?? 12;
           const fechaInicio = new Date();
@@ -604,6 +829,11 @@ export class VentasService {
               dni: true,
             },
           });
+          if (!clienteData) {
+            throw new NotFoundException(
+              `Cliente ${venta.clienteId} no encontrado`,
+            );
+          }
 
           const coberturaTexto =
             detalle.producto.garantiaMaxCopias != null
@@ -612,18 +842,18 @@ export class VentasService {
 
           await tx.garantia.create({
             data: {
-              equipoId: equipo!.id,
+              equipoId: equipo.id,
               ventaId: venta.id,
-              clienteIdOriginal: clienteData!.id,
-              clienteDocTipo: clienteData!.ruc
+              clienteIdOriginal: clienteData.id,
+              clienteDocTipo: clienteData.ruc
                 ? 'RUC'
-                : clienteData!.dni
+                : clienteData.dni
                   ? 'DNI'
                   : null,
-              clienteDocNumero: clienteData!.ruc ?? clienteData!.dni ?? null,
+              clienteDocNumero: clienteData.ruc ?? clienteData.dni ?? null,
               clienteNombre:
-                clienteData!.razonSocial ??
-                ([clienteData!.nombre, clienteData!.apellido]
+                clienteData.razonSocial ??
+                ([clienteData.nombre, clienteData.apellido]
                   .filter(Boolean)
                   .join(' ') ||
                   null),
@@ -631,8 +861,9 @@ export class VentasService {
               fechaFin,
               cobertura: coberturaTexto,
               codigoQR: randomUUID(),
-              contadorInicio: equipo?.contadorActual ?? null,
+              contadorInicio: equipo.contadorActual ?? null,
               contadorMaxCopias: detalle.producto.garantiaMaxCopias ?? null,
+              estado: EstadoGarantia.PENDIENTE_COMPLETAR,
             },
           });
         }
@@ -910,7 +1141,8 @@ export class VentasService {
 
     const credentialNames = new Set(credenciales.map((item) => item.name));
     const hasDbCredentials =
-      (credentialNames.has('sol-username') || credentialNames.has('sol-user')) &&
+      (credentialNames.has('sol-username') ||
+        credentialNames.has('sol-user')) &&
       credentialNames.has('sol-password');
 
     const hasEnvCredentials =
@@ -1054,6 +1286,21 @@ export class VentasService {
         );
       }
 
+      const equipoEstadoComercial =
+        equipo.estadoComercial as EstadoComercialEquipo;
+      if (equipoEstadoComercial === EstadoComercialEquipo.RESERVADO) {
+        const reserva = await this.findReservaEquipo(detalle.equipoSerie);
+        if (reserva?.ventaId !== venta.id) {
+          throw new BadRequestException(
+            `Equipo ${detalle.equipoSerie} está reservado por otra cotización`,
+          );
+        }
+      } else if (equipoEstadoComercial !== EstadoComercialEquipo.DISPONIBLE) {
+        throw new BadRequestException(
+          `Equipo ${detalle.equipoSerie} no está disponible para confirmar venta`,
+        );
+      }
+
       await tx.equipoCliente.create({
         data: {
           equipoId: equipo.id,
@@ -1134,6 +1381,7 @@ export class VentasService {
           codigoQR: randomUUID(),
           contadorInicio: equipo.contadorActual ?? null,
           contadorMaxCopias: detalle.producto.garantiaMaxCopias ?? null,
+          estado: EstadoGarantia.PENDIENTE_COMPLETAR,
         },
       });
     }
@@ -1207,11 +1455,17 @@ export class VentasService {
       );
     }
 
-    // Cotización sin confirmar → solo cambiar estado.
-    if (ventaEstado === EstadoVenta.COTIZACION) {
-      const updated = await this.prisma.venta.update({
-        where: { id },
-        data: { estado: EstadoVenta.CANCELADA, notas: motivo ?? venta.notas },
+    // Cotización o reserva sin confirmar → liberar reservas y cancelar.
+    if (
+      ventaEstado === EstadoVenta.COTIZACION ||
+      ventaEstado === EstadoVenta.RESERVADA
+    ) {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        await this.liberarReservasCotizacionEnTx(tx, venta.detalles ?? []);
+        return tx.venta.update({
+          where: { id },
+          data: { estado: EstadoVenta.CANCELADA, notas: motivo ?? venta.notas },
+        });
       });
       this.logger.log(`Cotización cancelada: ${updated.numero}`);
       return updated;
@@ -1294,8 +1548,13 @@ export class VentasService {
 
       // 3. Anular garantías asociadas.
       await tx.garantia.updateMany({
-        where: { ventaId: venta.id, estado: 'ACTIVA' },
-        data: { estado: 'ANULADA' },
+        where: {
+          ventaId: venta.id,
+          estado: {
+            in: [EstadoGarantia.ACTIVA, EstadoGarantia.PENDIENTE_COMPLETAR],
+          },
+        },
+        data: { estado: EstadoGarantia.ANULADA },
       });
 
       // 4. Reverso de caja (DEVOLUCION).
@@ -1337,7 +1596,8 @@ export class VentasService {
     if (!venta) {
       throw new NotFoundException(`Venta ${id} no encontrada`);
     }
-    if ((venta.estado as EstadoVenta) !== EstadoVenta.CANCELADA) {
+    const estado = venta.estado as EstadoVenta;
+    if (estado !== EstadoVenta.CANCELADA && estado !== EstadoVenta.COTIZACION) {
       throw new BadRequestException(
         'Primero cancela la venta para revertir stock, garantías y caja antes de eliminarla.',
       );

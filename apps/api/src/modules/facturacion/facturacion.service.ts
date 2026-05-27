@@ -1735,8 +1735,7 @@ export class FacturacionService {
           emisorNombreComercial: comprobante.emisorNombreComercial,
           emisorDireccionFiscal: comprobante.emisorDireccionFiscal,
           emisorUbigeoFiscal: comprobante.emisorUbigeoFiscal,
-          emisorCodigoEstablecimiento:
-            comprobante.emisorCodigoEstablecimiento,
+          emisorCodigoEstablecimiento: comprobante.emisorCodigoEstablecimiento,
           subtotal,
           igv,
           total: dto.monto,
@@ -1873,8 +1872,7 @@ export class FacturacionService {
           emisorNombreComercial: comprobante.emisorNombreComercial,
           emisorDireccionFiscal: comprobante.emisorDireccionFiscal,
           emisorUbigeoFiscal: comprobante.emisorUbigeoFiscal,
-          emisorCodigoEstablecimiento:
-            comprobante.emisorCodigoEstablecimiento,
+          emisorCodigoEstablecimiento: comprobante.emisorCodigoEstablecimiento,
           subtotal,
           igv,
           total: dto.monto,

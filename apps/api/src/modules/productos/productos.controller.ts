@@ -49,7 +49,7 @@ export class ProductosController {
   }
 
   @Post()
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Crear producto' })
   create(
     @Body() dto: CreateProductoDto,
@@ -70,13 +70,14 @@ export class ProductosController {
   }
 
   @Get('sku-sugerido')
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Generar un SKU sugerido por tipo y categoría' })
   suggestSku(
     @Query('tipo') tipo?: TipoProducto,
     @Query('categoriaId') categoriaId?: string,
+    @CurrentUser('rol') userRol?: RolUsuario,
   ) {
-    return this.productosService.suggestSku(tipo, categoriaId);
+    return this.productosService.suggestSku(tipo, categoriaId, userRol);
   }
 
   @Get(':id')
@@ -90,7 +91,7 @@ export class ProductosController {
   }
 
   @Patch(':id')
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
   @ApiOperation({ summary: 'Actualizar producto' })
   update(
     @Param('id', ParseUUIDPipe) id: string,

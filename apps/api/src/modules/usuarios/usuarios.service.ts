@@ -128,10 +128,9 @@ export class UsuariosService {
       where: { id },
       data: { activo: false },
     });
-    // Revocar refresh tokens para forzar logout en todas las sesiones
-    await this.prisma.refreshToken.updateMany({
-      where: { usuarioId: id, revoked: false },
-      data: { revoked: true },
+    // Eliminar refresh tokens para forzar logout de todas las sesiones
+    await this.prisma.refreshToken.deleteMany({
+      where: { usuarioId: id },
     });
     this.logger.log(`Cuenta desactivada: ${usuario.email}`);
     return { id, message: 'Cuenta desactivada.' };
@@ -249,13 +248,13 @@ export class UsuariosService {
       data: {
         password: hashedPassword,
         mustChangePassword: false,
+        sessionVersion: { increment: 1 },
       },
     });
 
-    // Revocar todos los refresh tokens del usuario
-    await this.prisma.refreshToken.updateMany({
-      where: { usuarioId: id, revoked: false },
-      data: { revoked: true },
+    // Eliminar todos los refresh tokens del usuario
+    await this.prisma.refreshToken.deleteMany({
+      where: { usuarioId: id },
     });
 
     this.logger.log(`Password cambiada para usuario: ${id}`);
@@ -269,10 +268,9 @@ export class UsuariosService {
       data: { deletedAt: new Date(), activo: false },
     });
 
-    // Revocar todos los refresh tokens
-    await this.prisma.refreshToken.updateMany({
-      where: { usuarioId: id, revoked: false },
-      data: { revoked: true },
+    // Eliminar todos los refresh tokens
+    await this.prisma.refreshToken.deleteMany({
+      where: { usuarioId: id },
     });
 
     this.logger.log(`Usuario eliminado (soft delete): ${id}`);

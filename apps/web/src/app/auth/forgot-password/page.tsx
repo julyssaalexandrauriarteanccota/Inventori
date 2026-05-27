@@ -7,7 +7,7 @@ import { ForgotPasswordForm } from '@/components/forgot-password-form'
 export default function ForgotPasswordPage() {
   return (
     <AuthProvider>
-      <div className="flex min-h-svh flex-col items-center justify-center p-6 md:p-10 bg-background text-foreground">
+      <div className="flex min-h-svh flex-col items-center justify-center p-4 pt-12 sm:p-6 md:p-10 bg-background text-foreground">
         <div className="flex w-full max-w-5xl flex-col gap-6">
           <ForgotPasswordForm />
           <AuthLegalFooter />

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { useForm, useWatch } from "react-hook-form";
+import { Controller, useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Calendar, Loader2, ShoppingCart } from "lucide-react";
 import {
   EstadoComercialEquipo,
+  TipoProducto,
   ventaFormSchema,
   type VentaFormPayload,
 } from "@erp/shared";
@@ -18,6 +19,7 @@ import {
   type SearchableSelectOption,
 } from "@/components/searchable-select";
 import { Button } from "@/components/ui/button";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,6 +34,7 @@ interface VentaFormProps {
   onSubmit: (data: VentaFormPayload) => void;
   isLoading?: boolean;
   mode: "create" | "edit";
+  soloEquipos?: boolean;
 }
 
 export function VentaForm({
@@ -39,6 +42,7 @@ export function VentaForm({
   onSubmit,
   isLoading = false,
   mode,
+  soloEquipos = false,
 }: VentaFormProps) {
   const {
     register,
@@ -50,7 +54,9 @@ export function VentaForm({
   } = useForm<VentaFormPayload>({
     resolver: zodResolver(ventaFormSchema),
     defaultValues: {
-      detalles: [{ productoId: "", cantidad: 1, precioUnitario: 0 }],
+      detalles: [
+        { productoId: "", cantidad: 1, precioUnitario: 0, descuento: 0 },
+      ],
       ...defaultValues,
     },
   });
@@ -62,6 +68,7 @@ export function VentaForm({
     control,
     name: "detalles.0.precioUnitario",
   });
+  const cantidad = useWatch({ control, name: "detalles.0.cantidad" });
 
   const { data: clientesRes, isLoading: isLoadingClientes } = useClientes({
     page: 1,
@@ -76,13 +83,17 @@ export function VentaForm({
 
   const clientes = useMemo(() => clientesRes?.data ?? [], [clientesRes?.data]);
   const productos = useMemo(
-    () => productosRes?.data ?? [],
-    [productosRes?.data],
+    () =>
+      (productosRes?.data ?? []).filter((producto) =>
+        soloEquipos ? producto.tipo === TipoProducto.EQUIPO : true,
+      ),
+    [productosRes?.data, soloEquipos],
   );
   const selectedProducto = productos.find(
     (producto) => producto.id === productoId,
   );
-  const requiereSerie = selectedProducto?.tieneNumeroSerie ?? false;
+  const requiereSerie =
+    !soloEquipos && (selectedProducto?.tieneNumeroSerie ?? false);
 
   const { data: equiposRes, isLoading: isLoadingEquipos } = useEquipos(
     {
@@ -151,6 +162,15 @@ export function VentaForm({
     }
   }, [equipoSerie, requiereSerie, setValue]);
 
+  useEffect(() => {
+    if (requiereSerie && cantidad !== 1) {
+      setValue("detalles.0.cantidad", 1, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [cantidad, requiereSerie, setValue]);
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <FieldGroup className="gap-3 sm:gap-7">
@@ -195,11 +215,18 @@ export function VentaForm({
             </Field>
 
             <Field data-invalid={errors.validoHasta ? true : undefined}>
-              <FieldLabel>Válido hasta</FieldLabel>
-              <Input
-                {...register("validoHasta")}
-                type="date"
-                aria-invalid={!!errors.validoHasta}
+              <FieldLabel>Válido hasta (opcional)</FieldLabel>
+              <Controller
+                control={control}
+                name="validoHasta"
+                render={({ field }) => (
+                  <DatePicker
+                    value={field.value}
+                    onChange={field.onChange}
+                    placeholder="Seleccionar fecha"
+                    aria-invalid={!!errors.validoHasta}
+                  />
+                )}
               />
               <FieldError>{errors.validoHasta?.message}</FieldError>
             </Field>
@@ -230,7 +257,7 @@ export function VentaForm({
               <ShoppingCart className="size-3.5 text-green-600 dark:text-green-400" />
             </div>
             <h3 className="text-sm font-semibold text-foreground">
-              Ítem principal
+              {soloEquipos ? "Producto cotizado" : "Ítem principal"}
             </h3>
           </div>
           <div className="grid gap-4 sm:gap-6 md:grid-cols-3">
@@ -238,7 +265,9 @@ export function VentaForm({
               data-invalid={errors.detalles?.[0]?.productoId ? true : undefined}
               className="md:col-span-3"
             >
-              <FieldLabel>Producto o servicio *</FieldLabel>
+              <FieldLabel>
+                {soloEquipos ? "Producto *" : "Producto o servicio *"}
+              </FieldLabel>
               <SearchableSelect
                 value={productoId ?? ""}
                 onChange={(value) => {
@@ -256,11 +285,21 @@ export function VentaForm({
                 placeholder={
                   isLoadingProductos
                     ? "Cargando productos..."
-                    : "Seleccionar producto o servicio"
+                    : soloEquipos
+                      ? "Seleccionar producto del catálogo"
+                      : "Seleccionar producto o servicio"
                 }
                 searchPlaceholder="Buscar por SKU o nombre"
-                emptyLabel="No hay productos activos"
-                ariaLabel="Seleccionar producto o servicio"
+                emptyLabel={
+                  soloEquipos
+                    ? "No hay productos de tipo equipo activos"
+                    : "No hay productos activos"
+                }
+                ariaLabel={
+                  soloEquipos
+                    ? "Seleccionar producto"
+                    : "Seleccionar producto o servicio"
+                }
                 invalid={!!errors.detalles?.[0]?.productoId}
                 disabled={isLoadingProductos}
               />
@@ -304,19 +343,23 @@ export function VentaForm({
               </Field>
             ) : null}
 
-            <Field
-              data-invalid={errors.detalles?.[0]?.cantidad ? true : undefined}
-            >
-              <FieldLabel>Cantidad *</FieldLabel>
-              <Input
-                {...register("detalles.0.cantidad", { valueAsNumber: true })}
-                type="number"
-                min={1}
-                placeholder="1"
-                aria-invalid={!!errors.detalles?.[0]?.cantidad}
-              />
-              <FieldError>{errors.detalles?.[0]?.cantidad?.message}</FieldError>
-            </Field>
+            {!soloEquipos && (
+              <Field
+                data-invalid={errors.detalles?.[0]?.cantidad ? true : undefined}
+              >
+                <FieldLabel>Cantidad *</FieldLabel>
+                <Input
+                  {...register("detalles.0.cantidad", { valueAsNumber: true })}
+                  type="number"
+                  min={1}
+                  max={requiereSerie ? 1 : undefined}
+                  disabled={requiereSerie}
+                  placeholder="1"
+                  aria-invalid={!!errors.detalles?.[0]?.cantidad}
+                />
+                <FieldError>{errors.detalles?.[0]?.cantidad?.message}</FieldError>
+              </Field>
+            )}
 
             <Field
               data-invalid={
@@ -344,7 +387,10 @@ export function VentaForm({
             >
               <FieldLabel>Descuento inc. IGV</FieldLabel>
               <Input
-                {...register("detalles.0.descuento", { valueAsNumber: true })}
+                {...register("detalles.0.descuento", {
+                  setValueAs: (value) =>
+                    value === "" || value == null ? undefined : Number(value),
+                })}
                 type="number"
                 min={0}
                 step="0.01"
@@ -367,7 +413,7 @@ export function VentaForm({
                 {mode === "create" ? "Creando..." : "Guardando..."}
               </>
             ) : mode === "create" ? (
-              "Crear operación"
+              soloEquipos ? "Crear cotización" : "Crear operación"
             ) : (
               "Guardar cambios"
             )}

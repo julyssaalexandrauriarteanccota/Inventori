@@ -72,7 +72,6 @@ export function useResumenApertura(aperturaId: string | undefined | null) {
     queryFn: () =>
       api.get<{ data: ResumenApertura }>(`/caja/aperturas/${aperturaId}`),
     enabled: !!aperturaId,
-    refetchInterval: 15000,
   })
 }
 
@@ -84,7 +83,6 @@ export function useMovimientosApertura(aperturaId: string | undefined | null) {
         `/caja/aperturas/${aperturaId}/movimientos`,
       ),
     enabled: !!aperturaId,
-    refetchInterval: 15000,
   })
 }
 

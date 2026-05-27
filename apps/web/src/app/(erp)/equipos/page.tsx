@@ -4,11 +4,13 @@ import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
 import { pdf } from "@react-pdf/renderer";
 import {
+  Calendar,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Clock,
   Cpu,
   Download,
   Eye,
@@ -25,6 +27,7 @@ import {
   Trash2,
   UserRound,
   Warehouse,
+  Wrench,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -174,27 +177,81 @@ function getInitialViewMode() {
 }
 
 function renderEquipoEstadoBadge(estado: EstadoEquipo) {
+  const styles = {
+    [EstadoEquipo.ACTIVO]: {
+      bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+      dot: "bg-emerald-500",
+    },
+    [EstadoEquipo.EN_REPARACION]: {
+      bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+      dot: "bg-amber-500",
+    },
+    [EstadoEquipo.BAJA]: {
+      bg: "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20",
+      dot: "bg-red-500",
+    },
+  }[estado];
+
   return (
-    <ErpBadge
-      tone={ESTADO_BADGE_TONES[estado]}
-      className="gap-1.5 whitespace-nowrap"
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold tracking-[0.01em] whitespace-nowrap shadow-none",
+        styles.bg
+      )}
     >
-      <span className="inline-flex size-1.5 rounded-full bg-current opacity-80" />
+      <span className={cn("inline-flex size-1.5 rounded-full shrink-0", styles.dot)} />
       {ESTADO_LABELS[estado]}
-    </ErpBadge>
+    </span>
   );
 }
 
 function renderEstadoComercialBadge(estado: EstadoComercialEquipo) {
+  const styles = {
+    [EstadoComercialEquipo.DISPONIBLE]: {
+      bg: "bg-emerald-500 shadow-emerald-500/30",
+      icon: CheckCircle2,
+    },
+    [EstadoComercialEquipo.RESERVADO]: {
+      bg: "bg-blue-500 shadow-blue-500/30",
+      icon: Clock,
+    },
+    [EstadoComercialEquipo.USO_INTERNO]: {
+      bg: "bg-indigo-500 shadow-indigo-500/30",
+      icon: Warehouse,
+    },
+    [EstadoComercialEquipo.VENDIDO]: {
+      bg: "bg-slate-500 shadow-slate-500/30",
+      icon: Cpu,
+    },
+    [EstadoComercialEquipo.ALQUILADO]: {
+      bg: "bg-violet-500 shadow-violet-500/30",
+      icon: UserRound,
+    },
+    [EstadoComercialEquipo.EN_REPARACION]: {
+      bg: "bg-amber-500 shadow-amber-500/30",
+      icon: Wrench,
+    },
+    [EstadoComercialEquipo.BAJA]: {
+      bg: "bg-red-500 shadow-red-500/30",
+      icon: Trash2,
+    },
+  }[estado];
+
+  const Icon = styles.icon;
+
   return (
-    <ErpBadge
-      tone={ESTADO_COMERCIAL_BADGE_TONES[estado]}
-      className="whitespace-nowrap"
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap text-white shadow-sm transition-all duration-200",
+        styles.bg
+      )}
     >
+      <Icon className="size-3 shrink-0" />
       {ESTADO_COMERCIAL_LABELS[estado]}
-    </ErpBadge>
+    </span>
   );
 }
+
 
 function getEquipoProductImage(equipo: EquipoListItem) {
   return getPrimaryProductImage(equipo.producto);
@@ -217,6 +274,116 @@ function getDestinoEquipo(equipo: EquipoListItem) {
   );
 }
 
+// ── Highlighted Text helper ──────────────────────────────────────────────────
+
+interface HighlightedTextProps {
+  text: string;
+  search: string;
+}
+
+function HighlightedText({ text, search }: HighlightedTextProps) {
+  if (!search || !search.trim()) {
+    return <>{text}</>;
+  }
+
+  const escapedSearch = search.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const regex = new RegExp(`(${escapedSearch})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        regex.test(part) ? (
+          <mark
+            key={i}
+            className="rounded bg-[var(--accent)]/18 px-0.5 font-semibold text-foreground dark:bg-[var(--accent)]/24"
+          >
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
+
+// ── Floating selection bar ───────────────────────────────────────────────────
+
+interface FloatingBarProps {
+  count: number;
+  onExport: () => void;
+  onPrint: () => void;
+  onDelete: () => void;
+  onClear: () => void;
+  isPrinting?: boolean;
+}
+
+function FloatingSelectionBar({
+  count,
+  onExport,
+  onPrint,
+  onDelete,
+  onClear,
+  isPrinting = false,
+}: FloatingBarProps) {
+  return (
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-300 ease-[cubic-bezier(0.25,1.5,0.5,1)] max-w-[calc(100vw-2rem)]">
+      <div className="flex items-center gap-1.5 px-1 sm:px-2 py-0.5">
+        <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] text-xs font-bold">
+          {count}
+        </div>
+        <span className="text-sm font-medium whitespace-nowrap hidden sm:inline">
+          seleccionado{count !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <div className="h-5 w-px bg-border mx-0.5" />
+      <Button
+        variant="ghost"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Exportar"
+        onClick={onExport}
+      >
+        <Download className="size-3.5" />
+        <span className="hidden sm:inline">Exportar</span>
+      </Button>
+      <Button
+        variant="ghost"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Imprimir etiquetas"
+        disabled={isPrinting}
+        onClick={onPrint}
+      >
+        {isPrinting ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Printer className="size-3.5" />
+        )}
+        <span className="hidden sm:inline">Imprimir etiquetas</span>
+      </Button>
+      <Button
+        variant="ghost"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Eliminar definitivo"
+        onClick={onDelete}
+      >
+        <Trash2 className="size-3.5" />
+        <span className="hidden sm:inline">Eliminar</span>
+      </Button>
+      <div className="h-5 w-px bg-border mx-0.5" />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="size-8 rounded-xl text-muted-foreground hover:text-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
+        onClick={onClear}
+        aria-label="Limpiar selección"
+      >
+        <X className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 // ── Grid card ──────────────────────────────────────────────────────────────
 
 interface EquipoCardProps {
@@ -231,6 +398,7 @@ interface EquipoCardProps {
   onReactivar: () => void;
   onDelete: () => void;
   animationDelay?: number;
+  search?: string;
 }
 
 function EquipoCard({
@@ -245,6 +413,7 @@ function EquipoCard({
   onReactivar,
   onDelete,
   animationDelay,
+  search = "",
 }: EquipoCardProps) {
   const seriePrefix = e.numeroSerie.slice(0, 3).toUpperCase();
   const imageUrl = getEquipoProductImage(e);
@@ -258,13 +427,19 @@ function EquipoCard({
       "bg-linear-to-br from-red-500 to-rose-600 dark:from-red-700 dark:to-rose-900",
   }[e.estado];
 
+  const accentBar = {
+    [EstadoEquipo.ACTIVO]: "from-emerald-400 via-emerald-500 to-emerald-600",
+    [EstadoEquipo.EN_REPARACION]: "from-amber-400 via-amber-500 to-amber-600",
+    [EstadoEquipo.BAJA]: "from-red-400 via-red-500 to-red-600",
+  }[e.estado];
+
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3.5 rounded-xl border bg-card p-4 shadow-sm transition-all duration-150 animate-fade-up",
+        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card/85 backdrop-blur-sm p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up overflow-hidden",
         isSelected
-          ? "border-primary bg-primary/5 shadow-md ring-2 ring-primary/20"
-          : "border-border hover:border-ring/50 hover:shadow-md",
+          ? "border-emerald-400 bg-emerald-50/70 dark:bg-emerald-500/10 dark:border-emerald-500/50 shadow-md ring-2 ring-emerald-400/20 dark:ring-emerald-500/20"
+          : "border-border/70 hover:border-sky-300 dark:hover:border-sky-500/40 hover:shadow-md hover:shadow-sky-500/5",
         onToggleSelect && "cursor-pointer",
       )}
       style={
@@ -274,7 +449,16 @@ function EquipoCard({
       }
       onClick={onToggleSelect}
     >
-      {/* Checkbox */}
+      {/* Tinted accent bar (left edge) */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute left-0 top-0 h-full w-1 bg-gradient-to-b opacity-70 group-hover:opacity-100 transition-opacity",
+          accentBar,
+        )}
+      />
+
+      {/* Checkbox top-left */}
       {onToggleSelect && (
         <div
           className={cn(
@@ -298,7 +482,7 @@ function EquipoCard({
             ev.stopPropagation();
             onDelete();
           }}
-          className="absolute right-3 top-3 z-10 flex size-6 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
+          className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/20 dark:hover:text-red-400 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 active:scale-95 active:duration-150"
           title="Eliminar definitivo"
         >
           <Trash2 className="size-3.5" />
@@ -308,8 +492,8 @@ function EquipoCard({
       {/* Header: avatar + name */}
       <div
         className={cn(
-          "flex items-center gap-3",
-          onToggleSelect ? "pl-6 pr-7" : "pr-7",
+          "flex items-center gap-3 relative",
+          onToggleSelect ? "pl-6 pr-7" : "pl-2 pr-7",
         )}
       >
         <ProductoThumbnail
@@ -322,13 +506,13 @@ function EquipoCard({
         />
         <div className="min-w-0 flex-1">
           <p
-            className="truncate font-semibold text-sm leading-tight"
+            className="break-words whitespace-normal font-semibold text-sm leading-snug"
             title={e.producto?.nombre ?? "—"}
           >
-            {e.producto?.nombre ?? "—"}
+            <HighlightedText text={e.producto?.nombre ?? "—"} search={search} />
           </p>
           <p className="truncate text-xs text-muted-foreground mt-0.5 font-mono">
-            {e.numeroSerie}
+            <HighlightedText text={e.numeroSerie} search={search} />
           </p>
         </div>
       </div>
@@ -338,12 +522,14 @@ function EquipoCard({
         {renderEquipoEstadoBadge(e.estado)}
         {renderEstadoComercialBadge(e.estadoComercial)}
         {e.producto?.marca?.nombre ? (
-          <ErpBadge tone="neutral">{e.producto.marca.nombre}</ErpBadge>
+          <ErpBadge tone="neutral">
+            <HighlightedText text={e.producto.marca.nombre} search={search} />
+          </ErpBadge>
         ) : null}
       </div>
 
       {/* Details */}
-      <div className="flex flex-col gap-1 text-xs text-muted-foreground border-t border-border/40 pt-3">
+      <div className="flex flex-col gap-1 text-xs text-muted-foreground border-t border-border/40 pt-3 pl-2">
         {destino ? (
           <div className="flex items-center gap-2 min-w-0">
             {e.almacen ? (
@@ -351,7 +537,9 @@ function EquipoCard({
             ) : (
               <MapPin className="size-3 shrink-0 text-muted-foreground/60" />
             )}
-            <span className="truncate">{destino}</span>
+            <span className="truncate">
+              <HighlightedText text={destino} search={search} />
+            </span>
           </div>
         ) : (
           <div className="flex items-center gap-2 opacity-40">
@@ -362,17 +550,19 @@ function EquipoCard({
         {e.producto?.modelo && (
           <div className="flex items-center gap-2">
             <Cpu className="size-3 shrink-0 text-muted-foreground/60" />
-            <span className="truncate">{e.producto.modelo}</span>
+            <span className="truncate">
+              <HighlightedText text={e.producto.modelo} search={search} />
+            </span>
           </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex flex-wrap gap-2 mt-auto pt-0.5">
+      <div className="flex gap-2 mt-auto pt-0.5">
         <Button
           variant="outline"
           size="sm"
-          className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+          className="flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium border-border/80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150 hover:bg-sky-500 hover:text-white hover:border-sky-500 dark:hover:bg-sky-500 dark:hover:border-sky-500"
           onClick={(ev) => {
             ev.stopPropagation();
             onView();
@@ -384,7 +574,7 @@ function EquipoCard({
           <Button
             variant="outline"
             size="sm"
-            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs"
+            className="flex-1 h-8 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(ev) => {
               ev.stopPropagation();
               onReactivar();
@@ -400,7 +590,7 @@ function EquipoCard({
           <Button
             variant="outline"
             size="sm"
-            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="flex-1 h-8 gap-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 hover:text-destructive transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(ev) => {
               ev.stopPropagation();
               onDarBaja();
@@ -413,7 +603,7 @@ function EquipoCard({
           <Button
             variant="ghost"
             size="sm"
-            className="min-w-24 flex-1 h-8 gap-1.5 rounded-lg text-xs"
+            className="flex-1 h-8 gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
             onClick={(ev) => {
               ev.stopPropagation();
               onEdit();
@@ -441,11 +631,11 @@ export default function EquiposPage() {
   const [search, setSearch] = useState("");
   const [estadoComercialFilter, setEstadoComercialFilter] =
     useState<string>("all");
+  const [estadoFilter, setEstadoFilter] = useState<string>("all");
+  const [draftEstadoFilter, setDraftEstadoFilter] = useState<string>("all");
   const debouncedSearch = useDebounce(search, 300);
 
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
-  const [draftEstadoComercialFilter, setDraftEstadoComercialFilter] =
-    useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "grid">(getInitialViewMode);
   const [deleteSerie, setDeleteSerie] = useState<string | null>(null);
   const [bulkDeleteSeries, setBulkDeleteSeries] = useState<string[]>([]);
@@ -476,8 +666,9 @@ export default function EquiposPage() {
         estadoComercialFilter !== "all"
           ? (estadoComercialFilter as EstadoComercialEquipo)
           : undefined,
+      estado: estadoFilter !== "all" ? (estadoFilter as EstadoEquipo) : undefined,
     }),
-    [page, limit, debouncedSearch, estadoComercialFilter],
+    [page, limit, debouncedSearch, estadoComercialFilter, estadoFilter],
   );
 
   const { data, isLoading, isError, refetch } = useEquipos(filters);
@@ -814,14 +1005,70 @@ export default function EquiposPage() {
     [printingEquipoId, brandingIdentity?.displayName, brandingIdentity?.taxId],
   );
 
+  const handleExportSelectedCards = useCallback(() => {
+    const rows = (data?.data ?? []).filter((row) => selectedCards.has(row.numeroSerie));
+    if (!rows.length) {
+      toast.error("No hay datos para exportar");
+      return;
+    }
+    const headers = [
+      "Nro. Serie",
+      "Producto",
+      "Marca",
+      "Estado operativo",
+      "Estado comercial",
+      "Destino",
+    ];
+    const lines = rows.map((e) =>
+      [
+        e.numeroSerie,
+        e.producto?.nombre ?? "",
+        e.producto?.marca?.nombre ?? "",
+        e.estado,
+        e.estadoComercial,
+        getDestinoEquipo(e) ?? "",
+      ]
+        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const csv = [headers.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "equipos-seleccionados.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${rows.length} equipos exportados`);
+    setSelectedCards(new Set());
+  }, [data?.data, selectedCards]);
+
+  const handlePrintSelectedCards = useCallback(async () => {
+    const rows = (data?.data ?? []).filter((row) => selectedCards.has(row.numeroSerie));
+    if (!rows.length) {
+      toast.error("No hay equipos seleccionados");
+      return;
+    }
+    toast.info(`Imprimiendo etiquetas para ${rows.length} equipos...`, { duration: 3000 });
+    for (const row of rows) {
+      await handlePrintEtiquetaEquipo(row);
+    }
+    setSelectedCards(new Set());
+  }, [data?.data, selectedCards, handlePrintEtiquetaEquipo]);
+
+  const handleBulkDeleteCards = useCallback(() => {
+    setBulkDeleteSeries(Array.from(selectedCards));
+    setSelectedCards(new Set());
+  }, [selectedCards]);
+
   const columns = useMemo<ColumnDef<EquipoListItem>[]>(
     () => [
       {
         accessorKey: "numeroSerie",
         header: "Nro. Serie",
         cell: ({ row }) => (
-          <span className="font-mono text-sm whitespace-nowrap">
-            {row.original.numeroSerie}
+          <span className="font-mono text-sm whitespace-nowrap text-muted-foreground">
+            <HighlightedText text={row.original.numeroSerie} search={search} />
           </span>
         ),
       },
@@ -832,25 +1079,35 @@ export default function EquiposPage() {
           const name = row.original.producto?.nombre ?? "—";
           const modelo = row.original.producto?.modelo;
           const imageUrl = getEquipoProductImage(row.original);
+          const gradientClass = {
+            [EstadoEquipo.ACTIVO]:
+              "bg-linear-to-br from-emerald-500 to-green-700 dark:from-emerald-700 dark:to-green-900 text-white shadow-sm shadow-emerald-500/30",
+            [EstadoEquipo.EN_REPARACION]:
+              "bg-linear-to-br from-amber-500 to-orange-600 dark:from-amber-700 dark:to-orange-800 text-white shadow-sm shadow-amber-500/30",
+            [EstadoEquipo.BAJA]:
+              "bg-linear-to-br from-red-500 to-rose-600 dark:from-red-700 dark:to-rose-900 text-white shadow-sm shadow-red-500/30",
+          }[row.original.estado];
+          const seriePrefix = row.original.numeroSerie.slice(0, 3).toUpperCase();
           return (
             <div className="flex min-w-0 items-center gap-2.5">
               <ProductoThumbnail
                 src={imageUrl}
                 alt={name}
-                fallback={row.original.numeroSerie}
+                fallback={seriePrefix}
                 size={36}
                 rounded="md"
+                className={cn(!imageUrl ? gradientClass : "shadow-sm shadow-black/5")}
               />
               <div className="flex min-w-0 flex-col">
                 <span
-                  className="block max-w-55 truncate font-medium text-sm"
+                  className="block max-w-55 truncate font-semibold text-sm text-foreground"
                   title={name}
                 >
-                  {name}
+                  <HighlightedText text={name} search={search} />
                 </span>
                 {modelo && (
-                  <span className="text-xs text-muted-foreground">
-                    {modelo}
+                  <span className="text-xs text-muted-foreground truncate max-w-55">
+                    <HighlightedText text={modelo} search={search} />
                   </span>
                 )}
               </div>
@@ -864,10 +1121,10 @@ export default function EquiposPage() {
         cell: ({ row }) =>
           row.original.producto?.marca?.nombre ? (
             <ErpBadge tone="neutral" className="whitespace-nowrap">
-              {row.original.producto.marca.nombre}
+              <HighlightedText text={row.original.producto.marca.nombre} search={search} />
             </ErpBadge>
           ) : (
-            <span className="text-muted-foreground">—</span>
+            <span className="text-muted-foreground/50 text-xs">—</span>
           ),
       },
       {
@@ -887,17 +1144,19 @@ export default function EquiposPage() {
         cell: ({ row }) => {
           const destino = getDestinoEquipo(row.original);
           const icon = row.original.almacen ? (
-            <Warehouse className="size-3.5 shrink-0 text-muted-foreground/60" />
+            <Warehouse className="size-3.5 shrink-0 text-sky-500 dark:text-sky-400" />
           ) : (
-            <UserRound className="size-3.5 shrink-0 text-muted-foreground/60" />
+            <UserRound className="size-3.5 shrink-0 text-emerald-500 dark:text-emerald-400" />
           );
           return destino ? (
             <span
-              className="flex max-w-45 items-center gap-1.5 truncate text-sm"
+              className="flex max-w-45 items-center gap-1.5 truncate text-xs text-muted-foreground"
               title={destino}
             >
               {icon}
-              <span className="truncate">{destino}</span>
+              <span className="truncate">
+                <HighlightedText text={destino} search={search} />
+              </span>
             </span>
           ) : (
             <span className="text-muted-foreground/50 text-xs">—</span>
@@ -914,7 +1173,7 @@ export default function EquiposPage() {
             <Button
               variant="outline"
               size="icon"
-              className="size-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="size-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] active:scale-95 active:duration-150"
               title="Imprimir etiqueta"
               disabled={printingEquipoId === row.original.id}
               onClick={() => handlePrintEtiquetaEquipo(row.original)}
@@ -929,7 +1188,7 @@ export default function EquiposPage() {
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-colors"
+              className="h-8 gap-1.5 rounded-lg px-2.5 text-xs hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
               onClick={() => setViewDetailSerie(row.original.numeroSerie)}
             >
               <Eye className="size-3.5" />
@@ -940,12 +1199,13 @@ export default function EquiposPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted"
+                  className="size-8 text-muted-foreground hover:text-foreground data-[state=open]:bg-muted transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
                 >
                   <MoreHorizontal className="size-4" />
                   <span className="sr-only">Acciones</span>
                 </Button>
               </DropdownMenuTrigger>
+
               <DropdownMenuContent align="end" className="w-44">
                 <DropdownMenuGroup>
                   {canEdit && (
@@ -1076,6 +1336,7 @@ export default function EquiposPage() {
     [
       canEdit,
       canDelete,
+      search,
       handleFlujoEquipo,
       handlePrintEtiquetaEquipo,
       openReactivarEquipo,
@@ -1092,6 +1353,10 @@ export default function EquiposPage() {
     setEstadoComercialFilter(value);
     setPage(1);
   }, []);
+  const handleEstadoChange = useCallback((value: string) => {
+    setEstadoFilter(value);
+    setPage(1);
+  }, []);
   const handleLimitChange = useCallback((value: number) => {
     setLimit(value);
     setPage(1);
@@ -1105,23 +1370,23 @@ export default function EquiposPage() {
   const openFilterPopover = useCallback(
     (open: boolean) => {
       setFilterPopoverOpen(open);
-      if (open) setDraftEstadoComercialFilter(estadoComercialFilter);
+      if (open) setDraftEstadoFilter(estadoFilter);
     },
-    [estadoComercialFilter],
+    [estadoFilter],
   );
 
   const applyFilterPopover = useCallback(() => {
-    handleEstadoComercialChange(draftEstadoComercialFilter);
+    handleEstadoChange(draftEstadoFilter);
     setFilterPopoverOpen(false);
-  }, [draftEstadoComercialFilter, handleEstadoComercialChange]);
+  }, [draftEstadoFilter, handleEstadoChange]);
 
   const clearFilterPopover = useCallback(() => {
-    setDraftEstadoComercialFilter("all");
-    handleEstadoComercialChange("all");
+    setDraftEstadoFilter("all");
+    handleEstadoChange("all");
     setFilterPopoverOpen(false);
-  }, [handleEstadoComercialChange]);
+  }, [handleEstadoChange]);
 
-  const activeFilterCount = estadoComercialFilter !== "all" ? 1 : 0;
+  const activeFilterCount = estadoFilter !== "all" ? 1 : 0;
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -1183,175 +1448,226 @@ export default function EquiposPage() {
       </div>
 
       {/* ── Toolbar ── */}
-      <div className="flex flex-col gap-2.5">
-        {/* Row 1: Actions on the right */}
-        <div className="flex items-center justify-end gap-2">
-          {/* Filtros popover */}
-          <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
-            <PopoverTrigger asChild>
-              <ToolbarFiltersButton
-                open={filterPopoverOpen}
-                activeCount={activeFilterCount}
-              />
-            </PopoverTrigger>
-            <PopoverContent
-              align="end"
-              sideOffset={10}
-              className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
-            >
-              <div className="border-b border-border/60 px-4 py-3">
-                <p className="text-sm font-semibold">Filtros</p>
-                <p className="text-xs text-muted-foreground">
-                  Refina la lista visible
-                </p>
-              </div>
-              <div className="space-y-4 px-4 py-4">
-                <div className="space-y-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                    Estado comercial
-                  </p>
-                  <div className="grid gap-2">
-                    {ESTADO_COMERCIAL_FILTER_OPTIONS.map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={cn(
-                          "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                          draftEstadoComercialFilter === option.value
-                            ? "border-primary/40 bg-primary/5 text-foreground"
-                            : "border-border/60 bg-background hover:bg-muted/40",
-                        )}
-                        onClick={() =>
-                          setDraftEstadoComercialFilter(option.value)
-                        }
-                      >
-                        <span
-                          className={cn(
-                            "flex size-4 items-center justify-center rounded-full border transition-colors",
-                            draftEstadoComercialFilter === option.value
-                              ? "border-primary"
-                              : "border-muted-foreground/40",
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "size-2 rounded-full transition-colors",
-                              draftEstadoComercialFilter === option.value
-                                ? "bg-primary"
-                                : "bg-transparent",
-                            )}
-                          />
-                        </span>
-                        <span>{option.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 rounded-lg text-xs text-muted-foreground"
-                    onClick={clearFilterPopover}
-                  >
-                    Limpiar
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 rounded-lg text-xs"
-                    onClick={applyFilterPopover}
-                  >
-                    Aplicar filtros
-                  </Button>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-
-          {canDelete && (
-            <Button
-              variant={selectionMode ? "secondary" : "outline"}
-              size="sm"
-              className="h-9 gap-1.5 rounded-lg text-xs"
-              onClick={handleSelectionModeToggle}
-            >
-              <CheckCircle2 className="size-3.5" />
-              {selectionMode ? "Cancelar selección" : "Seleccionar"}
-            </Button>
-          )}
-
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(value) => {
-              if (value === "list" || value === "grid") {
-                setViewMode(value);
-              }
-            }}
-            variant="outline"
-            size="sm"
-            className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5"
-          >
-            <ToggleGroupItem
-              value="list"
-              className="h-8 rounded-md px-2.5"
-              aria-label="Vista tabla"
-              title="Vista tabla"
-            >
-              <List className="size-3.5" />
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="grid"
-              className="h-8 rounded-md px-2.5"
-              aria-label="Vista tarjetas"
-              title="Vista tarjetas"
-            >
-              <LayoutGrid className="size-3.5" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-
-        {/* Row 2: Search input on the left, Tabs on the right */}
-        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3.5 w-full min-w-0">
+        {/* Row 1: Search and Actions */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between w-full">
           {/* Search */}
           <ToolbarSearchInput
             value={search}
             onChange={handleSearchChange}
             placeholder="Buscar por serie, producto…"
-            className="w-full sm:max-w-xs"
+            className="w-full sm:w-80 lg:w-96"
             inputClassName="border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
 
-          {/* Commercial status quick tabs */}
-          <div className="flex overflow-x-auto pb-1 sm:pb-0">
-            <Tabs
-              value={estadoComercialFilter}
-              onValueChange={handleEstadoComercialChange}
-              className="w-full sm:w-auto"
+          {/* Action buttons (Filtros, Seleccionar, ToggleGroup) */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end shrink-0">
+            {/* Filtros popover */}
+            <Popover open={filterPopoverOpen} onOpenChange={openFilterPopover}>
+              <PopoverTrigger asChild>
+                <ToolbarFiltersButton
+                  open={filterPopoverOpen}
+                  activeCount={activeFilterCount}
+                  className="flex-1 sm:flex-initial"
+                />
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                sideOffset={10}
+                className="w-[calc(100vw-2rem)] sm:w-70 max-w-xs rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+              >
+                <div className="border-b border-border/60 px-4 py-3">
+                  <p className="text-sm font-semibold">Filtros</p>
+                  <p className="text-xs text-muted-foreground">
+                    Refina la lista visible
+                  </p>
+                </div>
+                <div className="space-y-4 px-4 py-4">
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Estado operativo
+                    </p>
+                    <div className="grid gap-2">
+                      {[
+                        { value: "all", label: "Todos" },
+                        { value: EstadoEquipo.ACTIVO, label: "Activos" },
+                        { value: EstadoEquipo.EN_REPARACION, label: "En reparación" },
+                        { value: EstadoEquipo.BAJA, label: "De baja" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={cn(
+                            "flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.01] active:scale-[0.97] active:duration-150",
+                            draftEstadoFilter === option.value
+                              ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-foreground"
+                              : "border-border/60 bg-background hover:bg-muted/40",
+                          )}
+                          onClick={() => setDraftEstadoFilter(option.value)}
+                        >
+                          <span
+                            className={cn(
+                              "flex size-4 items-center justify-center rounded-full border transition-colors",
+                              draftEstadoFilter === option.value
+                                ? "border-[var(--accent)]"
+                                : "border-muted-foreground/40",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "size-2 rounded-full transition-colors",
+                                draftEstadoFilter === option.value
+                                  ? "bg-[var(--accent)]"
+                                  : "bg-transparent",
+                              )}
+                            />
+                          </span>
+                          <span>{option.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 rounded-lg text-xs text-muted-foreground transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:bg-muted active:scale-95 active:duration-150"
+                      onClick={clearFilterPopover}
+                    >
+                      Limpiar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                      onClick={applyFilterPopover}
+                    >
+                      Aplicar filtros
+                    </Button>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {canDelete && (
+              <Button
+                variant={selectionMode ? "secondary" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150",
+                  selectionMode
+                    ? "bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40 dark:hover:bg-emerald-500/30"
+                    : "border-border/80 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300",
+                )}
+                onClick={handleSelectionModeToggle}
+              >
+                <CheckCircle2 className="size-3.5 shrink-0" />
+                <span className="hidden sm:inline">
+                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                </span>
+              </Button>
+            )}
+
+            <ToggleGroup
+              type="single"
+              value={viewMode}
+              onValueChange={(value) => {
+                if (value === "list" || value === "grid") {
+                  setViewMode(value);
+                  setSelectedCards(new Set());
+                }
+              }}
+              variant="outline"
+              size="sm"
+              className="gap-0 rounded-lg border border-border/70 bg-muted/50 p-0.5 shrink-0"
             >
-              <TabsList className="h-9 w-full sm:w-auto gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5 flex">
-                <TabsTrigger
-                  value="all"
-                  className="h-8 flex-1 sm:flex-none rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
-                >
-                  Todos
-                </TabsTrigger>
-                {ESTADO_COMERCIAL_FILTER_OPTIONS.filter(
-                  (option) => option.value !== "all",
-                ).map((option) => (
-                  <TabsTrigger
-                    key={option.value}
-                    value={option.value}
-                    className="h-8 flex-1 sm:flex-none shrink-0 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground"
-                  >
-                    {option.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+              <ToggleGroupItem
+                value="list"
+                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
+                aria-label="Vista tabla"
+                title="Vista tabla"
+              >
+                <List className="size-3.5" />
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="grid"
+                className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
+                aria-label="Vista tarjetas"
+                title="Vista tarjetas"
+              >
+                <LayoutGrid className="size-3.5" />
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
+        </div>
+
+        {/* Row 2: Commercial status quick tabs - fully scrollable full width */}
+        <div className="w-full overflow-hidden">
+          <Tabs
+            value={estadoComercialFilter}
+            onValueChange={handleEstadoComercialChange}
+            className="w-full"
+          >
+            <TabsList className="flex w-full h-9 gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5 overflow-x-auto no-scrollbar scroll-smooth flex-nowrap">
+              <TabsTrigger
+                value="all"
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Monitor className="size-3.5" />
+                <span>Todos</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.DISPONIBLE}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <CheckCircle2 className="size-3.5" />
+                <span>Disponible</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.RESERVADO}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-blue-500/30 dark:data-[state=active]:bg-blue-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Clock className="size-3.5" />
+                <span>Reservado</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.USO_INTERNO}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Warehouse className="size-3.5" />
+                <span>Uso interno</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.VENDIDO}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-slate-500/30 dark:data-[state=active]:bg-slate-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Cpu className="size-3.5" />
+                <span>Vendido</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.ALQUILADO}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 dark:data-[state=active]:bg-violet-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <UserRound className="size-3.5" />
+                <span>Alquilado</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.EN_REPARACION}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Wrench className="size-3.5" />
+                <span>Reparación</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value={EstadoComercialEquipo.BAJA}
+                className="flex-1 sm:flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-red-500/30 dark:data-[state=active]:bg-red-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Trash2 className="size-3.5" />
+                <span>Baja</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
       </div>
 
@@ -1440,75 +1756,6 @@ export default function EquiposPage() {
         />
       ) : (
         <div className="min-h-0">
-          {selectionMode && viewMode === "grid" && selectedCards.size > 0 ? (
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-card px-4 py-3">
-              <p className="text-xs text-muted-foreground">
-                {selectedCards.size} equipo{selectedCards.size === 1 ? "" : "s"}{" "}
-                seleccionado{selectedCards.size === 1 ? "" : "s"}
-              </p>
-              <div className="flex items-center gap-1.5">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 gap-1.5 rounded-lg text-xs"
-                  onClick={() => {
-                    const rows = (data?.data ?? []).filter((row) =>
-                      selectedCards.has(row.numeroSerie),
-                    );
-                    const headers = [
-                      "Nro. Serie",
-                      "Producto",
-                      "Marca",
-                      "Estado operativo",
-                      "Estado comercial",
-                      "Destino",
-                    ];
-                    const lines = rows.map((e) =>
-                      [
-                        e.numeroSerie,
-                        e.producto?.nombre ?? "",
-                        e.producto?.marca?.nombre ?? "",
-                        e.estado,
-                        e.estadoComercial,
-                        getDestinoEquipo(e) ?? "",
-                      ]
-                        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-                        .join(","),
-                    );
-                    const csv = [headers.join(","), ...lines].join("\n");
-                    const blob = new Blob([csv], {
-                      type: "text/csv;charset=utf-8;",
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "equipos.csv";
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    toast.success(`${rows.length} equipos exportados`);
-                    setSelectedCards(new Set());
-                  }}
-                >
-                  <Download className="size-3.5" />
-                  Exportar
-                </Button>
-                {canDelete ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 gap-1.5 rounded-lg text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    onClick={() =>
-                      setBulkDeleteSeries(Array.from(selectedCards))
-                    }
-                  >
-                    <Trash2 className="size-3.5" />
-                    Eliminar definitivo
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
-
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {Array.from({ length: 8 }).map((_, i) => (
@@ -1572,6 +1819,7 @@ export default function EquiposPage() {
                     }
                     onReactivar={() => openReactivarEquipo(e)}
                     onDelete={() => setDeleteSerie(e.numeroSerie)}
+                    search={search}
                   />
                 ))}
               </div>
@@ -1989,6 +2237,17 @@ export default function EquiposPage() {
         }}
         canEdit={canEdit}
       />
+
+      {selectedCards.size > 0 && (
+        <FloatingSelectionBar
+          count={selectedCards.size}
+          onExport={handleExportSelectedCards}
+          onPrint={handlePrintSelectedCards}
+          onDelete={handleBulkDeleteCards}
+          onClear={() => setSelectedCards(new Set())}
+          isPrinting={printingEquipoId !== null}
+        />
+      )}
     </div>
   );
 }

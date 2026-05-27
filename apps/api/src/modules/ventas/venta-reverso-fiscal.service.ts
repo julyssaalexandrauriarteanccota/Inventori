@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   EstadoComercialEquipo,
   EstadoFacturacionVenta,
+  EstadoGarantia,
   TipoMovimiento,
 } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
@@ -119,8 +120,13 @@ export class VentaReversoFiscalService {
 
       // 3. Anular garantías asociadas.
       await tx.garantia.updateMany({
-        where: { ventaId: venta.id, estado: 'ACTIVA' },
-        data: { estado: 'ANULADA' },
+        where: {
+          ventaId: venta.id,
+          estado: {
+            in: [EstadoGarantia.ACTIVA, EstadoGarantia.PENDIENTE_COMPLETAR],
+          },
+        },
+        data: { estado: EstadoGarantia.ANULADA },
       });
 
       // 4. Reverso de caja (DEVOLUCION).

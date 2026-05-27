@@ -70,15 +70,20 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales invalidas');
     }
 
-    await this.prisma.usuario.update({
+    const { sessionVersion } = await this.prisma.usuario.update({
       where: { id: usuario.id },
-      data: { ultimoAcceso: new Date() },
+      data: {
+        ultimoAcceso: new Date(),
+        sessionVersion: { increment: 1 },
+      },
+      select: { sessionVersion: true },
     });
 
     const tokens = await this.generateTokens(
       usuario.id,
       usuario.email,
       usuario.rol,
+      sessionVersion,
     );
 
     this.logger.log(`Login exitoso: ${usuario.email}`);
@@ -403,9 +408,10 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
+    const hashedToken = this.hashRefreshToken(refreshToken);
     const storedToken = await this.prisma.refreshToken.findFirst({
       where: {
-        token: refreshToken,
+        token: hashedToken,
         revoked: false,
         expiresAt: { gt: new Date() },
       },
@@ -417,6 +423,7 @@ export class AuthService {
             rol: true,
             activo: true,
             deletedAt: true,
+            sessionVersion: true,
           },
         },
       },
@@ -430,15 +437,15 @@ export class AuthService {
       throw new UnauthorizedException('Usuario desactivado');
     }
 
-    await this.prisma.refreshToken.update({
+    await this.prisma.refreshToken.delete({
       where: { id: storedToken.id },
-      data: { revoked: true },
     });
 
     const tokens = await this.generateTokens(
       storedToken.usuario.id,
       storedToken.usuario.email,
       storedToken.usuario.rol,
+      storedToken.usuario.sessionVersion,
     );
 
     this.logger.log(`Token refreshed: ${storedToken.usuario.email}`);
@@ -447,24 +454,30 @@ export class AuthService {
   }
 
   async logout(refreshToken: string) {
+    const hashedToken = this.hashRefreshToken(refreshToken);
     const storedToken = await this.prisma.refreshToken.findFirst({
-      where: { token: refreshToken, revoked: false },
+      where: { token: hashedToken },
     });
 
     if (storedToken) {
-      await this.prisma.refreshToken.update({
+      await this.prisma.refreshToken.delete({
         where: { id: storedToken.id },
-        data: { revoked: true },
       });
     }
   }
 
   async logoutAll(userId: string) {
-    await this.prisma.refreshToken.updateMany({
-      where: { usuarioId: userId, revoked: false },
-      data: { revoked: true },
-    });
-    this.logger.log(`All tokens revoked for user: ${userId}`);
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.deleteMany({
+        where: { usuarioId: userId },
+      }),
+      this.prisma.usuario.update({
+        where: { id: userId },
+        data: { sessionVersion: { increment: 1 } },
+        select: { id: true },
+      }),
+    ]);
+    this.logger.log(`All tokens deleted for user: ${userId}`);
   }
 
   async getProfile(userId: string) {
@@ -533,26 +546,44 @@ export class AuthService {
     return { message: 'Contrasena actualizada correctamente.' };
   }
 
-  private async generateTokens(userId: string, email: string, rol: string) {
+  private async generateTokens(
+    userId: string,
+    email: string,
+    rol: string,
+    sessionVersion: number,
+  ) {
     const payload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub: userId,
       email,
       rol: rol as JwtPayload['rol'],
+      sv: sessionVersion,
     };
 
     const accessToken = this.jwtService.sign(payload);
 
     const refreshTokenValue = randomBytes(64).toString('hex');
+    const hashedToken = this.hashRefreshToken(refreshTokenValue);
     const refreshExpiresIn = this.configService.get<string>(
       'JWT_REFRESH_EXPIRES_IN',
       '30d',
     );
     const expiresAt = this.calculateExpiry(refreshExpiresIn);
 
+    // Enforce single active session by revoking all previous active tokens
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        usuarioId: userId,
+        revoked: false,
+      },
+      data: {
+        revoked: true,
+      },
+    });
+
     await this.prisma.refreshToken.create({
       data: {
         usuarioId: userId,
-        token: refreshTokenValue,
+        token: hashedToken,
         expiresAt,
       },
     });
@@ -601,6 +632,10 @@ export class AuthService {
 
   private hashPasswordResetToken(tokenId: string) {
     return createHash('sha256').update(tokenId).digest('hex');
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private ensureSecurePassword(password: string) {

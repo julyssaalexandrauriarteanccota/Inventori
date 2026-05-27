@@ -10,7 +10,7 @@ import * as fs from 'fs';
 async function main() {
   console.log('Starting direct inspection...');
   console.log('DATABASE_URL present:', !!process.env.DATABASE_URL);
-  
+
   const prisma = new PrismaService();
   await prisma.$connect();
   console.log('Connected to PostgreSQL successfully!');
@@ -24,9 +24,9 @@ async function main() {
     include: {
       detallesFiscales: true,
       envioLogs: {
-        orderBy: { fecha: 'desc' }
-      }
-    }
+        orderBy: { fecha: 'desc' },
+      },
+    },
   });
 
   if (!comp) {
@@ -46,9 +46,13 @@ async function main() {
   console.log('SUNAT Code:', comp.codigoSunat);
   console.log('\n================ SENDING LOGS ================');
   for (const log of comp.envioLogs) {
-    console.log(`- [${new Date(log.fecha).toLocaleString()}] Evento: ${log.tipoEvento} | Estado: ${log.estado}`);
+    console.log(
+      `- [${new Date(log.fecha).toLocaleString()}] Evento: ${log.tipoEvento} | Estado: ${log.estado}`,
+    );
     if (log.responseCode || log.responseDescription) {
-      console.log(`  SUNAT Resp: [${log.responseCode}] ${log.responseDescription}`);
+      console.log(
+        `  SUNAT Resp: [${log.responseCode}] ${log.responseDescription}`,
+      );
     }
     if (log.mensaje) {
       console.log(`  Mensaje: ${log.mensaje}`);
@@ -74,7 +78,7 @@ async function main() {
     // Create an ad-hoc ConfigService to feed to FiscalStorageService
     const configService = new ConfigService(process.env);
     const storage = new FiscalStorageService(configService);
-    
+
     try {
       const xml = await storage.readObjectText(comp.xmlStorageKey, 'latin1');
       if (xml) {
@@ -82,7 +86,7 @@ async function main() {
         const outPath = path.join(__dirname, 'last-signed-invoice.xml');
         fs.writeFileSync(outPath, xml, 'latin1');
         console.log(`Signed XML successfully written to: ${outPath}`);
-        
+
         // Print first 800 chars of XML
         console.log('\nFirst 800 characters of XML:');
         console.log(xml.slice(0, 800));

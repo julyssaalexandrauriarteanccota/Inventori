@@ -57,6 +57,7 @@ type UbigeoSelection = {
 }
 
 const LOWERCASE_CONNECTORS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e'])
+const LOCATION_TEXT_STOP_WORDS = new Set(['peru', 'perú'])
 
 function normalizeLookup(value: string) {
   return value
@@ -88,6 +89,25 @@ function formatUbigeoName(rawValue: string) {
         .join('-'),
     )
     .join(' ')
+}
+
+function cleanLocationTextPart(value: string) {
+  return value
+    .replace(/\b(departamento|region|región|provincia|province|distrito|district)\b/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*de\s+/iu, '')
+    .trim()
+}
+
+function splitLocationText(value?: string) {
+  if (!value?.trim()) {
+    return []
+  }
+
+  return value
+    .split(/[,;/|]/u)
+    .map((part) => cleanLocationTextPart(part))
+    .filter((part) => part && !LOCATION_TEXT_STOP_WORDS.has(normalizeLookup(part)))
 }
 
 const departamentosSource = (departamentosData as DepartamentosFile).ubigeo_departamentos
@@ -242,6 +262,87 @@ export function getCanonicalUbigeoSelection(selection: UbigeoSelection) {
     ...(departamento ? { departamento } : {}),
     ...(provincia ? { provincia } : {}),
     ...(distrito ? { distrito } : {}),
+  }
+}
+
+export function inferUbigeoSelectionFromText(
+  text?: string,
+  hints: UbigeoSelection = {},
+) {
+  const parts = splitLocationText(text)
+  const hintedDepartamento = findDepartamentoByName(hints.departamento)
+  let departamento = hintedDepartamento ?? null
+  let departamentoPartIndex = -1
+
+  if (!departamento) {
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const match = findDepartamentoByName(parts[index])
+      if (match) {
+        departamento = match
+        departamentoPartIndex = index
+        break
+      }
+    }
+  } else {
+    const selectedDepartamento = departamento
+    departamentoPartIndex = parts.findIndex(
+      (part) =>
+        normalizeLookup(part) === normalizeLookup(selectedDepartamento.name),
+    )
+  }
+
+  const hintedProvincia = departamento
+    ? findProvinciaByName(departamento.name, hints.provincia)
+    : null
+  let provincia = hintedProvincia ?? null
+  let provinciaPartIndex = -1
+
+  if (departamento && !provincia) {
+    const maxIndex =
+      departamentoPartIndex >= 0 ? departamentoPartIndex - 1 : parts.length - 1
+
+    for (let index = maxIndex; index >= 0; index -= 1) {
+      const match = findProvinciaByName(departamento.name, parts[index])
+      if (match) {
+        provincia = match
+        provinciaPartIndex = index
+        break
+      }
+    }
+  } else if (provincia) {
+    const selectedProvincia = provincia
+    provinciaPartIndex = parts.findIndex(
+      (part) => normalizeLookup(part) === normalizeLookup(selectedProvincia.name),
+    )
+  }
+
+  const hintedDistrito =
+    departamento && provincia
+      ? findDistritoByName(departamento.name, provincia.name, hints.distrito)
+      : null
+  let distrito = hintedDistrito ?? null
+
+  if (departamento && provincia && !distrito) {
+    const maxIndex =
+      provinciaPartIndex >= 0 ? provinciaPartIndex - 1 : parts.length - 1
+
+    for (let index = maxIndex; index >= 0; index -= 1) {
+      const match = findDistritoByName(
+        departamento.name,
+        provincia.name,
+        parts[index],
+      )
+      if (match) {
+        distrito = match
+        break
+      }
+    }
+  }
+
+  return {
+    ...(departamento ? { departamento: departamento.name } : {}),
+    ...(provincia ? { provincia: provincia.name } : {}),
+    ...(distrito ? { distrito: distrito.name } : {}),
   }
 }
 

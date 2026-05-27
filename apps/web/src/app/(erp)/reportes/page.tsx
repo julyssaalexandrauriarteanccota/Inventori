@@ -54,21 +54,46 @@ export default function ReportesHubPage() {
   );
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-4">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col gap-4">
+      {/* Decorative backing glows — coordinated with premium themes */}
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/8 dark:bg-indigo-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/6 dark:bg-sky-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-violet-400/5 dark:bg-violet-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
+
       <p className="text-sm text-muted-foreground">
         Indicadores y métricas del sistema
       </p>
 
       <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
-        <TabsList className="grid w-full grid-cols-2 rounded-2xl lg:grid-cols-4">
-          <TabsTrigger value="resumen">Resumen</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 sm:flex sm:w-auto h-10 gap-0.5 rounded-xl border border-border/70 bg-muted/70 p-0.5">
+          <TabsTrigger
+            value="resumen"
+            className="h-9 shrink-0 rounded-lg px-4 text-xs text-muted-foreground data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            Resumen
+          </TabsTrigger>
           {canViewFinancials && (
-            <TabsTrigger value="ventas">Ventas</TabsTrigger>
+            <TabsTrigger
+              value="ventas"
+              className="h-9 shrink-0 rounded-lg px-4 text-xs text-muted-foreground data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              Ventas
+            </TabsTrigger>
           )}
           {canViewFinancials && (
-            <TabsTrigger value="inventario">Inventario</TabsTrigger>
+            <TabsTrigger
+              value="inventario"
+              className="h-9 shrink-0 rounded-lg px-4 text-xs text-muted-foreground data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              Inventario
+            </TabsTrigger>
           )}
-          <TabsTrigger value="soporte">Soporte</TabsTrigger>
+          <TabsTrigger
+            value="soporte"
+            className="h-9 shrink-0 rounded-lg px-4 text-xs text-muted-foreground data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-md data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            Soporte
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumen" className="mt-4">

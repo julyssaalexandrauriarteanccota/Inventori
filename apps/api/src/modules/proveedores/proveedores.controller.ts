@@ -20,12 +20,17 @@ import {
   QueryProveedorDto,
 } from './dto';
 import { Roles } from '../../common/decorators';
+import { ConsultaDocumentoClienteService } from '../clientes/consulta-documento-cliente.service';
+import { ConsultaDocumentoClienteDto } from '../clientes/dto';
 
 @ApiTags('Proveedores')
 @ApiBearerAuth()
 @Controller('proveedores')
 export class ProveedoresController {
-  constructor(private readonly proveedoresService: ProveedoresService) {}
+  constructor(
+    private readonly proveedoresService: ProveedoresService,
+    private readonly consultaDocumentoService: ConsultaDocumentoClienteService,
+  ) {}
 
   @Post()
   @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
@@ -39,6 +44,13 @@ export class ProveedoresController {
   @ApiOperation({ summary: 'Listar proveedores (paginado)' })
   findAll(@Query() query: QueryProveedorDto) {
     return this.proveedoresService.findAll(query);
+  }
+
+  @Post('consulta-documento')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({ summary: 'Consultar RUC con proveedor documental' })
+  consultarDocumento(@Body() dto: ConsultaDocumentoClienteDto) {
+    return this.consultaDocumentoService.consultar(dto);
   }
 
   @Get(':id')

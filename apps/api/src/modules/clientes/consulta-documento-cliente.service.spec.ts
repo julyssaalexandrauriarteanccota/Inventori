@@ -1,4 +1,7 @@
-import { BadRequestException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
@@ -33,10 +36,12 @@ describe('ConsultaDocumentoClienteService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
+        return fallback;
+      },
+    );
     mockPrismaService.cliente.findFirst.mockResolvedValue({ id: 'cliente-1' });
     mockPrismaService.clienteValidacionSunat.upsert.mockResolvedValue({});
     mockPadronSunatRucService.findByRuc.mockResolvedValue(null);
@@ -50,11 +55,14 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('consulta y normaliza RUC desde Decolecta', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
-      if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER') return 'DECOLECTA,APISPERU';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
+        if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER')
+          return 'DECOLECTA,APISPERU';
+        return fallback;
+      },
+    );
     mockHttpService.get.mockReturnValue(
       of({
         data: {
@@ -78,7 +86,9 @@ describe('ConsultaDocumentoClienteService', () => {
 
     expect(result.razonSocial).toBe('EMPRESA SAC');
     expect(result.estado).toBe('ACTIVO');
-    expect(mockPrismaService.clienteValidacionSunat.upsert).toHaveBeenCalledWith(
+    expect(
+      mockPrismaService.clienteValidacionSunat.upsert,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           tipoDocumentoSunat_numeroDocumento: {
@@ -125,7 +135,9 @@ describe('ConsultaDocumentoClienteService', () => {
     expect(result.proveedor).toBe('SUNAT_PADRON_LOCAL');
     expect(result.razonSocial).toBe('LOCAL EMPRESA SAC');
     expect(mockHttpService.get).not.toHaveBeenCalled();
-    expect(mockPrismaService.clienteValidacionSunat.upsert).toHaveBeenCalledWith(
+    expect(
+      mockPrismaService.clienteValidacionSunat.upsert,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({
           proveedor: 'SUNAT_PADRON_LOCAL',
@@ -152,11 +164,14 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('en modo externo omite padrón local y consulta proveedores configurados', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
-      if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER') return 'SUNAT_PADRON_LOCAL,DECOLECTA';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
+        if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER')
+          return 'SUNAT_PADRON_LOCAL,DECOLECTA';
+        return fallback;
+      },
+    );
     mockPadronSunatRucService.findByRuc.mockResolvedValue({
       ruc: '20123456789',
       razonSocial: 'LOCAL EMPRESA SAC',
@@ -191,11 +206,14 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('consulta y normaliza DNI desde Decolecta', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
-      if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER') return 'DECOLECTA,APISPERU';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
+        if (key === 'DOCUMENT_LOOKUP_PROVIDER_ORDER')
+          return 'DECOLECTA,APISPERU';
+        return fallback;
+      },
+    );
     mockHttpService.get.mockReturnValue(
       of({
         data: {
@@ -216,7 +234,9 @@ describe('ConsultaDocumentoClienteService', () => {
     expect(result.nombres).toBe('JUAN CARLOS');
     expect(result.apellidoPaterno).toBe('PEREZ');
     expect(result.estado).toBe('VALIDO');
-    expect(mockPrismaService.clienteValidacionSunat.upsert).toHaveBeenCalledWith(
+    expect(
+      mockPrismaService.clienteValidacionSunat.upsert,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           tipoDocumentoSunat_numeroDocumento: {
@@ -229,11 +249,13 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('consulta RUC con APISPERU cuando Decolecta no está configurado', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return '';
-      if (key === 'APISPERU_API_TOKEN') return 'apisperu-token';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return '';
+        if (key === 'APISPERU_API_TOKEN') return 'apisperu-token';
+        return fallback;
+      },
+    );
     mockHttpService.get.mockReturnValue(
       of({
         data: {
@@ -271,11 +293,13 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('hace fallback a APISPERU si Decolecta falla', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
-      if (key === 'APISPERU_API_TOKEN') return 'apisperu-token';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return 'token-test';
+        if (key === 'APISPERU_API_TOKEN') return 'apisperu-token';
+        return fallback;
+      },
+    );
     mockHttpService.get
       .mockReturnValueOnce(throwError(() => new AxiosError('timeout')))
       .mockReturnValueOnce(
@@ -309,13 +333,18 @@ describe('ConsultaDocumentoClienteService', () => {
   });
 
   it('falla controlado cuando falta el token', async () => {
-    mockConfigService.get.mockImplementation((key: string, fallback?: string) => {
-      if (key === 'DECOLECTA_API_TOKEN') return '';
-      return fallback;
-    });
+    mockConfigService.get.mockImplementation(
+      (key: string, fallback?: string) => {
+        if (key === 'DECOLECTA_API_TOKEN') return '';
+        return fallback;
+      },
+    );
 
     await expect(
-      service.consultar({ tipoDocumento: 'RUC', numeroDocumento: '20123456789' }),
+      service.consultar({
+        tipoDocumento: 'RUC',
+        numeroDocumento: '20123456789',
+      }),
     ).rejects.toThrow(ServiceUnavailableException);
   });
 
@@ -325,7 +354,10 @@ describe('ConsultaDocumentoClienteService', () => {
     );
 
     await expect(
-      service.consultar({ tipoDocumento: 'RUC', numeroDocumento: '20123456789' }),
+      service.consultar({
+        tipoDocumento: 'RUC',
+        numeroDocumento: '20123456789',
+      }),
     ).rejects.toThrow(ServiceUnavailableException);
   });
 });

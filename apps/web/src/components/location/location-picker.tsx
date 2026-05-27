@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Loader2, LocateFixed, MapPin, Search, X } from "lucide-react";
+import {
+  Check,
+  ClipboardPaste,
+  Loader2,
+  LocateFixed,
+  MapPin,
+  Search,
+  X,
+} from "lucide-react";
 import type { LocationPayload, LocationSearchResult } from "@erp/shared";
 
 import {
@@ -17,6 +25,7 @@ interface LocationPickerProps {
   value: LocationPayload;
   onChange: (patch: Partial<LocationPayload>) => void;
   disabled?: boolean;
+  autoApplyReverse?: boolean;
 }
 
 function tryParseCoordinates(rawValue: string) {
@@ -50,6 +59,7 @@ export function LocationPicker({
   value,
   onChange,
   disabled = false,
+  autoApplyReverse = false,
 }: LocationPickerProps) {
   const buscarMutation = useBuscarUbicaciones();
   const reverseMutation = useUbicacionReversa();
@@ -60,6 +70,8 @@ export function LocationPicker({
     useState<LocationSearchResult | null>(null);
   const [mapCenter, setMapCenter] = useState<{ latitud: number; longitud: number } | null>(null);
   const activeSearchText = isEditingSearch ? searchText : currentDireccion;
+  const canPasteFromClipboard =
+    typeof navigator !== "undefined" && Boolean(navigator.clipboard?.readText);
 
   const marker = useMemo(() => {
     if (value.latitud == null || value.longitud == null) {
@@ -100,9 +112,34 @@ export function LocationPicker({
 
     reverseMutation.mutate(coordinates, {
       onSuccess: (response) => {
+        if (autoApplyReverse) {
+          applyResult(response.data);
+          return;
+        }
+
         setReverseSuggestion(response.data);
       },
     });
+  }
+
+  async function handlePasteFromClipboard() {
+    if (disabled || !canPasteFromClipboard) {
+      return;
+    }
+
+    const clipboardText = await navigator.clipboard.readText();
+    const nextText = clipboardText.trim();
+    if (!nextText) {
+      return;
+    }
+
+    setSearchText(nextText);
+    setIsEditingSearch(true);
+
+    const coordinates = tryParseCoordinates(nextText);
+    if (coordinates) {
+      handleCoordinatePick(coordinates);
+    }
   }
 
   function handleSearch() {
@@ -136,9 +173,9 @@ export function LocationPicker({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Buscar direccion o pegar coordenadas
+            Buscar dirección o pegar coordenadas
           </label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Input
               value={activeSearchText}
               onChange={(event) => {
@@ -151,7 +188,17 @@ export function LocationPicker({
             <Button
               type="button"
               variant="outline"
-              className="shrink-0 gap-2"
+              className="w-full shrink-0 gap-2 sm:w-auto"
+              onClick={() => void handlePasteFromClipboard()}
+              disabled={disabled || !canPasteFromClipboard}
+            >
+              <ClipboardPaste className="size-4" />
+              Pegar
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full shrink-0 gap-2 sm:w-auto"
               onClick={handleSearch}
               disabled={
                 disabled ||

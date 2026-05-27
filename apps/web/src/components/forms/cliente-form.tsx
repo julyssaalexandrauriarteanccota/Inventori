@@ -452,19 +452,19 @@ export function ClienteForm({
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
       <FieldGroup className="gap-5 sm:gap-7">
-        <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-4 py-2.5">
-          <FileText className="size-4 text-muted-foreground/60" />
-          <p className="text-xs text-muted-foreground">
-            Los campos marcados con <span className="font-semibold text-[var(--semantic-danger)]">*</span> son obligatorios.
+        <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/70 dark:border-rose-500/30 dark:bg-rose-500/10 px-4 py-2.5">
+          <FileText className="size-4 text-rose-600 dark:text-rose-400" />
+          <p className="text-xs text-foreground/80">
+            Los campos marcados con <span className="font-semibold text-rose-600 dark:text-rose-400">*</span> son obligatorios.
           </p>
         </div>
 
         {/* === SECCIÓN 1: IDENTIDAD === */}
-        <div className="rounded-2xl border border-border/50 border-l-[3px] border-l-[var(--accent)]/60 bg-card p-4 sm:p-6 transition-all duration-200">
+        <div className="rounded-2xl border border-border/60 border-l-4 border-l-sky-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent)] ring-2 ring-[var(--accent)]/10">1</span>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)]">
-              <User className="size-4 text-[var(--accent)]" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white shadow-sm shadow-sky-500/30">1</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+              <User className="size-4" />
             </div>
             <div>
               <h3 className="text-sm font-sans font-semibold text-foreground">Identidad del cliente</h3>
@@ -713,11 +713,11 @@ export function ClienteForm({
         </div>
 
         {/* === SECCIÓN 2: CONTACTO === */}
-        <div className="rounded-2xl border border-border/50 border-l-[3px] border-l-blue-500/40 bg-card p-4 sm:p-6">
+        <div className="rounded-2xl border border-border/60 border-l-4 border-l-emerald-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-blue-600 ring-2 ring-blue-500/10 dark:bg-blue-950 dark:text-blue-400">2</span>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950">
-              <Mail className="size-4 text-blue-600 dark:text-blue-400" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-500/30">2</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+              <Mail className="size-4" />
             </div>
             <div>
               <h3 className="text-sm font-semibold font-sans text-foreground">Datos de contacto</h3>
@@ -780,11 +780,11 @@ export function ClienteForm({
         </div>
 
         {/* === SECCIÓN 3: UBICACIÓN === */}
-        <div className="rounded-2xl border border-border/50 border-l-[3px] border-l-emerald-500/40 bg-card p-4 sm:p-6">
+        <div className="rounded-2xl border border-border/60 border-l-4 border-l-amber-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-xs font-bold text-emerald-600 ring-2 ring-emerald-500/10 dark:bg-emerald-950 dark:text-emerald-400">3</span>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-emerald-50 dark:bg-emerald-950">
-              <MapPin className="size-4 text-emerald-600 dark:text-emerald-400" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-sm shadow-amber-500/30">3</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30">
+              <MapPin className="size-4" />
             </div>
             <div>
               <h3 className="text-sm font-semibold font-sans text-foreground">Ubicación operativa y notas</h3>
@@ -939,11 +939,11 @@ export function ClienteForm({
         </div>
 
         {/* === SECCIÓN 4: ESTADO === */}
-        <div className="rounded-2xl border border-border/50 border-l-[3px] border-l-amber-500/40 bg-card p-4 sm:p-6">
+        <div className="rounded-2xl border border-border/60 border-l-4 border-l-violet-500 bg-card/85 backdrop-blur-sm p-4 sm:p-6 shadow-sm transition-shadow duration-200 hover:shadow-md">
           <div className="mb-5 flex items-center gap-3">
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-amber-50 text-xs font-bold text-amber-600 ring-2 ring-amber-500/10 dark:bg-amber-950 dark:text-amber-400">4</span>
-            <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-amber-50 dark:bg-amber-950">
-              <CheckCircle2 className="size-4 text-amber-600 dark:text-amber-400" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white shadow-sm shadow-violet-500/30">4</span>
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30">
+              <CheckCircle2 className="size-4" />
             </div>
             <div>
               <h3 className="text-sm font-semibold font-sans text-foreground">Estado comercial</h3>

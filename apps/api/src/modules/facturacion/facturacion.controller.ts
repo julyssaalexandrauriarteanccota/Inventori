@@ -597,14 +597,18 @@ export class FacturacionController {
 
   @Post('padron-sunat-ruc/importar')
   @Roles(RolUsuario.ADMIN)
-  @ApiOperation({ summary: 'Iniciar importación del padrón reducido RUC SUNAT' })
+  @ApiOperation({
+    summary: 'Iniciar importación del padrón reducido RUC SUNAT',
+  })
   importarPadronSunatRuc() {
     return this.padronSunatRucService.startImportFromSunatUrl();
   }
 
   @Post('padron-sunat-ruc/importar/cancelar')
   @Roles(RolUsuario.ADMIN)
-  @ApiOperation({ summary: 'Solicitar cancelación de importación del padrón RUC' })
+  @ApiOperation({
+    summary: 'Solicitar cancelación de importación del padrón RUC',
+  })
   cancelarImportacionPadronSunatRuc() {
     return this.padronSunatRucService.cancelImport();
   }

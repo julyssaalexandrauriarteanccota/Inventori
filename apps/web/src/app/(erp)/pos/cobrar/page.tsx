@@ -17,7 +17,6 @@ import {
   Loader2,
   Printer,
   Receipt,
-  Save,
   Smartphone,
   Sparkles,
   Upload,
@@ -72,7 +71,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-// PageHeader is removed to maximize vertical space and match catalog design
+import { PageHeader } from "@/components/layout/page-header";
 import {
   ThermalReceiptDialog,
   type ThermalReceiptData,
@@ -457,9 +456,7 @@ export default function PosCobrarPage() {
 
   // ── Submit ──────────────────────────────────────────────────────────
   const createVenta = useCreateVenta();
-  const [submitting, setSubmitting] = useState<null | "cotizacion" | "cobrar">(
-    null,
-  );
+  const [submitting, setSubmitting] = useState<null | "cobrar">(null);
 
   const upsertGenericClient = useCallback(async (): Promise<string> => {
     try {
@@ -523,15 +520,8 @@ export default function PosCobrarPage() {
 
   // ── Validación pre-submit ───────────────────────────────────────────
   const validarPreSubmit = useCallback(
-    (modo: "cotizacion" | "cobrar"): string | null => {
+    (): string | null => {
       if (cart.lines.length === 0) return "El carrito está vacío";
-      if (modo === "cotizacion") {
-        if (modoCliente === "IDENTIFICADO" && !clienteSel)
-          return "Selecciona un cliente o cambia a Público en General";
-        if (validacionFactura) return validacionFactura;
-        return null;
-      }
-      // Cobrar
       if (!aperturaActiva) return "Debes abrir tu caja antes de cobrar";
       if (!isVentaInternaLegal) {
         if (configFiscalQ.isLoading) {
@@ -597,51 +587,8 @@ export default function PosCobrarPage() {
   }, [cart.lines.length, confirmacion, router]);
 
   // ── Handlers de submit ──────────────────────────────────────────────
-  const handleGuardarCotizacion = useCallback(async () => {
-    const err = validarPreSubmit("cotizacion");
-    if (err) {
-      toast.error(err);
-      return;
-    }
-    setSubmitting("cotizacion");
-    try {
-      const clienteId =
-        modoCliente === "GENERICO"
-          ? await upsertGenericClient()
-          : clienteSel!.id;
-      const res = (await createVenta.mutateAsync({
-        clienteId,
-        notas: cart.notas || undefined,
-        detalles: cart.lines.map((l) => ({
-          productoId: l.productoId,
-          cantidad: l.cantidad,
-          precioUnitario: l.precioUnitario,
-          descuento: l.descuento || undefined,
-          equipoSerie: l.equipoSerie || undefined,
-        })),
-      })) as { data?: VentaCreada };
-      toast.success(`Cotización ${res.data?.numero ?? "guardada"}`);
-      cart.clear();
-      router.push("/pos");
-    } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Error al guardar cotización",
-      );
-    } finally {
-      setSubmitting(null);
-    }
-  }, [
-    validarPreSubmit,
-    modoCliente,
-    upsertGenericClient,
-    clienteSel,
-    createVenta,
-    cart,
-    router,
-  ]);
-
   const handleCobrar = useCallback(async () => {
-    const err = validarPreSubmit("cobrar");
+    const err = validarPreSubmit();
     if (err) {
       toast.error(err);
       return;
@@ -843,27 +790,21 @@ export default function PosCobrarPage() {
 
   // ── UI principal ────────────────────────────────────────────────────
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* Top Header Row for Checkout Step - Compact and Sleek */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 pb-2">
-        <div>
-          <h1 className="font-display text-lg sm:text-xl font-bold tracking-tight text-foreground">
-            Cobro y comprobante
-          </h1>
-          <p className="text-xs text-muted-foreground font-sans mt-0.5">
-            Paso 2 · Cobra la venta y define si queda interna o lista para
-            comprobante.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => router.push("/pos")}
-          className="h-8.5 gap-2 rounded-xl text-xs border-border bg-background/50 hover:bg-primary/5 hover:text-primary active:scale-95 transition-all duration-200 cursor-pointer font-sans"
-        >
-          <ArrowLeft className="size-4" /> Volver al carrito
-        </Button>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-y-auto md:overflow-hidden pr-1">
+      <PageHeader
+        title="Cobro y comprobante"
+        hideTitleVisually={true}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/pos")}
+            className="h-8.5 gap-2 rounded-xl text-xs border-border bg-background/50 hover:bg-primary/5 hover:text-primary active:scale-95 transition-all duration-200 cursor-pointer font-sans"
+          >
+            <ArrowLeft className="size-4" /> Volver al carrito
+          </Button>
+        }
+      />
 
       {!aperturaActiva ? (
         <div className="flex items-start gap-3 rounded-xl border border-[oklch(0.86_0.05_75)] bg-[oklch(0.96_0.02_75)] px-3 py-2.5 text-xs text-[oklch(0.38_0.08_75)] dark:border-[oklch(0.25_0.05_75)] dark:bg-[oklch(0.16_0.03_75)] dark:text-[oklch(0.78_0.08_75)]">
@@ -915,9 +856,9 @@ export default function PosCobrarPage() {
         </div>
       ) : null}
 
-      <div className="grid h-full min-h-0 gap-2 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+      <div className="grid h-auto md:h-full min-h-0 gap-2 md:grid-cols-[minmax(0,360px)_minmax(0,1fr)] lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
         {/* ── Columna izquierda: resumen carrito (read-only) ─── */}
-        <section className="flex min-h-0 flex-col rounded-xl border border-border/80 bg-card shadow-lg shadow-primary/[0.01]">
+        <section className="flex h-auto md:h-full min-h-0 flex-col rounded-xl border border-border/80 bg-card shadow-lg shadow-primary/[0.01]">
           <header className="flex items-center justify-between border-b border-border/40 px-3 py-2.5 bg-gradient-to-r from-primary/5 via-primary/[0.01] to-transparent rounded-t-xl">
             <div>
               <h2 className="font-display text-[15px] font-bold tracking-tight text-foreground">
@@ -935,7 +876,7 @@ export default function PosCobrarPage() {
               </p>
             </div>
           </header>
-          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2.5">
+          <div className="flex max-h-[180px] md:max-h-none min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-2.5">
             {cart.lines.map((l) => {
               const lineTotal = Math.max(
                 0,
@@ -1001,7 +942,7 @@ export default function PosCobrarPage() {
         </section>
 
         {/* ── Columna derecha: formulario de cobro ─── */}
-        <section className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+        <section className="flex h-auto md:h-full min-h-0 flex-col gap-2 md:overflow-y-auto">
           {/* Cliente */}
           <div className="rounded-xl border border-border/80 bg-card p-3 sm:p-3.5 shadow-md shadow-primary/[0.01]">
             <div className="flex items-center justify-between gap-3">
@@ -1531,20 +1472,6 @@ export default function PosCobrarPage() {
                 <Receipt className="size-4.5" />
               )}
               {isVentaInternaLegal ? "Cobrar venta interna" : "Cobrar y enviar a Por emitir"} · {money(cart.totals.total)}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleGuardarCotizacion()}
-              disabled={submitting !== null}
-              className="h-11 rounded-xl border-border bg-background/50 hover:bg-primary/5 hover:border-primary/20 hover:text-primary active:scale-[0.98] transition-all duration-200 cursor-pointer text-xs font-semibold text-muted-foreground gap-2"
-            >
-              {submitting === "cotizacion" ? (
-                <Loader2 className="size-4 animate-spin text-primary" />
-              ) : (
-                <Save className="size-4 text-muted-foreground/80 group-hover:text-primary" />
-              )}
-              Guardar como cotización
             </Button>
           </div>
         </section>
