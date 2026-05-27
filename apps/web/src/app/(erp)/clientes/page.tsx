@@ -47,8 +47,8 @@ import {
   useUpdateCliente,
 } from "@/hooks/use-clientes";
 import { useDebounce } from "@/hooks/use-debounce";
-import { usePageAutoRefresh } from "@/hooks/use-page-auto-refresh";
-import { PageAutoRefreshControl } from "@/components/layout/page-auto-refresh-control";
+
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { PageActionsMenu } from "@/components/layout/page-actions-menu";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
@@ -103,7 +103,7 @@ const DEFAULT_LIMIT = 20;
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 const VIEW_MODE_STORAGE_KEY = "erp:clientes:view-mode";
 
-const CLIENTES_REFRESH_TOAST_ID = "clientes-refresh";
+
 
 function hasNuevoParam() {
   if (typeof window === "undefined") return false;
@@ -338,13 +338,21 @@ function ClienteCard({
   const isGeneric = isSystemGenericClient(c);
   const canEditCliente = canEdit && !isGeneric;
   const canDeleteCliente = canDelete && !isGeneric;
+  const accentBar = isEmpresa
+    ? "from-indigo-400 via-indigo-500 to-indigo-600"
+    : "from-amber-400 via-amber-500 to-amber-600";
+  const avatarCls = isEmpresa
+    ? "bg-indigo-100 text-indigo-700 border border-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:border-indigo-500/30"
+    : "bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/30";
   return (
     <div
       className={cn(
-        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up",
+        "group relative flex flex-col gap-3.5 rounded-2xl border bg-card/85 backdrop-blur-sm p-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-1 hover:scale-[1.015] active:scale-[0.97] active:duration-150 animate-fade-up overflow-hidden",
         isSelected
-          ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md ring-2 ring-[var(--accent)]/20"
-          : "border-border hover:border-ring/50 hover:shadow-md",
+          ? "border-emerald-400 bg-emerald-50/70 dark:bg-emerald-500/10 dark:border-emerald-500/50 shadow-md ring-2 ring-emerald-400/20 dark:ring-emerald-500/20"
+          : isEmpresa
+            ? "border-border/70 hover:border-indigo-300 dark:hover:border-indigo-500/40 hover:shadow-md hover:shadow-indigo-500/5"
+            : "border-border/70 hover:border-amber-300 dark:hover:border-amber-500/40 hover:shadow-md hover:shadow-amber-500/5",
         onToggleSelect && "cursor-pointer",
       )}
       style={
@@ -354,6 +362,15 @@ function ClienteCard({
       }
       onClick={onToggleSelect}
     >
+      {/* Tinted accent bar (left edge) */}
+      <span
+        aria-hidden
+        className={cn(
+          "pointer-events-none absolute left-0 top-0 h-full w-1 bg-gradient-to-b opacity-70 group-hover:opacity-100 transition-opacity",
+          accentBar,
+        )}
+      />
+
       {/* Checkbox top-left */}
       {onToggleSelect && (
         <div
@@ -378,7 +395,7 @@ function ClienteCard({
             e.stopPropagation();
             onDelete();
           }}
-          className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-[var(--semantic-danger-soft)] hover:text-[var(--semantic-danger)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 active:scale-95 active:duration-150"
+          className="absolute right-2 top-2 z-10 flex size-9 items-center justify-center rounded-full text-muted-foreground/40 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-500/20 dark:hover:text-red-400 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-110 active:scale-95 active:duration-150"
           title="Eliminar"
           aria-label="Eliminar cliente"
         >
@@ -389,23 +406,21 @@ function ClienteCard({
       {/* Header avatar + name */}
       <div
         className={cn(
-          "flex items-center gap-3",
-          onToggleSelect ? "pl-6 pr-7" : "pr-7",
+          "flex items-center gap-3 relative",
+          onToggleSelect ? "pl-6 pr-7" : "pl-2 pr-7",
         )}
       >
         <div
           className={cn(
             "flex size-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold shadow-sm",
-            isEmpresa
-              ? "bg-[var(--accent)] text-[var(--accent-text)]"
-              : "bg-[var(--accent-soft)] text-[var(--accent)] border border-[var(--accent)]/20",
+            avatarCls,
           )}
         >
           {getInitials(c)}
         </div>
         <div className="min-w-0 flex-1">
           <p
-            className="truncate font-semibold text-sm leading-tight"
+            className="break-words whitespace-normal font-semibold text-sm leading-snug"
             title={getDisplayName(c)}
           >
             <HighlightedText text={getDisplayName(c)} search={search} />
@@ -480,7 +495,12 @@ function ClienteCard({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium hover:bg-[var(--accent)] hover:text-[var(--accent-text)] hover:border-[var(--accent)] transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          className={cn(
+            "flex-1 h-8 gap-1.5 rounded-lg text-xs font-medium border-border/80 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150",
+            isEmpresa
+              ? "hover:bg-indigo-500 hover:text-white hover:border-indigo-500 dark:hover:bg-indigo-500 dark:hover:border-indigo-500"
+              : "hover:bg-amber-500 hover:text-white hover:border-amber-500 dark:hover:bg-amber-500 dark:hover:border-amber-500",
+          )}
           onClick={(e) => {
             e.stopPropagation();
             onView();
@@ -524,39 +544,42 @@ function FloatingSelectionBar({
   onClear,
 }: FloatingBarProps) {
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-300 ease-[cubic-bezier(0.25,1.5,0.5,1)]">
-      <div className="flex items-center gap-2 px-2 py-0.5">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 rounded-2xl border border-border/60 bg-background/95 backdrop-blur-md shadow-2xl px-2 py-1.5 ring-1 ring-black/5 animate-in slide-in-from-bottom-3 duration-300 ease-[cubic-bezier(0.25,1.5,0.5,1)] max-w-[calc(100vw-2rem)]">
+      <div className="flex items-center gap-1.5 px-1 sm:px-2 py-0.5">
         <div className="flex size-6 min-w-6 items-center justify-center rounded-full bg-[var(--accent)] text-[var(--accent-text)] text-xs font-bold">
           {count}
         </div>
-        <span className="text-sm font-medium whitespace-nowrap">
+        <span className="text-sm font-medium whitespace-nowrap hidden sm:inline">
           seleccionado{count !== 1 ? "s" : ""}
         </span>
       </div>
       <div className="h-5 w-px bg-border mx-0.5" />
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Exportar"
         onClick={onExport}
       >
-        <Download className="size-3.5" /> Exportar
+        <Download className="size-3.5" />
+        <span className="hidden sm:inline">Exportar</span>
       </Button>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Imprimir"
         onClick={onPrint}
       >
-        <Printer className="size-3.5" /> Imprimir
+        <Printer className="size-3.5" />
+        <span className="hidden sm:inline">Imprimir</span>
       </Button>
       <Button
         variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 text-xs text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+        title="Eliminar"
         onClick={onDelete}
       >
-        <Trash2 className="size-3.5" /> Eliminar
+        <Trash2 className="size-3.5" />
+        <span className="hidden sm:inline">Eliminar</span>
       </Button>
       <div className="h-5 w-px bg-border mx-0.5" />
       <Button
@@ -674,13 +697,7 @@ export default function ClientesPage() {
   const createMutation = useCreateCliente();
   const updateMutation = useUpdateCliente(editClientId || "");
 
-  const autoRefresh = usePageAutoRefresh({
-    scope: "clientes",
-    toastLabel: "Clientes",
-    manualToastMessage: "Lista actualizada",
-    toastId: CLIENTES_REFRESH_TOAST_ID,
-  });
-  const handleManualRefresh = autoRefresh.manualRefresh;
+
 
   const handleCreate = useCallback(
     (formData: ClienteFormPayload) => {
@@ -825,43 +842,60 @@ export default function ClientesPage() {
       {
         accessorKey: "tipo",
         header: "Tipo",
-        cell: ({ row }) => (
-          <ErpBadge
-            tone={row.original.tipo === TipoCliente.EMPRESA ? "info" : "violet"}
-            className="gap-1"
-          >
-            {row.original.tipo === TipoCliente.EMPRESA ? (
-              <>
+        cell: ({ row }) => {
+          const isEmpresa = row.original.tipo === TipoCliente.EMPRESA;
+          return (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
+                isEmpresa
+                  ? "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/15 dark:text-indigo-300"
+                  : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-300",
+              )}
+            >
+              {isEmpresa ? (
                 <Building2 className="size-3" />
-                Empresa
-              </>
-            ) : (
-              <>
+              ) : (
                 <User className="size-3" />
-                Natural
-              </>
-            )}
-          </ErpBadge>
-        ),
+              )}
+              {isEmpresa ? "Empresa" : "Natural"}
+            </span>
+          );
+        },
       },
       {
         id: "nombreCompleto",
         header: "Cliente",
         cell: ({ row }) => {
           const text = getDisplayName(row.original);
+          const isEmpresa = row.original.tipo === TipoCliente.EMPRESA;
+          const avatarCls = isEmpresa
+            ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300"
+            : "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300";
           return (
-            <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2.5 min-w-0">
               <span
-                className="block max-w-55 truncate font-semibold text-sm text-foreground"
-                title={text}
+                className={cn(
+                  "flex size-8 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold",
+                  avatarCls,
+                )}
+                aria-hidden
               >
-                <HighlightedText text={text} search={search} />
+                {getInitials(row.original)}
               </span>
-              {row.original.esGenerico ? (
-                <span className="text-xs text-[var(--semantic-warning)]">
-                  Registro del sistema
+              <div className="flex flex-col min-w-0">
+                <span
+                  className="block max-w-64 sm:max-w-xs md:max-w-md break-words whitespace-normal font-semibold text-sm leading-snug text-foreground"
+                  title={text}
+                >
+                  <HighlightedText text={text} search={search} />
                 </span>
-              ) : null}
+                {row.original.esGenerico ? (
+                  <span className="text-xs text-[var(--semantic-warning)]">
+                    Registro del sistema
+                  </span>
+                ) : null}
+              </div>
             </div>
           );
         },
@@ -911,13 +945,17 @@ export default function ClientesPage() {
         header: "Ubicación",
         cell: ({ row }) => {
           const ubicacion = getUbicacion(row.original);
-          return (
+          const hasUbicacion = ubicacion && ubicacion !== "—";
+          return hasUbicacion ? (
             <span
-              className="block max-w-56 truncate text-xs text-muted-foreground"
+              className="inline-flex items-center gap-1.5 max-w-56 text-xs text-muted-foreground"
               title={ubicacion}
             >
-              {ubicacion}
+              <MapPin className="size-3 shrink-0 text-sky-500 dark:text-sky-400" />
+              <span className="truncate">{ubicacion}</span>
             </span>
+          ) : (
+            <span className="text-muted-foreground/50 text-xs">—</span>
           );
         },
       },
@@ -1100,9 +1138,10 @@ export default function ClientesPage() {
 
   return (
     <div className="relative flex flex-col gap-6 w-full min-w-0 sm:flex-1 sm:min-h-0">
-      {/* Decorative backing glows for premium high-contrast dark mode aesthetic */}
-      <div className="pointer-events-none absolute -z-10 bg-primary/5 blur-[120px] top-0 left-1/4 size-[400px] rounded-full dark:opacity-75" />
-      <div className="pointer-events-none absolute -z-10 bg-violet-500/5 blur-[130px] bottom-1/4 right-1/4 size-[380px] rounded-full dark:opacity-50" />
+      {/* Decorative backing glows — coordinated with stat-card palette */}
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/6 dark:bg-indigo-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-amber-400/5 dark:bg-amber-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
       <PageHeader
         title="Clientes"
         description="Gestiona la información de tus clientes"
@@ -1111,13 +1150,13 @@ export default function ClientesPage() {
         actions={
           <>
             <div className="flex items-center gap-2">
-              <PageAutoRefreshControl autoRefresh={autoRefresh} />
+              <RealtimeStatus />
               <PageActionsMenu
                 items={[
                   {
                     label: "Actualizar lista",
                     icon: RefreshCcw,
-                    onSelect: handleManualRefresh,
+                    onSelect: () => void refetch(),
                   },
                   {
                     label: "Exportar CSV",
@@ -1147,27 +1186,32 @@ export default function ClientesPage() {
           label="Total clientes"
           value={statsTotal && statsGeneric ? totalClientes : undefined}
           icon={Users}
+          theme="sky"
+          subtitle="Cartera total"
           index={0}
         />
         <StatCard
           label="Empresas"
           value={statsEmpresa?.meta?.total}
           icon={Building2}
-          color="bg-[var(--semantic-info-soft)] text-[var(--semantic-info)]"
+          theme="indigo"
+          subtitle="Jurídicas con RUC"
           index={1}
         />
         <StatCard
           label="Personas"
           value={statsNatural && statsGeneric ? totalNaturales : undefined}
           icon={User}
-          color="bg-[var(--accent-soft)] text-[var(--accent)]"
+          theme="amber"
+          subtitle="Naturales con DNI"
           index={2}
         />
         <StatCard
           label="Activos"
           value={statsActivo && statsGeneric ? totalActivos : undefined}
           icon={CheckCircle2}
-          color="bg-[var(--accent-soft)] text-[var(--accent)]"
+          theme="emerald"
+          subtitle="En operación"
           index={3}
         />
       </div>
@@ -1181,30 +1225,30 @@ export default function ClientesPage() {
             onChange={handleSearchChange}
             placeholder="Buscar por nombre, RUC, DNI…"
             className="sm:w-80 lg:w-96"
-            inputClassName="border-border/60 bg-background/40 hover:bg-muted/60"
+            inputClassName="border-border/70 bg-background/60 hover:bg-muted/60 focus-visible:border-sky-400/60 dark:focus-visible:border-sky-500/60 focus-visible:ring-sky-400/15 dark:focus-visible:ring-sky-500/15"
           />
 
           <div className="flex flex-col gap-2 w-full sm:w-auto sm:flex-row sm:items-center sm:justify-end">
             {/* Tipo tabs */}
             <Tabs value={tipoFilter} onValueChange={handleTipoChange} className="w-full sm:w-auto">
-              <TabsList className="flex w-full sm:w-auto h-9 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
+              <TabsList className="flex w-full sm:w-auto h-9 gap-0.5 rounded-lg border border-border/70 bg-muted/70 p-0.5">
                 <TabsTrigger
                   value="all"
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-100 data-[state=active]:text-sky-700 dark:data-[state=active]:bg-sky-500/20 dark:data-[state=active]:text-sky-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Users className="size-3.5" />
                   <span className="hidden sm:inline">Todos</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.EMPRESA}
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-100 data-[state=active]:text-indigo-700 dark:data-[state=active]:bg-indigo-500/20 dark:data-[state=active]:text-indigo-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <Building2 className="size-3.5" />
                   <span className="hidden sm:inline">Empresa</span>
                 </TabsTrigger>
                 <TabsTrigger
                   value={TipoCliente.NATURAL}
-                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-background/75 data-[state=active]:text-foreground data-[state=active]:shadow-none transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className="flex-1 sm:flex-initial h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-100 data-[state=active]:text-amber-700 dark:data-[state=active]:bg-amber-500/20 dark:data-[state=active]:text-amber-300 data-[state=active]:shadow-none data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
                 >
                   <User className="size-3.5" />
                   <span className="hidden sm:inline">Natural</span>
@@ -1225,7 +1269,7 @@ export default function ClientesPage() {
                 <PopoverContent
                   align="end"
                   sideOffset={10}
-                  className="w-70 rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
+                  className="w-[calc(100vw-2rem)] sm:w-70 max-w-xs rounded-xl border border-border/70 p-0 shadow-[0_24px_60px_-32px_rgba(15,23,42,0.4)]"
                 >
                   <div className="border-b border-border/60 px-4 py-3">
                     <p className="text-sm font-semibold">Filtros</p>
@@ -1306,11 +1350,18 @@ export default function ClientesPage() {
                 <Button
                   variant={selectionMode ? "secondary" : "outline"}
                   size="sm"
-                  className="h-9 gap-1.5 rounded-lg text-xs flex-1 sm:flex-initial transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                  className={cn(
+                    "h-9 w-9 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-lg text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150",
+                    selectionMode
+                      ? "bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40 dark:hover:bg-emerald-500/30"
+                      : "border-border/80 hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10 dark:hover:text-emerald-300",
+                  )}
                   onClick={handleSelectionModeToggle}
                 >
-                  <CheckCircle2 className="size-3.5" />
-                  {selectionMode ? "Cancelar" : "Seleccionar"}
+                  <CheckCircle2 className="size-3.5 shrink-0" />
+                  <span className="hidden sm:inline">
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </span>
                 </Button>
               )}
 
@@ -1320,11 +1371,11 @@ export default function ClientesPage() {
                 onValueChange={handleViewModeChange}
                 variant="outline"
                 size="sm"
-                className="gap-0 rounded-lg border border-border/60 bg-background/40 p-0.5 shrink-0"
+                className="gap-0 rounded-lg border border-border/70 bg-muted/50 p-0.5 shrink-0"
               >
                 <ToggleGroupItem
                   value="list"
-                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
                   aria-label="Vista tabla"
                   title="Vista tabla"
                 >
@@ -1332,7 +1383,7 @@ export default function ClientesPage() {
                 </ToggleGroupItem>
                 <ToggleGroupItem
                   value="grid"
-                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150"
+                  className="h-8 rounded-md px-2.5 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-95 active:duration-150 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground data-[state=on]:shadow-sm hover:bg-background/80"
                   aria-label="Vista tarjetas"
                   title="Vista tarjetas"
                 >
@@ -1369,8 +1420,8 @@ export default function ClientesPage() {
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 text-xs rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                      className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 rounded-xl text-xs transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                      title="Exportar"
                       onClick={() => {
                         const rows = selectedRows as ClienteListItem[];
                         const csv = buildClienteCsvRows(rows);
@@ -1387,12 +1438,13 @@ export default function ClientesPage() {
                         clearSelection();
                       }}
                     >
-                      <Download className="size-3.5" /> Exportar
+                      <Download className="size-3.5" />
+                      <span className="hidden sm:inline">Exportar</span>
                     </Button>
                     <Button
                       variant="ghost"
-                      size="sm"
-                      className="h-8 gap-1.5 text-xs text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                      className="h-8 w-8 sm:w-auto p-0 sm:px-3 gap-0 sm:gap-1.5 text-[var(--semantic-danger)] hover:text-[var(--semantic-danger)] hover:bg-[var(--semantic-danger-soft)] rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+                      title="Eliminar"
                       onClick={() => {
                         const ids = (selectedRows as ClienteListItem[])
                           .filter((row) => !isSystemGenericClient(row))
@@ -1408,7 +1460,8 @@ export default function ClientesPage() {
                         setBulkDeleteIds(ids);
                       }}
                     >
-                      <Trash2 className="size-3.5" /> Eliminar
+                      <Trash2 className="size-3.5" />
+                      <span className="hidden sm:inline">Eliminar</span>
                     </Button>
                   </div>
                 )
