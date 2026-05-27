@@ -154,7 +154,7 @@
     --app-border: var(--border-subtle);
     --app-muted-foreground: var(--text-muted);
 
-    --sidebar: var(--bg-surface);
+    --sidebar: var(--bg-elevated);
     --sidebar-foreground: var(--text-secondary);
     --sidebar-accent: var(--accent-soft);
     --sidebar-accent-foreground: var(--accent);
@@ -210,7 +210,7 @@
     --app-border: var(--border-subtle);
     --app-muted-foreground: var(--text-muted);
 
-    --sidebar: var(--bg-surface);
+    --sidebar: var(--bg-elevated);
     --sidebar-foreground: var(--text-secondary);
     --sidebar-accent: var(--accent-soft);
     --sidebar-accent-foreground: var(--text-primary);
@@ -264,7 +264,7 @@
     --app-border: var(--border-subtle);
     --app-muted-foreground: var(--text-muted);
 
-    --sidebar: var(--bg-surface);
+    --sidebar: var(--bg-elevated);
     --sidebar-foreground: var(--text-secondary);
     --sidebar-accent: var(--accent-soft);
     --sidebar-accent-foreground: var(--accent);
@@ -336,7 +336,7 @@
     --app-border: var(--border-subtle);
     --app-muted-foreground: var(--text-muted);
 
-    --sidebar: var(--bg-surface);
+    --sidebar: var(--bg-elevated);
     --sidebar-foreground: var(--text-secondary);
     --sidebar-accent: var(--accent-soft);
     --sidebar-accent-foreground: var(--text-primary);

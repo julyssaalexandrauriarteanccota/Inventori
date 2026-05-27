@@ -18,7 +18,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar
       collapsible="icon"
-      className="border-r border-sidebar-border bg-sidebar"
+      className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
       {...props}
     >
       <SidebarBrand />
