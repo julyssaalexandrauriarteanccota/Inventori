@@ -21,7 +21,11 @@ export interface StatCardProps {
   color?: string
   subtitle?: string
   isLoading?: boolean
-  /** Stagger index for entrance animation delay (70ms per step). */
+  /**
+   * @deprecated No longer used. Previously controlled a staggered
+   * entrance animation; the gentle global fade-in replaces it.
+   * Kept on the type so existing call sites still compile.
+   */
   index?: number
   /** Optional link — wraps card in an anchor when provided. */
   href?: string
@@ -127,7 +131,7 @@ function StatCardInner({
   color = "bg-primary/10 text-primary",
   subtitle,
   isLoading = false,
-  index = 0,
+  index: _index = 0,
   onClick,
   href,
   active,
@@ -143,27 +147,25 @@ function StatCardInner({
   return (
     <div
       className={cn(
-        "group relative overflow-hidden flex items-center gap-3.5 rounded-2xl border px-5 py-4 shadow-sm transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] animate-fade-up",
+        "group relative overflow-hidden flex items-center gap-3.5 rounded-2xl border px-5 py-4 shadow-sm transition-shadow duration-200 ease-out animate-fade-in",
         styles
           ? styles.card
           : "bg-card/75 backdrop-blur-sm border-border/70",
         isInteractive
-          ? "cursor-pointer hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-1 active:scale-[0.98]"
-          : "hover:shadow-md hover:-translate-y-0.5 transition-transform",
+          ? "cursor-pointer hover:shadow-md active:scale-[0.99]"
+          : "hover:shadow-sm",
         // Stronger hover border for non-themed; themed cards keep their tint
         !styles &&
           (active
             ? "border-primary/40 bg-primary/5 ring-2 ring-primary/10"
             : "hover:border-border-strong/80"),
-        styles && isInteractive && "hover:-translate-y-1",
         className,
       )}
-      style={{ animationDelay: `${index * 75}ms` }}
       onClick={onClick}
     >
       <div
         className={cn(
-          "relative z-10 flex size-11 shrink-0 items-center justify-center rounded-xl transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 group-hover:rotate-[2deg]",
+          "relative z-10 flex size-11 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 ease-out group-hover:scale-[1.04]",
           styles ? cn(styles.tile, styles.text) : color,
         )}
       >
@@ -208,7 +210,7 @@ function StatCardInner({
         <Icon
           aria-hidden
           className={cn(
-            "pointer-events-none absolute -right-3 -bottom-3 size-20 opacity-[0.18] dark:opacity-[0.22] transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-110 group-hover:opacity-[0.28] dark:group-hover:opacity-[0.32]",
+            "pointer-events-none absolute -right-3 -bottom-3 size-20 opacity-[0.18] dark:opacity-[0.22] transition-opacity duration-300 ease-out group-hover:opacity-[0.26] dark:group-hover:opacity-[0.30]",
             styles.watermark,
           )}
         />

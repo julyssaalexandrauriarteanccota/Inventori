@@ -22,7 +22,6 @@ import {
   Phone,
   Plus,
   Printer,
-  RefreshCcw,
   Trash2,
   User,
   Users,
@@ -49,9 +48,8 @@ import {
 import { useDebounce } from "@/hooks/use-debounce";
 
 import { RealtimeStatus } from "@/components/layout/realtime-status";
-import { PageActionsMenu } from "@/components/layout/page-actions-menu";
-import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
 import { ToolbarFiltersButton } from "@/components/layout/toolbar-filters-button";
 import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ErpBadge, ErpStatusBadge } from "@/components/erp-badges";
@@ -778,23 +776,6 @@ export default function ClientesPage() {
     });
   }, [bulkDeleteIds, clientes, deleteMutation]);
 
-  const handleExportCSV = useCallback(() => {
-    const rows = clientes;
-    if (!rows.length) {
-      toast.error("No hay datos para exportar");
-      return;
-    }
-    const csv = buildClienteCsvRows(rows);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "clientes.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Exportado correctamente");
-  }, [clientes]);
-
   const handleExportSelectedCards = useCallback(() => {
     const rows = clientes.filter((c) => selectedCards.has(c.id));
     if (!rows.length) {
@@ -1142,43 +1123,25 @@ export default function ClientesPage() {
       <div className="pointer-events-none absolute -z-10 bg-sky-400/8 dark:bg-sky-500/8 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
       <div className="pointer-events-none absolute -z-10 bg-indigo-400/6 dark:bg-indigo-500/6 blur-[130px] top-32 right-1/4 size-[360px] rounded-full" />
       <div className="pointer-events-none absolute -z-10 bg-amber-400/5 dark:bg-amber-500/5 blur-[150px] bottom-1/4 right-12 size-[380px] rounded-full" />
-      <PageHeader
-        title="Clientes"
-        description="Gestiona la información de tus clientes"
-        hideTitleVisually
-        actionsClassName="w-full sm:w-auto"
-        actions={
-          <>
-            <div className="flex items-center gap-2">
-              <RealtimeStatus />
-              <PageActionsMenu
-                items={[
-                  {
-                    label: "Actualizar lista",
-                    icon: RefreshCcw,
-                    onSelect: () => void refetch(),
-                  },
-                  {
-                    label: "Exportar CSV",
-                    icon: Download,
-                    onSelect: handleExportCSV,
-                  },
-                ]}
-              />
-            </div>
-            {canCreate ? (
-              <Button
-                onClick={() => setOpenCreate(true)}
-                className="erp-page-primary-cta rounded-xl gap-2 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150 ml-auto sm:ml-0"
-              >
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nuevo cliente</span>
-                <span className="sm:hidden">Nuevo</span>
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+      {/* Page-level CTA pushed into the global topbar (desktop) /
+          sticky bottom action bar (mobile) via TopbarActions. */}
+      <TopbarActions>
+        <RealtimeStatus />
+        {canCreate ? (
+          <Button
+            onClick={() => setOpenCreate(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo cliente</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        ) : null}
+      </TopbarActions>
+      {/* Accessible page heading kept off-screen so screen readers
+          still announce the page name now that the visual heading
+          has been removed in favour of the breadcrumb + topbar CTA. */}
+      <h1 className="sr-only">Clientes</h1>
 
       {/* ── Stats row ── */}
       <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
@@ -1469,32 +1432,37 @@ export default function ClientesPage() {
           }
         />
       ) : (
-        <div className="min-h-0">
+        // Grid view: scrollable cards area + pagination pinned to the bottom
+        // of the available space (so it doesn't ride up when there are few
+        // results). Falls back to natural flow on mobile (no min-h-0).
+        <div className="flex flex-1 min-h-0 flex-col">
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-pulse"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="size-11 rounded-xl bg-muted" />
-                    <div className="space-y-1.5 flex-1">
-                      <div className="h-3.5 rounded bg-muted w-3/4" />
-                      <div className="h-3 rounded bg-muted w-1/2" />
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="rounded-2xl border border-border bg-card p-4 space-y-3 animate-pulse"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="size-11 rounded-xl bg-muted" />
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3.5 rounded bg-muted w-3/4" />
+                        <div className="h-3 rounded bg-muted w-1/2" />
+                      </div>
+                    </div>
+                    <div className="h-3 rounded bg-muted w-full" />
+                    <div className="h-3 rounded bg-muted w-2/3" />
+                    <div className="flex gap-2 pt-2">
+                      <div className="h-8 flex-1 rounded-lg bg-muted" />
+                      <div className="h-8 flex-1 rounded-lg bg-muted" />
                     </div>
                   </div>
-                  <div className="h-3 rounded bg-muted w-full" />
-                  <div className="h-3 rounded bg-muted w-2/3" />
-                  <div className="flex gap-2 pt-2">
-                    <div className="h-8 flex-1 rounded-lg bg-muted" />
-                    <div className="h-8 flex-1 rounded-lg bg-muted" />
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           ) : !clientes.length ? (
-            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground gap-3">
+            <div className="flex flex-1 flex-col items-center justify-center py-20 text-muted-foreground gap-3">
               <Users className="size-12 opacity-20" />
               <p className="text-sm font-medium">No se encontraron clientes</p>
               <p className="text-xs opacity-70">
@@ -1503,7 +1471,8 @@ export default function ClientesPage() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                 {clientes.map((c, index) => (
                   <ClienteCard
                     key={c.id}
@@ -1529,10 +1498,12 @@ export default function ClientesPage() {
                     onDelete={() => setDeleteId(c.id)}
                   />
                 ))}
+                </div>
               </div>
-              {/* Pagination and Limit Selector for Grid View */}
+              {/* Pagination + page-size selector anchored to the bottom
+                  of the grid view (mt-auto + shrink-0). */}
               {visibleTotal > 0 && (
-                <div className="flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between mt-6">
+                <div className="shrink-0 mt-3 flex flex-col gap-3 rounded-xl border border-border/70 bg-card/75 backdrop-blur-sm px-4 py-3 shadow-[0_12px_24px_-34px_rgba(15,23,42,0.38)] sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                     <div className="flex items-center gap-2">
                       <span className="whitespace-nowrap text-xs text-muted-foreground">
