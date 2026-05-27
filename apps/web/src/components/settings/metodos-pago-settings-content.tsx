@@ -14,6 +14,7 @@ import {
   Plus,
   Search,
   Trash2,
+  Wallet,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -61,6 +62,9 @@ import {
   SettingsDataTable,
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 
 const metodoPagoSchema = z.object({
   codigo: z
@@ -138,7 +142,7 @@ export function MetodosPagoSettingsContent() {
         size: 260,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30">
               <CreditCard className="size-4" />
             </div>
             <span className="truncate font-medium text-foreground">
@@ -210,26 +214,63 @@ export function MetodosPagoSettingsContent() {
     });
   };
 
+  const totalCount = metodosPago.length;
+  const activosCount = useMemo(
+    () => metodosPago.filter((m) => m.activo).length,
+    [metodosPago],
+  );
+  const inactivosCount = totalCount - activosCount;
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-foreground">
-              Métodos de pago
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Gestiona las opciones disponibles para ventas y cobros.
-            </p>
-          </div>
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <TopbarActions>
+          <RealtimeStatus />
           <Button
             size="sm"
-            className="rounded-xl"
             onClick={() => setShowCreate(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
           >
             <Plus className="size-4" />
-            Nuevo método
+            <span className="hidden sm:inline">Nuevo método</span>
+            <span className="sm:hidden">Nuevo</span>
           </Button>
+        </TopbarActions>
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : totalCount}
+            icon={Wallet}
+            theme="sky"
+            subtitle="Métodos configurados"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activos"
+            value={isLoading ? undefined : activosCount}
+            icon={Check}
+            theme="emerald"
+            subtitle="Disponibles en POS y ventas"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Inactivos"
+            value={isLoading ? undefined : inactivosCount}
+            icon={X}
+            theme="slate"
+            subtitle="Pausados u ocultos"
+            isLoading={isLoading}
+          />
+        </div>
+
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-foreground">
+            Métodos de pago
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            Gestiona las opciones disponibles para ventas y cobros.
+          </p>
         </div>
 
         <div className="relative">
@@ -238,7 +279,7 @@ export function MetodosPagoSettingsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por código o nombre..."
-            className="rounded-xl pl-9"
+            className="rounded-xl pl-9 border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
         </div>
 

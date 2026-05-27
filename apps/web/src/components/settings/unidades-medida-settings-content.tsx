@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Check,
+  CheckCircle2,
   Eye,
   Loader2,
   MoreHorizontal,
@@ -10,6 +11,7 @@ import {
   Plus,
   Ruler,
   Trash2,
+  X,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -75,6 +77,9 @@ import {
   SettingsDataTable,
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 
 type EstadoFiltro = "all" | "activos" | "inactivos";
 
@@ -126,7 +131,7 @@ export function UnidadesMedidaSettingsContent() {
         size: 220,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30">
               <Ruler className="size-4" />
             </div>
             <span className="truncate font-medium text-foreground">
@@ -233,9 +238,58 @@ export function UnidadesMedidaSettingsContent() {
     });
   };
 
+  const totalCount = todasUnidades.length;
+  const activasCount = React.useMemo(
+    () => todasUnidades.filter((u) => u.activo).length,
+    [todasUnidades],
+  );
+  const inactivasCount = totalCount - activasCount;
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nueva unidad</span>
+              <span className="sm:hidden">Nueva</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : totalCount}
+            icon={Ruler}
+            theme="sky"
+            subtitle="Unidades en el catálogo"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activas"
+            value={isLoading ? undefined : activasCount}
+            icon={CheckCircle2}
+            theme="emerald"
+            subtitle="Disponibles en productos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Inactivas"
+            value={isLoading ? undefined : inactivasCount}
+            icon={X}
+            theme="slate"
+            subtitle="Ocultas u obsoletas"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-foreground">
@@ -260,17 +314,6 @@ export function UnidadesMedidaSettingsContent() {
               <SelectItem value="inactivos">Solo inactivas</SelectItem>
             </SelectContent>
           </Select>
-
-          {canManage && (
-            <Button
-              size="sm"
-              onClick={() => setShowCreate(true)}
-              className="shrink-0 rounded-xl"
-            >
-              <Plus className="size-4" />
-              Nueva unidad
-            </Button>
-          )}
         </div>
 
         <SettingsDataTable

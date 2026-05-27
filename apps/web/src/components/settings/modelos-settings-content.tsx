@@ -4,6 +4,8 @@ import * as React from "react";
 import {
   Check,
   Eye,
+  Layers,
+  LifeBuoy,
   Loader2,
   MoreHorizontal,
   Package,
@@ -11,6 +13,7 @@ import {
   Plus,
   Stamp,
   Trash2,
+  Wrench,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,6 +65,9 @@ import {
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 
 const PRODUCTO_TIPO_LABELS: Record<TipoProducto, string> = {
   [TipoProducto.EQUIPO]: "Equipo",
@@ -158,7 +164,7 @@ export function ModelosSettingsContent({
         size: 240,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30">
               <Package className="size-4" />
             </div>
             <span className="truncate font-medium text-foreground">
@@ -268,9 +274,71 @@ export function ModelosSettingsContent({
     [canManage, onRequestDeleteAction],
   );
 
+  const countByTipo = React.useMemo(() => {
+    const acc: Partial<Record<TipoProducto, number>> = {};
+    for (const m of todosModelos) {
+      acc[m.tipo] = (acc[m.tipo] ?? 0) + 1;
+    }
+    return acc;
+  }, [todosModelos]);
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nuevo modelo</span>
+              <span className="sm:hidden">Nuevo</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : todosModelos.length}
+            icon={Package}
+            theme="sky"
+            subtitle="Modelos catalogados"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Equipos"
+            value={isLoading ? undefined : countByTipo[TipoProducto.EQUIPO] ?? 0}
+            icon={Layers}
+            theme="indigo"
+            subtitle="Para equipos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Repuestos"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.REPUESTO] ?? 0
+            }
+            icon={Wrench}
+            theme="amber"
+            subtitle="Piezas e insumos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Servicios"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.SERVICIO] ?? 0
+            }
+            icon={LifeBuoy}
+            theme="emerald"
+            subtitle="Soporte y mantenimiento"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8">
           <div className="min-w-0">
             <h2 className="truncate text-base font-semibold text-foreground">
@@ -314,17 +382,6 @@ export function ModelosSettingsContent({
                 ))}
               </SelectContent>
             </Select>
-
-            {canManage && (
-              <Button
-                size="sm"
-                onClick={() => setShowCreate(true)}
-                className="shrink-0 rounded-xl"
-              >
-                <Plus className="size-4" />
-                Nuevo modelo
-              </Button>
-            )}
           </div>
         </div>
 

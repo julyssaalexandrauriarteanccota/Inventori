@@ -5,11 +5,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import {
   AlertTriangle,
+  ArrowDown,
   ArrowRightLeft,
+  ArrowUp,
+  CheckCircle2,
   Eye,
   Loader2,
   MoreHorizontal,
   Pencil,
+  Plus,
   RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -74,6 +78,9 @@ import {
   SettingsDataTable,
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 
 const COMPORTAMIENTO_LABELS: Record<MovimientoComportamiento, string> = {
   [MovimientoComportamiento.ENTRADA]: "Entrada",
@@ -516,9 +523,75 @@ export function TiposMovimientoSettingsContent() {
     }
   }, [comportamiento, form, requiereEvidencia]);
 
+  const entradasCount = useMemo(
+    () =>
+      items.filter(
+        (i) => i.comportamiento === MovimientoComportamiento.ENTRADA,
+      ).length,
+    [items],
+  );
+  const salidasCount = useMemo(
+    () =>
+      items.filter(
+        (i) => i.comportamiento === MovimientoComportamiento.SALIDA,
+      ).length,
+    [items],
+  );
+  const activosCount = useMemo(() => items.filter((i) => i.activo).length, [
+    items,
+  ]);
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        <TopbarActions>
+          <RealtimeStatus />
+          <Button
+            size="sm"
+            onClick={() => setShowCreateForm(true)}
+            className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+          >
+            <Plus className="size-4" />
+            <span className="hidden sm:inline">Nuevo tipo</span>
+            <span className="sm:hidden">Nuevo</span>
+          </Button>
+        </TopbarActions>
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : items.length}
+            icon={ArrowRightLeft}
+            theme="sky"
+            subtitle="Tipos configurados"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Entradas"
+            value={isLoading ? undefined : entradasCount}
+            icon={ArrowDown}
+            theme="emerald"
+            subtitle="Aumentan stock"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Salidas"
+            value={isLoading ? undefined : salidasCount}
+            icon={ArrowUp}
+            theme="amber"
+            subtitle="Reducen stock"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activos"
+            value={isLoading ? undefined : activosCount}
+            icon={CheckCircle2}
+            theme="indigo"
+            subtitle="Habilitados para operar"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-foreground">

@@ -3,12 +3,14 @@
 import * as React from "react";
 import {
   Check,
+  CheckCircle2,
   Eye,
   Loader2,
   MoreHorizontal,
   Pencil,
   Plus,
   Wallet,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { RolUsuario } from "@erp/shared";
@@ -55,6 +57,9 @@ import {
   SettingsDataTable,
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 
 type EstadoFiltro = "all" | "activas" | "inactivas";
 
@@ -83,7 +88,7 @@ export function CajasSettingsContent() {
         size: 260,
         cell: ({ row }) => (
           <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-sky-500 text-white shadow-sm shadow-sky-500/30">
               <Wallet className="size-4" />
             </div>
             <span className="truncate font-medium text-foreground">
@@ -170,9 +175,58 @@ export function CajasSettingsContent() {
     [canManage],
   );
 
+  const totalCount = todasCajas.length;
+  const activasCount = React.useMemo(
+    () => todasCajas.filter((c) => c.activa).length,
+    [todasCajas],
+  );
+  const inactivasCount = totalCount - activasCount;
+
   return (
     <>
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nueva caja</span>
+              <span className="sm:hidden">Nueva</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : totalCount}
+            icon={Wallet}
+            theme="sky"
+            subtitle="Cajas registradas"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activas"
+            value={isLoading ? undefined : activasCount}
+            icon={CheckCircle2}
+            theme="emerald"
+            subtitle="Habilitadas para apertura"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Inactivas"
+            value={isLoading ? undefined : inactivasCount}
+            icon={X}
+            theme="slate"
+            subtitle="No disponibles en POS"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8 lg:flex-row lg:items-center">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-base font-semibold text-foreground">
@@ -196,17 +250,6 @@ export function CajasSettingsContent() {
               <SelectItem value="inactivas">Solo inactivas</SelectItem>
             </SelectContent>
           </Select>
-
-          {canManage && (
-            <Button
-              size="sm"
-              onClick={() => setShowCreate(true)}
-              className="shrink-0 rounded-xl"
-            >
-              <Plus className="size-4" />
-              Nueva caja
-            </Button>
-          )}
         </div>
 
         <SettingsDataTable

@@ -20,6 +20,7 @@ import {
   KeyRound,
   Search,
   Shield,
+  ShieldCheck,
   FileText,
   SlidersHorizontal,
   LifeBuoy,
@@ -33,6 +34,9 @@ import {
   UserX,
   Power,
   PowerOff,
+  Layers,
+  Wrench,
+  Building2,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -129,6 +133,9 @@ import {
   SettingsDataTable,
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
+import { StatCard } from "@/components/layout/stat-card";
+import { TopbarActions } from "@/components/layout/topbar-actions";
+import { RealtimeStatus } from "@/components/layout/realtime-status";
 import { cn } from "@/lib/utils";
 import ProveedoresPage from "@/app/(erp)/compras/proveedores/page";
 import { getApiAssetUrl } from "@/lib/api";
@@ -214,9 +221,60 @@ function AlmacenesContent({
   const almacenes = almacenesRes?.data ?? [];
   const canManage = hasRole(RolUsuario.ADMIN, RolUsuario.ENCARGADO);
 
+  const activos = React.useMemo(
+    () => almacenes.filter((a) => a.activo).length,
+    [almacenes],
+  );
+  const principales = React.useMemo(
+    () => almacenes.filter((a) => a.esPrincipal).length,
+    [almacenes],
+  );
+
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nuevo almacén</span>
+              <span className="sm:hidden">Nuevo</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard
+            label="Total almacenes"
+            value={isLoading ? undefined : almacenes.length}
+            icon={Warehouse}
+            theme="sky"
+            subtitle="Ubicaciones registradas"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activos"
+            value={isLoading ? undefined : activos}
+            icon={Check}
+            theme="emerald"
+            subtitle="En operación"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Principal"
+            value={isLoading ? undefined : principales}
+            icon={Building2}
+            theme="amber"
+            subtitle="Marcado como sede principal"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex items-center gap-2 md:pr-8">
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-foreground truncate">
@@ -226,16 +284,6 @@ function AlmacenesContent({
               Gestiona las ubicaciones de almacenamiento del inventario
             </p>
           </div>
-          {canManage && (
-            <Button
-              size="sm"
-              onClick={() => setShowCreate(true)}
-              className="rounded-xl shrink-0"
-            >
-              <Plus className="size-4" />
-              Nuevo almacén
-            </Button>
-          )}
         </div>
 
         {isLoading ? (
@@ -742,10 +790,70 @@ function CategoriasContent({
 
   const categorias = (categoriasRes?.data ?? []) as CategoriaItem[];
   const rootCategorias = categorias.filter((c: CategoriaItem) => !c.padreId);
+  const flatAll = React.useMemo(() => flattenCategorias(categorias), [categorias]);
+  const countByTipo = React.useMemo(() => {
+    const acc: Partial<Record<TipoProducto, number>> = {};
+    for (const c of flatAll) acc[c.tipo] = (acc[c.tipo] ?? 0) + 1;
+    return acc;
+  }, [flatAll]);
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nueva categoría</span>
+              <span className="sm:hidden">Nueva</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : flatAll.length}
+            icon={FolderTree}
+            theme="sky"
+            subtitle="Categorías + subcategorías"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Equipos"
+            value={isLoading ? undefined : countByTipo[TipoProducto.EQUIPO] ?? 0}
+            icon={Layers}
+            theme="indigo"
+            subtitle="Para inventario de equipos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Repuestos"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.REPUESTO] ?? 0
+            }
+            icon={Wrench}
+            theme="amber"
+            subtitle="Piezas e insumos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Servicios"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.SERVICIO] ?? 0
+            }
+            icon={LifeBuoy}
+            theme="emerald"
+            subtitle="Mantenimiento y soporte"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground truncate">
@@ -764,16 +872,6 @@ function CategoriasContent({
                 setViewingItem(null);
               }}
             />
-            {canManage && (
-              <Button
-                size="sm"
-                onClick={() => setShowCreate(true)}
-                className="rounded-xl shrink-0"
-              >
-                <Plus className="size-4" />
-                Nueva categoría
-              </Button>
-            )}
           </div>
         </div>
 
@@ -942,7 +1040,7 @@ function CategoriaRow({
         ) : (
           <span className="size-4.5" />
         )}
-        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-(--sidebar-primary)/10 text-(--sidebar-primary)">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
           <FolderTree className="size-3.5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -1541,9 +1639,73 @@ function MarcasContent({
   const [viewingItem, setViewingItem] =
     React.useState<SettingsMarcaItem | null>(null);
 
+  const countByTipo = React.useMemo(() => {
+    const acc: Partial<Record<TipoProducto, number>> = {};
+    for (const m of marcas) {
+      for (const t of m.tipos) acc[t] = (acc[t] ?? 0) + 1;
+    }
+    return acc;
+  }, [marcas]);
+
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nueva marca</span>
+              <span className="sm:hidden">Nueva</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : marcas.length}
+            icon={Stamp}
+            theme="sky"
+            subtitle="Marcas registradas"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Para equipos"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.EQUIPO] ?? 0
+            }
+            icon={Layers}
+            theme="indigo"
+            subtitle="Disponibles en catálogo de equipos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Para repuestos"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.REPUESTO] ?? 0
+            }
+            icon={Wrench}
+            theme="amber"
+            subtitle="Piezas e insumos"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Para servicios"
+            value={
+              isLoading ? undefined : countByTipo[TipoProducto.SERVICIO] ?? 0
+            }
+            icon={LifeBuoy}
+            theme="emerald"
+            subtitle="Marcas vinculadas a servicios"
+            isLoading={isLoading}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 md:pr-8">
           <div className="min-w-0">
             <h2 className="text-base font-semibold text-foreground truncate">
@@ -1562,16 +1724,6 @@ function MarcasContent({
                 setViewingItem(null);
               }}
             />
-            {canManage && (
-              <Button
-                size="sm"
-                onClick={() => setShowCreate(true)}
-                className="rounded-xl shrink-0"
-              >
-                <Plus className="size-4" />
-                Nueva marca
-              </Button>
-            )}
           </div>
         </div>
 
@@ -3142,6 +3294,20 @@ function UsuariosContent({
   const usuarios = res?.data ?? [];
   const meta = res?.meta;
 
+  const totalUsuarios = meta?.total ?? usuarios.length;
+  const activosCount = React.useMemo(
+    () => usuarios.filter((u) => u.activo).length,
+    [usuarios],
+  );
+  const adminsCount = React.useMemo(
+    () => usuarios.filter((u) => u.rol === RolUsuario.ADMIN).length,
+    [usuarios],
+  );
+  const tecnicosCount = React.useMemo(
+    () => usuarios.filter((u) => u.rol === RolUsuario.TECNICO).length,
+    [usuarios],
+  );
+
   const activeViewingItem = viewingItem
     ? usuarios.find((u) => u.id === viewingItem.id) || viewingItem
     : null;
@@ -3350,7 +3516,57 @@ function UsuariosContent({
 
   return (
     <>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-4">
+        {canManage && (
+          <TopbarActions>
+            <RealtimeStatus />
+            <Button
+              size="sm"
+              onClick={() => setShowCreate(true)}
+              className="erp-page-primary-cta rounded-xl gap-2 h-9 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            >
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Nuevo usuario</span>
+              <span className="sm:hidden">Nuevo</span>
+            </Button>
+          </TopbarActions>
+        )}
+
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Total"
+            value={isLoading ? undefined : totalUsuarios}
+            icon={Users}
+            theme="sky"
+            subtitle="Cuentas registradas"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Activos"
+            value={isLoading ? undefined : activosCount}
+            icon={UserCheck}
+            theme="emerald"
+            subtitle="Con acceso al sistema"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Administradores"
+            value={isLoading ? undefined : adminsCount}
+            icon={ShieldCheck}
+            theme="indigo"
+            subtitle="Permisos totales"
+            isLoading={isLoading}
+          />
+          <StatCard
+            label="Técnicos"
+            value={isLoading ? undefined : tecnicosCount}
+            icon={Wrench}
+            theme="amber"
+            subtitle="Operación de soporte"
+            isLoading={isLoading}
+          />
+        </div>
+
         {/* Header */}
         <div className="flex items-center gap-2 md:pr-8">
           <div className="min-w-0 flex-1">
@@ -3361,16 +3577,6 @@ function UsuariosContent({
               Gestiona las cuentas de usuario del sistema
             </p>
           </div>
-          {canManage && (
-            <Button
-              size="sm"
-              onClick={() => setShowCreate(true)}
-              className="rounded-xl shrink-0"
-            >
-              <Plus className="size-4" />
-              Nuevo usuario
-            </Button>
-          )}
         </div>
 
         {/* Search */}
@@ -3380,7 +3586,7 @@ function UsuariosContent({
             placeholder="Buscar por nombre o email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 rounded-xl"
+            className="pl-9 rounded-xl border-border bg-background hover:border-sky-400/60 dark:hover:border-sky-500/60 focus-visible:border-sky-500 dark:focus-visible:border-sky-400 focus-visible:ring-sky-400/25 dark:focus-visible:ring-sky-500/25 shadow-sm"
           />
         </div>
 
