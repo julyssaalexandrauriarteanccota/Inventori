@@ -112,5 +112,5 @@ export function useAtmosphere() {
 
 export function AtmosphereScript() {
   const code = `(function(){try{var v=localStorage.getItem("${STORAGE_KEY}")||"${DEFAULT_ATMOSPHERE}";document.documentElement.setAttribute("data-atmosphere",v)}catch(e){}})();`
-  return <script dangerouslySetInnerHTML={{ __html: code }} />
+  return <script dangerouslySetInnerHTML={{ __html: code }} suppressHydrationWarning />
 }

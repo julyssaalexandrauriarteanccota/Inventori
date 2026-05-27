@@ -74,7 +74,7 @@ describe('erp-navigation', () => {
     expect(canAccessErpPath('/ventas/facturacion', RolUsuario.ADMIN)).toBe(true)
     // /ventas/facturacion IS registered → denied for TECNICO
     expect(canAccessErpPath('/ventas/facturacion', RolUsuario.TECNICO)).toBe(false)
-    // /compras/proveedores IS registered → allowed for ENCARGADO
-    expect(canAccessErpPath('/compras/proveedores', RolUsuario.ENCARGADO)).toBe(true)
+    // /proveedores IS registered → allowed for ENCARGADO
+    expect(canAccessErpPath('/proveedores', RolUsuario.ENCARGADO)).toBe(true)
   })
 })

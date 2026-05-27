@@ -33,6 +33,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { LocationMap } from '@/components/location/location-map'
 
 function InfoItem({
   label,
@@ -145,6 +146,9 @@ export function ProveedorDetalleModal({
   const proveedor = proveedorRes?.data as Record<string, unknown> | undefined
 
   if (!id) return null
+
+  const latitud = typeof proveedor?.latitud === 'number' ? proveedor.latitud : null
+  const longitud = typeof proveedor?.longitud === 'number' ? proveedor.longitud : null
 
   const razonSocial = (proveedor?.razonSocial as string) ?? ''
   const initials = razonSocial
@@ -282,6 +286,7 @@ export function ProveedorDetalleModal({
                     </div>
                     <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
                       <InfoItem label="Email" value={proveedor.email as string} icon={Mail} copyable />
+                      <InfoItem label="Celular" value={proveedor.celular as string} icon={Phone} copyable />
                       <InfoItem label="Teléfono" value={proveedor.telefono as string} icon={Phone} copyable />
                       <InfoItem label="Persona de contacto" value={proveedor.contactoNombre as string} icon={User} />
                       <InfoItem label="Tel. contacto" value={proveedor.contactoTelefono as string} icon={Phone} copyable />
@@ -299,8 +304,38 @@ export function ProveedorDetalleModal({
                       </div>
                       <h3 className="text-sm font-semibold text-foreground">Ubicación y notas</h3>
                     </div>
-                    <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
+                    {latitud != null && longitud != null ? (
+                      <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
+                        <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                            Mapa operativo
+                          </p>
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            {latitud.toFixed(6)}, {longitud.toFixed(6)}
+                          </span>
+                        </div>
+                        <LocationMap
+                          marker={{ latitud, longitud }}
+                          interactive={false}
+                          className="h-72 rounded-xl border border-border/40"
+                          zoom={16}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
                       <InfoItem label="Dirección" value={proveedor.direccion as string} icon={MapPin} />
+                      <InfoItem label="Distrito" value={proveedor.distrito as string} />
+                      <InfoItem label="Provincia" value={proveedor.provincia as string} />
+                      <InfoItem label="Departamento" value={proveedor.departamento as string} />
+                      <InfoItem label="Referencia" value={proveedor.referencia as string} />
+                      <InfoItem
+                        label="Coordenadas"
+                        value={
+                          latitud != null && longitud != null
+                            ? `${latitud.toFixed(6)}, ${longitud.toFixed(6)}`
+                            : null
+                        }
+                      />
                     </div>
                     {(proveedor.notas as string) && (
                       <div className="mt-4 border-t border-border/40 pt-4">

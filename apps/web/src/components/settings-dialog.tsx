@@ -130,7 +130,6 @@ import {
   type ColumnDef,
 } from "@/components/settings/settings-data-table";
 import { cn } from "@/lib/utils";
-import ProveedoresPage from "@/app/(erp)/compras/proveedores/page";
 import { getApiAssetUrl } from "@/lib/api";
 import { getUploadAcceptAttr, uploadSelectedFiles } from "@/lib/file-uploads";
 import { generateSecurePassword } from "@/lib/passwords";
@@ -4826,7 +4825,6 @@ export function SectionContent({
     return <UsuariosContent onRequestDelete={onRequestDeleteAction} />;
   if (sectionId === "almacenes")
     return <AlmacenesContent onRequestDelete={onRequestDeleteAction} />;
-  if (sectionId === "proveedores") return <ProveedoresPage />;
   if (sectionId === "categorias")
     return <CategoriasContent onRequestDelete={onRequestDeleteAction} />;
   if (sectionId === "marcas")
