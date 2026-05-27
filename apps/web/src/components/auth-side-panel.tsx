@@ -1,17 +1,51 @@
 import { ClipboardList } from "lucide-react"
 
+import { cn } from "@/lib/utils"
+
 type AuthSidePanelProps = {
   title: string
   description: string
+  /**
+   * Optional media slot (video / image / lottie / etc). When provided,
+   * REPLACES the default icon block at the top of the panel.
+   * Title and description stay underneath.
+   */
+  media?: React.ReactNode
+  /**
+   * Optional override for the entire panel content (full bleed).
+   * When provided, ignores title/description/media — caller is responsible
+   * for rendering everything (including any background / padding).
+   */
+  fullBleed?: React.ReactNode
+  className?: string
 }
 
 export function AuthSidePanel({
   title,
   description,
+  media,
+  fullBleed,
+  className,
 }: AuthSidePanelProps) {
+  if (fullBleed) {
+    return (
+      <div
+        className={cn(
+          "relative hidden overflow-hidden border-l border-border/70 md:flex md:min-h-full md:items-stretch md:justify-stretch",
+          className,
+        )}
+      >
+        {fullBleed}
+      </div>
+    )
+  }
+
   return (
     <div
-      className="relative hidden overflow-hidden border-l border-border/70 md:flex md:min-h-full md:items-center md:justify-center md:px-12 lg:px-14"
+      className={cn(
+        "relative hidden overflow-hidden border-l border-border/70 md:flex md:min-h-full md:items-center md:justify-center md:px-12 lg:px-14",
+        className,
+      )}
       style={{
         background:
           "radial-gradient(ellipse at 70% 20%, color-mix(in oklch, var(--sidebar-primary) 8%, transparent) 0%, transparent 60%), " +
@@ -30,15 +64,17 @@ export function AuthSidePanel({
       />
 
       <div className="relative flex max-w-sm flex-col items-center gap-5 text-center animate-fade-in">
-        <div
-          className="flex size-[4.5rem] items-center justify-center rounded-[1.35rem] shadow-lg"
-          style={{
-            background:
-              "linear-gradient(135deg, var(--sidebar-primary), color-mix(in oklch, var(--sidebar-primary), black 18%))",
-          }}
-        >
-          <ClipboardList className="size-8 text-white" strokeWidth={1.75} />
-        </div>
+        {media ?? (
+          <div
+            className="flex size-[4.5rem] items-center justify-center rounded-[1.35rem] shadow-lg"
+            style={{
+              background:
+                "linear-gradient(135deg, var(--sidebar-primary), color-mix(in oklch, var(--sidebar-primary), black 18%))",
+            }}
+          >
+            <ClipboardList className="size-8 text-white" strokeWidth={1.75} />
+          </div>
+        )}
 
         <div className="flex flex-col gap-3">
           <h2 className="text-3xl font-semibold tracking-tight text-foreground">

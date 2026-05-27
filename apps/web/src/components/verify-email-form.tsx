@@ -188,18 +188,18 @@ export function VerifyEmailForm({
                     value={codigo}
                     onChange={(v) => setCodigo(v)}
                     disabled={submitting}
-                    containerClassName="gap-3"
+                    containerClassName="gap-2 sm:gap-3"
                   >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
+                    <InputOTPGroup className="gap-2 sm:gap-2.5">
+                      <InputOTPSlot index={0} className="size-12 rounded-xl border first:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
+                      <InputOTPSlot index={1} className="size-12 rounded-xl border last:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
+                      <InputOTPSlot index={2} className="size-12 rounded-xl border last:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
                     </InputOTPGroup>
                     <InputOTPSeparator />
-                    <InputOTPGroup>
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
+                    <InputOTPGroup className="gap-2 sm:gap-2.5">
+                      <InputOTPSlot index={3} className="size-12 rounded-xl border first:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
+                      <InputOTPSlot index={4} className="size-12 rounded-xl border last:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
+                      <InputOTPSlot index={5} className="size-12 rounded-xl border last:rounded-xl border-border/70 text-lg font-semibold shadow-none data-[active=true]:border-primary data-[active=true]:ring-primary/20 data-[active=true]:ring-[3px]" />
                     </InputOTPGroup>
                   </InputOTP>
                   <p className="text-xs text-muted-foreground">
