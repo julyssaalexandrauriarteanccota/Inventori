@@ -35,6 +35,10 @@ const mockConfig = {
   get: jest.fn(),
 };
 
+const mockEvents = {
+  emitToRoles: jest.fn(),
+};
+
 function zipWithText(text: string) {
   const zip = new AdmZip();
   zip.addFile('padron.txt', Buffer.from(text, 'latin1'));
@@ -65,6 +69,7 @@ describe('PadronSunatRucService', () => {
     service = new PadronSunatRucService(
       mockPrisma as unknown as PrismaService,
       mockConfig as unknown as ConfigService,
+      mockEvents as unknown as import('../../websockets/events.service').EventsService,
     );
   });
 

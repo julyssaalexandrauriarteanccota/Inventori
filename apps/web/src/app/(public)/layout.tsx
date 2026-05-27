@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export const NAV_LINKS = [
+const NAV_LINKS = [
   { href: "/catalogo?categoria=equipos", label: "Equipos" },
   { href: "/#equipamiento", label: "Soluciones" },
   { href: "/#soporte", label: "Servicios" },

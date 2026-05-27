@@ -98,7 +98,6 @@ export function useNextProductoSku(
       );
     },
     enabled: enabled && !!tipo,
-    staleTime: 0,
   });
 }
 

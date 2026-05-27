@@ -8,6 +8,8 @@ import type { SolicitudPublicaEventPayload } from './solicitudes.type'
 // ── Socket event names ────────────────────────────────────────────────
 
 export const SocketEvents = {
+  /** Evento genérico para invalidar caches en el frontend (realtime ERP). */
+  ERP_INVALIDATE: 'erp.invalidate',
   TICKET_CREATED: 'ticket.created',
   TICKET_UPDATED: 'ticket.updated',
   TICKET_CLOSED: 'ticket.closed',
@@ -35,6 +37,11 @@ export const SocketEvents = {
   COMUNICACION_BAJA_RECHAZADA: 'comunicacion-baja.rechazada',
   /** Nueva solicitud pública desde el formulario de la landing. */
   SOLICITUD_NUEVA: 'solicitud.nueva',
+  /**
+   * Cambio de etapa en el job de importación del Padrón RUC SUNAT.
+   * Solo se emite a roles ADMIN y ENCARGADO.
+   */
+  PADRON_SUNAT_RUC_IMPORT_STAGE: 'padron-sunat-ruc.import.stage',
 } as const
 
 export type SocketEventName = (typeof SocketEvents)[keyof typeof SocketEvents]
@@ -104,9 +111,38 @@ export interface CertificadoAlertaPayload {
   diasRestantes: number
 }
 
+export interface ErpInvalidatePayload {
+  /** Nombre lógico del scope (p.ej. "clientes", "ventas", "productos"). */
+  scope: string
+}
+
+export type PadronSunatRucImportStatus =
+  | 'RUNNING'
+  | 'CANCEL_REQUESTED'
+  | 'CANCELLED'
+  | 'SUCCESS'
+  | 'ERROR'
+
+export type PadronSunatRucImportStage =
+  | 'DOWNLOADING'
+  | 'DECOMPRESSING'
+  | 'CLEANING'
+  | 'IMPORTING'
+  | 'PUBLISHING'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'ERROR'
+
+export interface PadronSunatRucImportStagePayload {
+  status: PadronSunatRucImportStatus
+  stage: PadronSunatRucImportStage
+  message: string
+}
+
 // ── Union type for all payloads ───────────────────────────────────────
 
 export interface SocketEventMap {
+  [SocketEvents.ERP_INVALIDATE]: ErpInvalidatePayload
   [SocketEvents.TICKET_CREATED]: TicketEventPayload
   [SocketEvents.TICKET_UPDATED]: TicketEventPayload
   [SocketEvents.TICKET_CLOSED]: TicketEventPayload
@@ -120,4 +156,5 @@ export interface SocketEventMap {
   [SocketEvents.COMUNICACION_BAJA_ACEPTADA]: ComunicacionBajaEventPayload
   [SocketEvents.COMUNICACION_BAJA_RECHAZADA]: ComunicacionBajaEventPayload
   [SocketEvents.SOLICITUD_NUEVA]: SolicitudPublicaEventPayload
+  [SocketEvents.PADRON_SUNAT_RUC_IMPORT_STAGE]: PadronSunatRucImportStagePayload
 }

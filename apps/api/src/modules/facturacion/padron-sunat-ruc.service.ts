@@ -7,7 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import AdmZip = require('adm-zip');
 import { StringDecoder } from 'node:string_decoder';
+import { RolUsuario, SocketEvents } from '@erp/shared';
+import type { PadronSunatRucImportStagePayload } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
+import { EventsService } from '../../websockets/events.service';
 
 const DEFAULT_PADRON_URL =
   'https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip';
@@ -94,7 +97,20 @@ export class PadronSunatRucService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly events: EventsService,
   ) {}
+
+  private emitStage(
+    status: PadronSunatRucImportStagePayload['status'],
+    stage: PadronSunatRucImportStagePayload['stage'],
+    message: string,
+  ) {
+    this.events.emitToRoles(
+      [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
+      SocketEvents.PADRON_SUNAT_RUC_IMPORT_STAGE,
+      { status, stage, message } satisfies PadronSunatRucImportStagePayload,
+    );
+  }
 
   async findByRuc(ruc: string) {
     return this.prisma.padronSunatRuc.findUnique({ where: { ruc } });
@@ -146,6 +162,8 @@ export class PadronSunatRucService {
       },
     });
 
+    this.emitStage('RUNNING', 'DOWNLOADING', 'Descargando ZIP del padrón reducido RUC desde SUNAT.');
+
     this.abortController = new AbortController();
     this.runningImport = this.importFromSunatUrl(
       job.id,
@@ -182,6 +200,11 @@ export class PadronSunatRucService {
       },
     });
     this.abortController?.abort();
+    this.emitStage(
+      'CANCEL_REQUESTED',
+      this.asStage(activeJob.stage) as PadronSunatRucImportStagePayload['stage'],
+      'Cancelación solicitada. Se conservará el padrón publicado.',
+    );
 
     return this.getImportStatus();
   }
@@ -237,6 +260,7 @@ export class PadronSunatRucService {
       stage: 'DECOMPRESSING',
       message: 'Descomprimiendo archivo del padrón SUNAT.',
     });
+    this.emitStage('RUNNING', 'DECOMPRESSING', 'Descomprimiendo archivo del padrón SUNAT.');
     await this.ensureNotCancelled(jobId);
 
     const zip = new AdmZip(zipBuffer);
@@ -264,6 +288,7 @@ export class PadronSunatRucService {
       totalLines: null,
       importedAt,
     });
+    this.emitStage('RUNNING', 'CLEANING', 'Preparando staging para validar el padrón actualizado.');
 
     await this.updateJob(jobId, {
       stage: 'IMPORTING',
@@ -274,6 +299,7 @@ export class PadronSunatRucService {
       totalLines: null,
       importedAt,
     });
+    this.emitStage('RUNNING', 'IMPORTING', 'Insertando contribuyentes en staging.');
 
     const flushLine = async (line: string) => {
       await this.ensureNotCancelled(jobId);
@@ -320,10 +346,11 @@ export class PadronSunatRucService {
     await this.publishStaging(jobId);
 
     const durationMs = Date.now() - startedAt.getTime();
+    const completedMessage = `Padrón SUNAT RUC publicado: ${inserted} registros.`;
     await this.updateJob(jobId, {
       status: 'SUCCESS',
       stage: 'COMPLETED',
-      message: `Padrón SUNAT RUC publicado: ${inserted} registros.`,
+      message: completedMessage,
       processed,
       inserted,
       discarded,
@@ -332,6 +359,7 @@ export class PadronSunatRucService {
       importedAt,
       error: null,
     });
+    this.emitStage('SUCCESS', 'COMPLETED', completedMessage);
     await this.prisma.padronSunatRucStaging.deleteMany({ where: { jobId } });
     this.logger.log(
       `Padrón SUNAT RUC publicado: ${inserted}/${processed} válidos, ${discarded} descartados en ${durationMs}ms`,
@@ -351,6 +379,7 @@ export class PadronSunatRucService {
       stage: 'PUBLISHING',
       message: 'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.',
     });
+    this.emitStage('RUNNING', 'PUBLISHING', 'Publicando padrón validado. El padrón anterior sigue activo hasta terminar.');
 
     await this.prisma.$transaction(async (tx) => {
       await tx.padronSunatRuc.deleteMany({});
@@ -534,6 +563,11 @@ export class PadronSunatRucService {
       durationMs: Date.now() - startedAt.getTime(),
       error: isCancelled ? null : message,
     });
+    this.emitStage(
+      isCancelled ? 'CANCELLED' : 'ERROR',
+      isCancelled ? 'CANCELLED' : 'ERROR',
+      message,
+    );
     await this.prisma.padronSunatRucStaging.deleteMany({ where: { jobId } });
 
     if (!isCancelled) {

@@ -20,9 +20,12 @@ import type {
   ComprobanteAlertaPayload,
   CertificadoAlertaPayload,
   ComunicacionBajaEventPayload,
+  ErpInvalidatePayload,
+  PadronSunatRucImportStagePayload,
 } from '@erp/shared'
 import { SocketEvents } from '@erp/shared'
 import { getToken } from '@/lib/auth'
+import { getRealtimeInvalidationQueryKeys } from '@/lib/realtime-invalidation'
 
 // ── Notification types ──────────────────────────────────────────
 
@@ -102,6 +105,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socket.on('connect', () => setIsConnected(true))
     socket.on('disconnect', () => setIsConnected(false))
 
+    // ── ERP Invalidation events (Realtime cache update)
+    socket.on(SocketEvents.ERP_INVALIDATE, (p: ErpInvalidatePayload) => {
+      const keys = getRealtimeInvalidationQueryKeys(p.scope)
+      keys.forEach((queryKey) => {
+        queryClient.invalidateQueries({ queryKey })
+      })
+    })
+
     // ── Ticket events
     socket.on(SocketEvents.TICKET_CREATED, (p: TicketEventPayload) => {
       const n = makeNotification(
@@ -165,7 +176,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.success(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
         queryClient.invalidateQueries({ queryKey: ['ventas'] })
       },
     )
@@ -181,7 +192,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.error(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
         queryClient.invalidateQueries({ queryKey: ['ventas'] })
       },
     )
@@ -198,7 +209,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.warning(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
       },
     )
 
@@ -213,7 +224,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.warning(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
       },
     )
 
@@ -256,7 +267,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.success(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
         queryClient.invalidateQueries({
           queryKey: ['facturacion', 'comunicaciones-baja'],
         })
@@ -275,10 +286,40 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         )
         addNotification(n)
         toast.error(n.title, { description: n.description })
-        queryClient.invalidateQueries({ queryKey: ['comprobantes'] })
+        queryClient.invalidateQueries({ queryKey: ['facturacion'] })
         queryClient.invalidateQueries({
           queryKey: ['facturacion', 'comunicaciones-baja'],
         })
+      },
+    )
+
+    // ── Padrón SUNAT RUC import stage events
+    socket.on(
+      SocketEvents.PADRON_SUNAT_RUC_IMPORT_STAGE,
+      (p: PadronSunatRucImportStagePayload) => {
+        queryClient.invalidateQueries({
+          queryKey: ['facturacion', 'padron-sunat-ruc', 'import-status'],
+        })
+        if (p.status === 'SUCCESS') {
+          const n = makeNotification(
+            SocketEvents.PADRON_SUNAT_RUC_IMPORT_STAGE,
+            'Padrón SUNAT actualizado',
+            p.message,
+            '/configuracion',
+          )
+          addNotification(n)
+          toast.success(n.title, { description: n.description })
+        } else if (p.status === 'ERROR') {
+          const n = makeNotification(
+            SocketEvents.PADRON_SUNAT_RUC_IMPORT_STAGE,
+            'Error al importar Padrón SUNAT',
+            p.message,
+            '/configuracion',
+          )
+          addNotification(n)
+          toast.error(n.title, { description: n.description })
+        }
+        // RUNNING / CANCEL_REQUESTED / CANCELLED: solo invalida, sin toast
       },
     )
 

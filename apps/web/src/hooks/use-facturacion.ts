@@ -1131,11 +1131,6 @@ export function usePadronSunatRucImportStatus() {
       api.get<ApiEnvelope<ImportPadronSunatRucResult>>(
         "/facturacion/padron-sunat-ruc/importar/status",
       ),
-    refetchInterval: (query) =>
-      query.state.data?.data.status === "RUNNING" ||
-      query.state.data?.data.status === "CANCEL_REQUESTED"
-        ? 2000
-        : false,
   });
 }
 
