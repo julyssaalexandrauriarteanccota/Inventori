@@ -108,16 +108,16 @@
 /* ☀️ COMERCIAL — Cálido, suave, resistente a fatiga
    bg-l intermedio + bg-l-dark más cálido = look acogedor sin glare */
 :root[data-atmosphere="comercial"] {
-    --bg-chroma: 0.018;
+    --bg-chroma: 0.005; /* Reducimos de 0.018 a 0.005 para eliminar el tinte rosa/naranja y lograr un gris cálido ultra limpio */
     --bg-hue: 35;
-    --bg-l: 0.955; /* claro: cream suave (sin reflejos duros) */
+    --bg-l: 0.975; /* Subimos de 0.955 a 0.975 para lograr un fondo de pantalla nítido y moderno */
     --bg-l-dark: 0.085; /* oscuro: oscuro cálido (resistente a fatiga) */
-    --accent-hue: 45; /* Naranja quemado — según design/atmosferas.md */
+    --accent-hue: 24; /* Naranja quemado refinado */
     --accent-chroma: 0.22;
     --accent-l: 0.65;
     --accent: hsl(22 95% 52%);
-    --accent-soft: hsl(24 100% 95%);
-    --accent-border: hsl(24 92% 80%);
+    --accent-soft: hsl(24 45% 96%); /* Desaturamos el fondo blando para evitar manchas rosas o pech */
+    --accent-border: hsl(24 35% 88%); /* Desaturamos el borde blando para evitar bordes naranjas/rosas */
     --accent-on-soft: hsl(22 86% 36%);
     --accent-hover: hsl(22 92% 45%);
     --accent-text: oklch(0.98 0 0);
@@ -136,8 +136,8 @@
     --bg-elevated: oklch(1 0 0);
 
     /* Re-evaluate borders and text */
-    --border-subtle: oklch(0.88 var(--bg-chroma) var(--bg-hue));
-    --border-strong: oklch(0.78 var(--bg-chroma) var(--bg-hue));
+    --border-subtle: oklch(0.88 calc(var(--bg-chroma) * 0.35) var(--bg-hue));
+    --border-strong: oklch(0.78 calc(var(--bg-chroma) * 0.5) var(--bg-hue));
     --text-primary: oklch(0.14 0.01 var(--bg-hue));
     --text-secondary: oklch(0.38 0.01 var(--bg-hue));
     --text-muted: oklch(0.48 0.01 var(--bg-hue));
@@ -160,7 +160,9 @@
     --sidebar-accent-foreground: var(--accent);
     --sidebar-border: var(--border-subtle);
     --sidebar-active-bg: var(--accent-soft);
-    --sidebar-active-fg: var(--text-primary);
+    --sidebar-active-fg: var(--accent-on-soft);
+    --sidebar-icon-fg: color-mix(in srgb, var(--accent) 45%, var(--text-secondary));
+    --sidebar-icon-bg: transparent;
 }
 
 /* Bloque dinámico oscuro — recalcula backgrounds/borders/accents cuando hay atmósfera activa en dark mode */
@@ -178,8 +180,8 @@
     );
 
     /* Re-evaluate borders and text in dark mode */
-    --border-subtle: oklch(calc(var(--bg-l-dark) + 0.07) var(--bg-chroma) var(--bg-hue));
-    --border-strong: oklch(calc(var(--bg-l-dark) + 0.12) var(--bg-chroma) var(--bg-hue));
+    --border-subtle: oklch(calc(var(--bg-l-dark) + 0.07) calc(var(--bg-chroma) * 0.35) var(--bg-hue));
+    --border-strong: oklch(calc(var(--bg-l-dark) + 0.12) calc(var(--bg-chroma) * 0.5) var(--bg-hue));
     --text-primary: oklch(0.98 0 0);
     --text-secondary: oklch(0.72 0.01 var(--bg-hue));
     --text-muted: oklch(0.60 0.01 var(--bg-hue));
@@ -214,7 +216,9 @@
     --sidebar-accent-foreground: var(--text-primary);
     --sidebar-border: var(--border-subtle);
     --sidebar-active-bg: var(--accent-soft);
-    --sidebar-active-fg: var(--text-primary);
+    --sidebar-active-fg: var(--accent-on-soft);
+    --sidebar-icon-fg: color-mix(in srgb, var(--accent) 55%, var(--text-secondary));
+    --sidebar-icon-bg: transparent;
 }
 
 /* Light mode fallback — SOLO cuando no hay data-atmosphere activo.
@@ -629,16 +633,8 @@
         [data-slot="select-trigger"],
         [data-slot="textarea"]
     ) {
-        border-color: color-mix(
-            in oklch,
-            var(--sidebar-primary) 9%,
-            oklch(0.84 0 0)
-        ) !important;
-        background-color: color-mix(
-            in oklch,
-            var(--sidebar-primary) 2.25%,
-            oklch(0.992 0 0)
-        ) !important;
+        border-color: var(--app-border) !important;
+        background-color: var(--form-field-bg) !important;
         color: var(--color-foreground) !important;
         box-shadow: none !important;
     }
@@ -649,14 +645,10 @@
     ):hover {
         border-color: color-mix(
             in oklch,
-            var(--sidebar-primary) 11%,
-            oklch(0.81 0 0)
+            var(--sidebar-primary) 12%,
+            var(--app-border)
         ) !important;
-        background-color: color-mix(
-            in oklch,
-            var(--sidebar-primary) 3.25%,
-            oklch(0.988 0 0)
-        ) !important;
+        background-color: var(--form-field-bg) !important;
     }
     :is(
         [data-slot="input"],
@@ -668,8 +660,23 @@
             var(--sidebar-primary) 15%,
             oklch(0.78 0 0)
         ) !important;
+        background-color: var(--form-field-bg) !important;
         box-shadow: 0 0 0 1px
             color-mix(in oklch, var(--sidebar-primary) 16%, transparent) !important;
+    }
+    :is(
+        [data-slot="input"],
+        [data-slot="select-trigger"],
+        [data-slot="textarea"]
+    )[aria-invalid="true"] {
+        border-color: color-mix(
+            in oklch,
+            var(--semantic-danger) 55%,
+            var(--app-border)
+        ) !important;
+        background-color: var(--form-field-bg) !important;
+        box-shadow: 0 0 0 1px
+            color-mix(in oklch, var(--semantic-danger) 14%, transparent) !important;
     }
     :is([data-slot="input"], [data-slot="textarea"])::placeholder {
         color: color-mix(
@@ -2033,6 +2040,148 @@
     }
 }
 
+/* ----- Infinite Marquee (Equipos) ----- */
+.iv .iv-marquee-wrap {
+    position: relative;
+    width: 100vw;
+    margin-left: calc(-1 * clamp(20px, 5vw, 80px));
+    overflow: hidden;
+    padding: 24px 0;
+    /* Gradient mask: fade edges to transparent */
+    mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 8%,
+        black 92%,
+        transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 8%,
+        black 92%,
+        transparent 100%
+    );
+}
+
+.iv .iv-marquee-track {
+    display: flex;
+    gap: 20px;
+    will-change: transform;
+    width: max-content;
+}
+
+.iv .iv-marquee-card {
+    position: relative;
+    flex-shrink: 0;
+    width: 300px;
+    padding: 28px 24px 24px;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    transition:
+        background 280ms ease,
+        border-color 280ms ease,
+        box-shadow 280ms ease,
+        transform 280ms ease;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 240px;
+    text-decoration: none;
+    color: inherit;
+    cursor: pointer;
+    user-select: none;
+}
+.iv .iv-marquee-card:hover {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--accent) 50%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--accent) 18%, transparent),
+        0 8px 32px -8px color-mix(in oklab, var(--accent) 16%, transparent);
+    transform: translateY(-4px);
+}
+
+.iv .iv-marquee-tag {
+    font-family: var(--iv-font-mono);
+    font-size: 12px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+}
+.iv .iv-marquee-icon {
+    color: var(--accent);
+    transition: transform 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.iv .iv-marquee-card:hover .iv-marquee-icon {
+    transform: scale(1.12) translateY(-2px);
+}
+.iv .iv-marquee-card h3 {
+    font-family: var(--iv-font-display);
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--ink);
+    margin: 0;
+}
+.iv .iv-marquee-card p {
+    color: var(--ink-2);
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0;
+    flex: 1;
+}
+/* Reuse existing .iv-arrow inside marquee cards */
+.iv .iv-marquee-card .iv-arrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--iv-font-mono);
+    letter-spacing: 0.1em;
+    margin-top: 8px;
+    opacity: 0;
+    transform: translateX(-8px);
+    transition:
+        opacity 280ms ease,
+        transform 280ms ease;
+}
+.iv .iv-marquee-card:hover .iv-arrow {
+    opacity: 1;
+    transform: none;
+}
+.iv .iv-marquee-card .iv-arrow svg {
+    transition: transform 200ms ease;
+}
+.iv .iv-marquee-card:hover .iv-arrow svg {
+    transform: translateX(4px);
+}
+
+@media (max-width: 640px) {
+    .iv .iv-marquee-card {
+        width: 260px;
+        min-height: 210px;
+        padding: 22px 20px 20px;
+    }
+    .iv .iv-marquee-wrap {
+        mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 4%,
+            black 96%,
+            transparent 100%
+        );
+        -webkit-mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 4%,
+            black 96%,
+            transparent 100%
+        );
+    }
+}
+
 /* ----- Process steps (Soporte) ----- */
 .iv .iv-process {
     display: grid;
@@ -2098,6 +2247,150 @@
     }
     .iv .iv-step::before {
         display: none;
+    }
+}
+
+/* ----- Brand Marquee (Marcas) ----- */
+.iv .iv-brand-section {
+    position: relative;
+    padding: clamp(60px, 8vw, 100px) 0;
+    max-width: 1600px;
+    margin: 0 auto;
+    text-align: center;
+}
+.iv .iv-brand-header {
+    padding: 0 clamp(20px, 5vw, 80px);
+    margin-bottom: 48px;
+}
+.iv .iv-brand-title {
+    font-family: var(--iv-font-display);
+    font-weight: 700;
+    font-size: clamp(28px, 3.2vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0 0 14px;
+}
+.iv .iv-brand-title .iv-accent {
+    color: var(--accent);
+    font-style: italic;
+}
+.iv .iv-brand-title .iv-accent::after {
+    content: ".";
+    color: var(--accent-2);
+    font-style: normal;
+}
+.iv .iv-brand-subtitle {
+    font-size: clamp(14px, 1.1vw, 17px);
+    line-height: 1.5;
+    color: var(--ink-3);
+    margin: 0;
+}
+
+.iv .iv-brand-marquee {
+    position: relative;
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    overflow: hidden;
+    padding: 16px 0;
+    /* Gradient mask: elegant fade on edges */
+    mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 10%,
+        black 90%,
+        transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+        to right,
+        transparent 0%,
+        black 10%,
+        black 90%,
+        transparent 100%
+    );
+}
+
+.iv .iv-brand-track {
+    display: flex;
+    gap: 20px;
+    width: max-content;
+}
+
+.iv .iv-brand-pill {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 240px;
+    height: 88px;
+    padding: 16px 28px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    cursor: default;
+    transition:
+        background 250ms ease,
+        border-color 250ms ease,
+        box-shadow 250ms ease;
+}
+.iv .iv-brand-pill:hover {
+    background: var(--surface-2);
+    border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+    box-shadow:
+        0 0 0 1px color-mix(in oklab, var(--accent) 12%, transparent),
+        0 4px 20px -6px color-mix(in oklab, var(--accent) 14%, transparent);
+}
+
+.iv .iv-brand-wordmark {
+    height: 22px;
+    width: auto;
+    color: var(--ink);
+    opacity: 0.7;
+    transition: opacity 250ms ease;
+}
+.iv .iv-brand-pill:hover .iv-brand-wordmark {
+    opacity: 1;
+}
+
+.iv .iv-brand-tagline {
+    font-family: var(--iv-font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    transition: color 250ms ease;
+}
+.iv .iv-brand-pill:hover .iv-brand-tagline {
+    color: var(--accent);
+}
+
+@media (max-width: 640px) {
+    .iv .iv-brand-pill {
+        width: 200px;
+        height: 76px;
+        padding: 12px 20px;
+        border-radius: 14px;
+    }
+    .iv .iv-brand-wordmark {
+        height: 18px;
+    }
+    .iv .iv-brand-marquee {
+        mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 5%,
+            black 95%,
+            transparent 100%
+        );
+        -webkit-mask-image: linear-gradient(
+            to right,
+            transparent 0%,
+            black 5%,
+            black 95%,
+            transparent 100%
+        );
     }
 }
 
@@ -2508,5 +2801,19 @@
     .iv .iv-reveal {
         opacity: 1;
         transform: none;
+    }
+    .iv .iv-marquee-track {
+        animation: none !important;
+    }
+    .iv .iv-marquee-card .iv-arrow {
+        opacity: 1;
+        transform: none;
+    }
+    .iv .iv-brand-track {
+        animation: none !important;
+        transform: none !important;
+    }
+    .iv .iv-brand-wordmark {
+        opacity: 1;
     }
 }

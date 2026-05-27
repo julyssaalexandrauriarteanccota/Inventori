@@ -74,7 +74,7 @@ function SidebarConfigView({
             key={group.label}
             className="py-1 group-data-[collapsible=icon]:px-0"
           >
-            <SidebarGroupLabel className="px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
+            <SidebarGroupLabel className="px-2 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--sidebar-primary)]/50 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
               {group.label}
             </SidebarGroupLabel>
             <SidebarMenu>

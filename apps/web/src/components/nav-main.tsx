@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { usePathname } from "next/navigation"
 import {
   SidebarGroup,
@@ -18,6 +19,16 @@ export function NavMain({ items }: { items: NavItem[] }) {
   const pathname = usePathname()
   const badges = useNavBadges()
   const sections = groupNavItems(items)
+  const activeUrl = React.useMemo(() => {
+    const urls = items.flatMap((item) => [
+      item.url,
+      ...(item.items?.map((subItem) => subItem.url) ?? []),
+    ])
+
+    return urls
+      .filter((url) => pathname === url || pathname.startsWith(url + "/"))
+      .sort((a, b) => b.length - a.length)[0]
+  }, [items, pathname])
 
   return (
     <>
@@ -26,7 +37,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
           key={section.label}
           className="py-1 group-data-[collapsible=icon]:px-0"
         >
-          <SidebarGroupLabel className="px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
+          <SidebarGroupLabel className="px-2 text-[10.5px] font-semibold uppercase tracking-widest text-[var(--sidebar-primary)]/50 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-0 group-data-[collapsible=icon]:overflow-hidden group-data-[collapsible=icon]:py-0 group-data-[collapsible=icon]:transition-opacity">
             {section.label}
           </SidebarGroupLabel>
           <SidebarMenu>
@@ -34,7 +45,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
               <NavMainItem
                 key={item.title}
                 item={item}
-                pathname={pathname}
+                activeUrl={activeUrl}
                 badges={badges}
               />
             ))}
