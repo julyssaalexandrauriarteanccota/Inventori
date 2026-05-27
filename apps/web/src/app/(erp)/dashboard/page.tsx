@@ -611,57 +611,80 @@ function CompactKpiCard({
   isLoading: boolean
   index?: number
 }) {
-  /* Parse solid palette classes from the color string.
-     Expected format: "bg-amber-50 border-amber-200 text-amber-600 dark:text-amber-400"
-     Falls back gracefully for legacy "bg-muted text-muted-foreground" format. */
-  const tokens  = color.split(' ')
-  const textCls = tokens.find((c) => c.startsWith('text-') && !c.startsWith('dark:')) ?? 'text-primary'
-  const bgCls   = tokens.find((c) => c.startsWith('bg-'))     ?? 'bg-primary/10'
-  const borderCls = tokens.find((c) => c.startsWith('border-')) ?? 'border-border'
-  /* Icon tile: bump bg shade one step darker (bg-amber-50 → bg-amber-100) */
-  const tileBgCls = bgCls.replace(/-(\d+)$/, (_, n) => `-${Math.min(Number(n) + 50, 900)}`)
+  /* Parse classes from color string supporting both light and dark variants.
+     Example: "bg-amber-50 dark:bg-amber-500/10 border-amber-200
+              dark:border-amber-500/30 text-amber-600 dark:text-amber-400" */
+  const tokens = color.split(' ')
+
+  /* All bg-* and border-* (light + dark) go on the card */
+  const cardBgBorderCls = tokens
+    .filter((t) => /^(dark:)?(bg|border)-/.test(t))
+    .join(' ')
+
+  /* All text-* (light + dark) go on the colored icons */
+  const iconTextCls = tokens
+    .filter((t) => /^(dark:)?text-/.test(t))
+    .join(' ') || 'text-primary'
+
+  /* Light-only text (used for ArrowUpRight which needs a single color anchor) */
+  const lightTextOnly = tokens.find((t) => t.startsWith('text-') && !t.startsWith('dark:')) ?? 'text-primary'
+
+  /* Icon tile: light = shade bumped (-50 → -100); dark = opacity doubled */
+  const lightBg = tokens.find((t) => /^bg-[a-z]+-\d+$/.test(t))
+  const darkBg  = tokens.find((t) => /^dark:bg-/.test(t))
+  const tileLightCls = lightBg?.replace(/-(\d+)$/, (_, n) => {
+    const num = Number(n)
+    const next = num === 50 ? 100 : Math.min(num + 100, 900)
+    return `-${next}`
+  }) ?? ''
+  const tileDarkCls = darkBg
+    ? darkBg
+        .replace(/\/\[(0?\.\d+)\]/, (_, op) => `/[${Math.min(Number(op) * 2, 0.4).toFixed(2)}]`)
+        .replace(/\/(\d+)$/, (_, n) => `/${Math.min(Number(n) * 2, 40)}`)
+    : ''
+  const tileCls = `${tileLightCls} ${tileDarkCls}`.trim()
 
   return (
     <Link href={href} className="block">
       <div
         className={cn(
           'group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md animate-fade-up min-h-[130px] flex flex-col justify-between',
-          bgCls, borderCls,
+          cardBgBorderCls,
         )}
         style={{ animationDelay: `${index * 70}ms` }}
       >
         {/* top row: solid colored icon tile + arrow circle */}
         <div className="flex items-center justify-between">
-          <div className={cn('flex size-10 items-center justify-center rounded-xl', tileBgCls)}>
-            <Icon className={cn('size-5', textCls)} />
+          <div className={cn('flex size-10 items-center justify-center rounded-xl', tileCls)}>
+            <Icon className={cn('size-5', iconTextCls)} />
           </div>
           <div className={cn(
             'flex size-8 items-center justify-center rounded-full border transition-all',
-            borderCls,
+            cardBgBorderCls.split(' ').filter((t) => /^(dark:)?border-/.test(t)).join(' '),
             'group-hover:bg-current/10',
           )}>
-            <ArrowUpRight className={cn('size-3.5 transition-colors', textCls, 'opacity-60 group-hover:opacity-100')} />
+            <ArrowUpRight className={cn('size-3.5 transition-colors', lightTextOnly, 'opacity-60 group-hover:opacity-100')} />
           </div>
         </div>
 
         {/* label + number */}
         <div className="mt-3">
-          <p className="text-xs font-medium text-foreground/60">{label}</p>
+          <p className="text-xs font-medium text-foreground/65 dark:text-foreground/75">{label}</p>
           {isLoading ? (
             <div className="mt-1.5 h-9 w-14 animate-pulse rounded-lg bg-foreground/[0.08]" />
           ) : (
-            <p className="mt-0.5 text-4xl font-display font-bold tabular-nums leading-none">
+            <p className="mt-0.5 text-4xl font-display font-bold tabular-nums leading-none text-foreground">
               {value}
             </p>
           )}
         </div>
 
         {/* subtitle */}
-        <p className="mt-1.5 text-xs text-foreground/55 leading-tight">{subtitle}</p>
+        <p className="mt-1.5 text-xs leading-tight text-foreground/55 dark:text-foreground/65">{subtitle}</p>
 
         {/* watermark icon */}
-        <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.12]">
-          <Icon className={cn('size-24', textCls)} />
+        <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.12] dark:opacity-[0.18]">
+          <Icon className={cn('size-24', iconTextCls)} />
         </div>
       </div>
     </Link>
@@ -771,7 +794,7 @@ export default function DashboardPage() {
           value={ticketsQ.isLoading ? '--' : String(ticketsTotal)}
           subtitle={`${ticketsTotal} pendiente${ticketsTotal !== 1 ? 's' : ''} de resolución`}
           icon={Ticket}
-          color="bg-amber-50 border-amber-200 text-amber-600 dark:text-amber-400"
+          color="bg-amber-50 dark:bg-amber-500/[0.12] border-amber-200 dark:border-amber-500/30 text-amber-600 dark:text-amber-400"
           href="/soporte"
           isLoading={ticketsQ.isLoading}
           index={showAdmin ? 1 : 0}
@@ -785,8 +808,8 @@ export default function DashboardPage() {
             icon={AlertTriangle}
             color={
               alertasTotal > 0
-                ? 'bg-red-50 border-red-200 text-red-600 dark:text-red-400'
-                : 'bg-slate-50 border-slate-200 text-slate-400 dark:text-slate-500'
+                ? 'bg-red-50 dark:bg-red-500/[0.12] border-red-200 dark:border-red-500/30 text-red-600 dark:text-red-400'
+                : 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
             }
             href="/inventario"
             isLoading={alertasQ.isLoading}
@@ -799,7 +822,7 @@ export default function DashboardPage() {
           value={equiposQ.isLoading ? '--' : String(equiposTotal)}
           subtitle={`${equiposTotal} en operación`}
           icon={Printer}
-          color="bg-sky-50 border-sky-200 text-sky-600 dark:text-sky-400"
+          color="bg-sky-50 dark:bg-sky-500/[0.12] border-sky-200 dark:border-sky-500/30 text-sky-600 dark:text-sky-400"
           href="/equipos"
           isLoading={equiposQ.isLoading}
           index={showAdmin ? 3 : 1}
