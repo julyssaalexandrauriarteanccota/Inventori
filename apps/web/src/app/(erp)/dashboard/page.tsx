@@ -97,79 +97,98 @@ function DonutRing({
   )
 }
 
-/* ─────────────────────────── WeeklyBars (SVG) ───────────────────────── */
+/* ─────────────────────────── DualWeeklyBars (SVG) ───────────────────── */
 
-/* Demo data — wire to /reportes/ventas-semana when the endpoint is ready */
-const MOCK_WEEKLY = [
-  { day: 'Lun', v: 1200 },
-  { day: 'Mar', v: 1900 },
-  { day: 'Mié', v: 2600 },
-  { day: 'Jue', v: 2100 },
-  { day: 'Vie', v: 3400 },
-  { day: 'Sáb', v: 1700 },
-  { day: 'Dom', v: 800 },
+/* Demo data (dual-series) — wire to real endpoint when available */
+const MOCK_DUAL = [
+  { day: 'Lun', stock: 1800, ventas: 1200 },
+  { day: 'Mar', stock: 2200, ventas: 1900 },
+  { day: 'May', stock: 1600, ventas: 2600 },
+  { day: 'Jun', stock: 2800, ventas: 2100 },
+  { day: 'Sep', stock: 2400, ventas: 3400 },
+  { day: 'Sáb', stock: 1400, ventas: 1700 },
+  { day: 'Rep', stock: 2000, ventas: 2200 },
 ]
 
-function WeeklyBars() {
-  const maxV = Math.max(...MOCK_WEEKLY.map((d) => d.v))
-  const VH = 76
-  const totalW = 300
-  const n = MOCK_WEEKLY.length
-  const barW = 30
-  const spacing = (totalW - n * barW) / (n + 1)
+function DualWeeklyBars() {
+  /* layout constants */
+  const TW = 420          // total svg width
+  const YAW = 34          // y-axis label area width
+  const CW = TW - YAW     // chart drawing width
+  const VH = 130          // chart height in SVG units
+  const TOP = 14          // top padding (above tallest bar)
+  const BTM = 26          // bottom padding (for day labels)
+  const SVG_H = TOP + VH + BTM
+  const BASE = TOP + VH   // y-coordinate of the baseline (bottom of bars)
+
+  const MAX_V = 4000      // scale ceiling
+  const scaleH = (v: number) => Math.max(3, (v / MAX_V) * VH)
+
+  const BAR_W = 13
+  const BAR_GAP = 4
+  const GROUP_W = BAR_W * 2 + BAR_GAP   // 30
+  const N = MOCK_DUAL.length
+  const GROUP_SP = (CW - N * GROUP_W) / (N + 1)
+  const groupX = (i: number) => YAW + GROUP_SP + i * (GROUP_W + GROUP_SP)
+
+  const Y_TICKS = [0, 1000, 2000, 3000, 4000]
 
   return (
     <svg
-      viewBox={`0 0 ${totalW} ${VH + 24}`}
+      viewBox={`0 0 ${TW} ${SVG_H}`}
       className="w-full"
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <linearGradient id="dg-bar" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--sidebar-primary)" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="var(--sidebar-primary)" stopOpacity="0.2" />
+        <linearGradient id="db-primary" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--sidebar-primary)" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="var(--sidebar-primary)" stopOpacity="0.35" />
         </linearGradient>
-        <linearGradient id="dg-bar-hi" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--sidebar-primary)" stopOpacity="1" />
-          <stop offset="100%" stopColor="var(--sidebar-primary)" stopOpacity="0.5" />
+        <linearGradient id="db-dark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#1f4a3d" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="#1f4a3d" stopOpacity="0.45" />
         </linearGradient>
       </defs>
 
-      {/* faint horizontal grid */}
-      {[0.25, 0.5, 0.75, 1].map((f) => (
-        <line
-          key={f}
-          x1={0} y1={VH * (1 - f)}
-          x2={totalW} y2={VH * (1 - f)}
-          stroke="currentColor" strokeOpacity={0.05} strokeWidth={1}
-        />
-      ))}
+      {/* Y-axis gridlines + labels */}
+      {Y_TICKS.map((tick) => {
+        const y = BASE - (tick / MAX_V) * VH
+        return (
+          <g key={tick}>
+            <line
+              x1={YAW} y1={y} x2={TW} y2={y}
+              stroke="currentColor" strokeOpacity={tick === 0 ? 0.12 : 0.06}
+              strokeWidth={tick === 0 ? 1.5 : 1}
+            />
+            <text
+              x={YAW - 5} y={y + 4}
+              textAnchor="end" fontSize={9}
+              fill="currentColor" fillOpacity={0.38}
+              fontFamily="var(--font-sans)"
+            >
+              {tick === 0 ? '0' : `${tick / 1000}k`}
+            </text>
+          </g>
+        )
+      })}
 
-      {MOCK_WEEKLY.map(({ day, v }, i) => {
-        const bH = Math.max(6, (v / maxV) * VH)
-        const x = spacing + i * (barW + spacing)
-        const isHi = v === maxV
+      {/* Dual bars per day */}
+      {MOCK_DUAL.map(({ day, stock, ventas }, i) => {
+        const gx = groupX(i)
+        const sH = scaleH(stock)
+        const vH = scaleH(ventas)
+        const labelX = gx + BAR_W + BAR_GAP / 2
         return (
           <g key={day}>
-            <rect
-              x={x} y={VH - bH}
-              width={barW} height={bH} rx={7}
-              fill={isHi ? 'url(#dg-bar-hi)' : 'url(#dg-bar)'}
-            />
-            {isHi && (
-              <text
-                x={x + barW / 2} y={VH - bH - 5}
-                textAnchor="middle" fontSize={8}
-                fill="var(--sidebar-primary)" fontWeight="700"
-                fontFamily="var(--font-sans)"
-              >
-                {(v / 1000).toFixed(1)}k
-              </text>
-            )}
+            {/* dark series (stock) */}
+            <rect x={gx} y={BASE - sH} width={BAR_W} height={sH} rx={5} fill="url(#db-dark)" />
+            {/* primary series (ventas) */}
+            <rect x={gx + BAR_W + BAR_GAP} y={BASE - vH} width={BAR_W} height={vH} rx={5} fill="url(#db-primary)" />
+            {/* day label */}
             <text
-              x={x + barW / 2} y={VH + 15}
+              x={labelX} y={BASE + 17}
               textAnchor="middle" fontSize={9}
-              fill="currentColor" fillOpacity={0.4}
+              fill="currentColor" fillOpacity={0.42}
               fontFamily="var(--font-sans)"
             >
               {day}
@@ -177,6 +196,14 @@ function WeeklyBars() {
           </g>
         )
       })}
+
+      {/* legend */}
+      <g transform={`translate(${YAW}, ${SVG_H - 8})`}>
+        <rect width={8} height={8} rx={2} fill="#1f4a3d" fillOpacity={0.7} />
+        <text x={11} y={7} fontSize={8} fill="currentColor" fillOpacity={0.45} fontFamily="var(--font-sans)">Stock</text>
+        <rect x={48} width={8} height={8} rx={2} fill="var(--sidebar-primary)" fillOpacity={0.8} />
+        <text x={59} y={7} fontSize={8} fill="currentColor" fillOpacity={0.45} fontFamily="var(--font-sans)">Ventas</text>
+      </g>
     </svg>
   )
 }
@@ -264,82 +291,136 @@ function DashboardTicketsByState() {
   )
 }
 
-/* ─────────────────────────── QuickActions ───────────────────────────── */
+/* ─────────────────────────── QuickActions (pill buttons) ───────────── */
 
 function QuickActions({ hasRole }: { hasRole: (...roles: RolUsuario[]) => boolean }) {
-  const ACTIONS: {
+  const PILLS: {
     label: string
-    desc: string
     icon: LucideIcon
     href: string
-    color: string
+    cls: string
     roles?: RolUsuario[]
   }[] = [
     {
       label: 'Nueva venta',
-      desc: 'Registrar comprobante de venta',
       icon: ShoppingCart,
       href: '/ventas',
-      color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+      cls: 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
     {
       label: 'Crear ticket',
-      desc: 'Abrir ticket de soporte técnico',
       icon: Ticket,
       href: '/soporte/nuevo',
-      color: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-      roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO],
+      cls: 'bg-[var(--sidebar-primary)] hover:bg-[var(--sidebar-primary)]/90 text-white shadow-primary/20',
     },
     {
       label: 'Registrar cliente',
-      desc: 'Agregar nuevo cliente al sistema',
       icon: Users,
       href: '/clientes/nuevo',
-      color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
+      cls: 'bg-card border border-border hover:border-primary/30 hover:bg-primary/5 text-foreground',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
     {
       label: 'Ver inventario',
-      desc: 'Consultar stock y alertas de mínimo',
       icon: Package,
       href: '/inventario',
-      color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+      cls: 'bg-card border border-border hover:border-violet-500/30 hover:bg-violet-500/5 text-foreground',
       roles: [RolUsuario.ADMIN, RolUsuario.ENCARGADO],
     },
-  ].filter((a) => !a.roles || hasRole(...a.roles))
+  ].filter((p) => !p.roles || hasRole(...p.roles))
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-4 h-full">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Accesos rápidos</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Acciones frecuentes para tu rol</p>
+          <h2 className="text-sm font-semibold text-foreground">Quick Actions</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Acciones frecuentes</p>
         </div>
         <Zap className="size-4 text-muted-foreground/30" />
       </div>
 
-      <div className="flex flex-col gap-2 flex-1">
-        {ACTIONS.map((a) => (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="group flex items-center gap-3 rounded-xl border border-border bg-background/60 px-3.5 py-2.5 transition-all hover:border-primary/25 hover:bg-primary/5 hover:shadow-sm"
-          >
-            <span
+      <div className="flex flex-col gap-2.5 flex-1">
+        {PILLS.map((p) => (
+          <Link key={p.href} href={p.href} className="w-full">
+            <div
               className={cn(
-                'flex size-9 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-110',
-                a.color,
+                'flex items-center justify-center gap-2 w-full h-12 rounded-full font-semibold text-sm transition-all hover:-translate-y-0.5 hover:shadow-lg shadow-md',
+                p.cls,
               )}
             >
-              <a.icon className="size-4" />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold leading-tight">{a.label}</p>
-              <p className="text-[11px] text-muted-foreground truncate">{a.desc}</p>
+              <p.icon className="size-4 shrink-0" />
+              {p.label}
             </div>
-            <ArrowRight className="size-3.5 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-primary shrink-0" />
           </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────── RecentActivity ─────────────────────────── */
+
+/* Placeholder data — replace with real /actividad endpoint when available */
+const ACTIVITY_DATA = [
+  {
+    initials: 'AD',
+    bg: 'bg-blue-500',
+    name: 'Alexandra Deff',
+    action: 'Actualizó repositorio de productos',
+    status: 'Completado',
+    statusCls: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  },
+  {
+    initials: 'EA',
+    bg: 'bg-purple-500',
+    name: 'Edwin Adenike',
+    action: 'Procesó nueva orden de venta',
+    status: 'En progreso',
+    statusCls: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  },
+  {
+    initials: 'IO',
+    bg: 'bg-orange-400',
+    name: 'Isaac O.',
+    action: 'Revisó ticket de soporte',
+    status: 'Pendiente',
+    statusCls: 'bg-slate-400/10 text-slate-600 dark:text-slate-400',
+  },
+]
+
+function RecentActivity() {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-4 h-full">
+      <div>
+        <h2 className="text-sm font-semibold text-foreground">Actividad reciente</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">Últimas acciones del equipo</p>
+      </div>
+
+      <div className="flex flex-col gap-4 flex-1">
+        {ACTIVITY_DATA.map((item) => (
+          <div key={item.name} className="flex items-start gap-3">
+            <div
+              className={cn(
+                'flex size-9 shrink-0 items-center justify-center rounded-full text-white text-xs font-bold shadow-sm',
+                item.bg,
+              )}
+            >
+              {item.initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold leading-tight">{item.name}</p>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">{item.action}</p>
+              <span
+                className={cn(
+                  'mt-1 inline-block text-[10px] font-semibold rounded-full px-2 py-0.5',
+                  item.statusCls,
+                )}
+              >
+                {item.status}
+              </span>
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -700,24 +781,24 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ── charts row ─────────────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* sales bar chart */}
-        <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-2 flex flex-col gap-4">
+      {/* ── charts / actions / activity row (3 cols on desktop) ─────────── */}
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* Activity & Stock Levels bar chart */}
+        <div className="rounded-2xl border border-border bg-card p-5 lg:col-span-6 flex flex-col gap-3">
           <div className="flex items-start justify-between gap-2">
             <div>
-              <h2 className="text-sm font-semibold text-foreground">Actividad de ventas</h2>
+              <h2 className="text-sm font-semibold text-foreground">Activity &amp; Stock Levels</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Distribución estimada · vista semanal
+                Ventas vs. stock · datos de demo
               </p>
             </div>
             <span className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-xs text-muted-foreground">
-              Esta semana
+              Last week
             </span>
           </div>
 
-          {/* totals inline strip */}
-          <div className="flex flex-wrap items-center gap-4 rounded-xl bg-muted/40 px-4 py-3">
+          {/* totals strip */}
+          <div className="flex flex-wrap items-center gap-4 rounded-xl bg-muted/40 px-4 py-2.5">
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Total mes
@@ -725,45 +806,49 @@ export default function DashboardPage() {
               {kpisQ.isLoading ? (
                 <div className="mt-0.5 h-6 w-24 animate-pulse rounded bg-muted" />
               ) : (
-                <p className="text-xl font-display font-bold">
+                <p className="text-lg font-display font-bold">
                   {formatCurrency(ventasMes?.totalMonto ?? 0)}
                 </p>
               )}
             </div>
-
-            <div className="h-9 w-px bg-border" />
-
+            <div className="h-8 w-px bg-border" />
             <div>
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                 Operaciones
               </p>
-              <p className="text-xl font-display font-bold">
+              <p className="text-lg font-display font-bold">
                 {kpisQ.isLoading ? '--' : (ventasMes?.cantidad ?? 0)}
               </p>
             </div>
-
-            <div className="ml-auto flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            <div className="ml-auto flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
               <TrendingUp className="size-3" />
               Activo
             </div>
           </div>
 
-          <WeeklyBars />
+          <DualWeeklyBars />
         </div>
 
-        {/* period summary card */}
+        {/* Quick Actions pill buttons */}
+        <div className="lg:col-span-3">
+          <QuickActions hasRole={hasRole} />
+        </div>
+
+        {/* Recent Activity */}
+        <div className="lg:col-span-3">
+          <RecentActivity />
+        </div>
+      </div>
+
+      {/* ── bottom row ─────────────────────────────────────────────────── */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DashboardTicketsByState />
         <PeriodSummaryCard
           clientesNuevosMes={clientesNuevosMes}
           ticketsCerradosMes={ticketsCerradosMes}
           kpisLoading={kpisQ.isLoading}
           showAdmin={showAdmin}
         />
-      </div>
-
-      {/* ── bottom row ─────────────────────────────────────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <DashboardTicketsByState />
-        <QuickActions hasRole={hasRole} />
       </div>
     </div>
   )
