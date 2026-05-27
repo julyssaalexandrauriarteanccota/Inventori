@@ -106,17 +106,21 @@ export function NotificationCenter() {
             <Button
               variant="ghost"
               size="icon"
-              className="group relative size-9 rounded-full border border-sidebar-border/85 bg-sidebar-accent/78 text-sidebar-primary transition-all duration-200 hover:bg-sidebar-accent active:scale-95"
+              className={cn(
+                "group relative size-9 rounded-full border transition-all duration-200 active:scale-95",
+                unreadCount > 0
+                  ? "border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/[0.12] dark:text-amber-400 dark:hover:bg-amber-500/[0.18]"
+                  : "border-sidebar-border bg-sidebar-accent text-sidebar-primary hover:bg-sidebar-primary/[0.1]",
+              )}
               aria-label={unreadCount > 0 ? `Notificaciones, ${unreadCount} sin leer` : 'Notificaciones'}
             >
               <Bell className="size-4 transition-transform duration-300 ease-out group-hover:rotate-12" />
               {unreadCount > 0 && (
-                <Badge
-                  variant="destructive"
-                  className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full p-0 text-[10px]"
+                <span
+                  className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white ring-1 ring-sidebar"
                 >
                   {unreadCount > 9 ? '9+' : unreadCount}
-                </Badge>
+                </span>
               )}
               <span className="sr-only">Notificaciones</span>
             </Button>

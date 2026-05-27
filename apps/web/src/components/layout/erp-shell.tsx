@@ -3,6 +3,7 @@
 import { Fragment } from "react"
 import { usePathname } from "next/navigation"
 
+import { useAuth } from "@/hooks/use-auth"
 import { AppCommand } from "@/components/app-command"
 import { AppSidebar } from "@/components/app-sidebar"
 import { NotificationCenter } from "@/components/notification-center"
@@ -105,6 +106,11 @@ function DynamicBreadcrumb() {
 
 export function ErpShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const { user } = useAuth()
+
+  const userInitials = user
+    ? `${user.nombre?.[0] ?? ''}${user.apellido?.[0] ?? ''}`.toUpperCase()
+    : ''
 
   return (
     <SettingsDialogProvider>
@@ -120,8 +126,6 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
               "bg-sidebar text-sidebar-foreground",
               "border-b border-sidebar-border/70",
               "shadow-[0_2px_8px_-2px_rgba(0,0,0,0.07),inset_0_-1px_0_rgba(0,0,0,0.04)]",
-              // Icons always painted with accent color, hover brightens
-              "[&_button>svg]:text-sidebar-primary [&_button>svg]:opacity-75 [&_button:hover>svg]:opacity-100 [&_button>svg]:transition-opacity",
             )}
           >
             {/* 2px brand accent stripe at the very top of the content header */}
@@ -130,6 +134,8 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
               style={{ background: 'color-mix(in srgb, var(--sidebar-primary) 40%, transparent)' }}
               aria-hidden
             />
+
+            {/* ── Left: trigger + breadcrumb ─────────────────────────────── */}
             <div className="flex min-w-0 items-center gap-1.5 border-0 bg-transparent p-0 shadow-none sm:gap-3 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-sidebar-accent sm:px-4 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/90">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -148,10 +154,26 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
                 <DynamicBreadcrumb />
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-1 border-0 bg-transparent p-0 shadow-none sm:gap-2 sm:rounded-2xl sm:border sm:border-sidebar-border/90 sm:bg-sidebar-accent sm:px-3 sm:py-2 sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] sm:dark:bg-sidebar-accent/90">
+
+            {/* ── Right: search + notifications + theme + user chip ─────── */}
+            <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
               <AppCommand />
               <NotificationCenter />
               <ThemeToggle />
+              {/* User avatar chip */}
+              {user && (
+                <div className="hidden sm:flex items-center gap-2 rounded-full border pl-1 pr-3 py-1 transition-all cursor-default border-sidebar-primary/20 bg-sidebar-primary/[0.07] hover:bg-sidebar-primary/[0.12]">
+                  <span
+                    className="flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                    style={{ background: 'var(--sidebar-primary)' }}
+                  >
+                    {userInitials}
+                  </span>
+                  <span className="text-xs font-semibold text-foreground leading-none hidden lg:block">
+                    {user.nombre}
+                  </span>
+                </div>
+              )}
             </div>
           </header>
           <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden">

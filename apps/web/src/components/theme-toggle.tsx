@@ -28,7 +28,7 @@ export function ThemeToggle() {
             <Button
               variant="ghost"
               size="icon"
-              className="size-9 rounded-full border border-sidebar-border/85 bg-sidebar-accent/78 text-sidebar-primary transition-all duration-200 hover:bg-sidebar-accent active:scale-95"
+              className="size-9 rounded-full border border-sidebar-border bg-sidebar-accent text-sidebar-primary transition-all duration-200 hover:bg-sidebar-primary/[0.1] active:scale-95"
               aria-label="Cambiar tema"
             >
               <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all duration-500 ease-out dark:-rotate-90 dark:scale-0" />

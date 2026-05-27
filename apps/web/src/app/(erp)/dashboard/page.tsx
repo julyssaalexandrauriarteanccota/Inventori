@@ -611,64 +611,42 @@ function CompactKpiCard({
   isLoading: boolean
   index?: number
 }) {
-  /* extract individual classes from the combined color string
-     e.g. "bg-amber-500/10 text-amber-600 dark:text-amber-400" */
-  /* pull light-mode text class (first text-* that is NOT a dark: variant) */
-  const textCls = color.split(' ').find((c) => c.startsWith('text-') && !c.startsWith('dark:')) ?? 'text-primary'
-  const bgCls   = color.split(' ').find((c) => c.startsWith('bg-'))  ?? 'bg-primary/10'
-
-  /* For colored cards: the whole card uses the tinted background;
-     for muted cards (alerts when count=0): fall back to standard card style */
-  const isMuted = bgCls.startsWith('bg-muted')
-  /* derive border color from bg class: bg-amber-500/10 → border-amber-500/20 */
-  const borderCls = isMuted
-    ? 'border-border'
-    : bgCls.replace('bg-', 'border-').replace('/10', '/20')
+  /* Parse solid palette classes from the color string.
+     Expected format: "bg-amber-50 border-amber-200 text-amber-600 dark:text-amber-400"
+     Falls back gracefully for legacy "bg-muted text-muted-foreground" format. */
+  const tokens  = color.split(' ')
+  const textCls = tokens.find((c) => c.startsWith('text-') && !c.startsWith('dark:')) ?? 'text-primary'
+  const bgCls   = tokens.find((c) => c.startsWith('bg-'))     ?? 'bg-primary/10'
+  const borderCls = tokens.find((c) => c.startsWith('border-')) ?? 'border-border'
+  /* Icon tile: bump bg shade one step darker (bg-amber-50 → bg-amber-100) */
+  const tileBgCls = bgCls.replace(/-(\d+)$/, (_, n) => `-${Math.min(Number(n) + 50, 900)}`)
 
   return (
     <Link href={href} className="block">
       <div
         className={cn(
-          'group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-lg animate-fade-up min-h-[130px] flex flex-col justify-between',
-          isMuted ? 'bg-card border-border' : cn(bgCls, borderCls),
+          'group relative overflow-hidden rounded-2xl border p-5 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md animate-fade-up min-h-[130px] flex flex-col justify-between',
+          bgCls, borderCls,
         )}
         style={{ animationDelay: `${index * 70}ms` }}
       >
-        {/* top row: icon square + arrow circle */}
+        {/* top row: solid colored icon tile + arrow circle */}
         <div className="flex items-center justify-between">
-          {/* frosted white tile on tinted cards; normal tinted tile on muted */}
-          {isMuted ? (
-            <div className={cn('flex size-10 items-center justify-center rounded-xl', bgCls)}>
-              <Icon className={cn('size-5', textCls)} />
-            </div>
-          ) : (
-            <div className="flex size-10 items-center justify-center rounded-xl bg-white/70 shadow-sm dark:bg-white/10">
-              <Icon className={cn('size-5', textCls)} />
-            </div>
-          )}
+          <div className={cn('flex size-10 items-center justify-center rounded-xl', tileBgCls)}>
+            <Icon className={cn('size-5', textCls)} />
+          </div>
           <div className={cn(
-            'flex size-8 items-center justify-center rounded-full transition-all',
-            isMuted
-              ? 'border border-border/70 group-hover:border-primary/30 group-hover:bg-primary/5'
-              : 'border border-current/20 group-hover:bg-current/10',
+            'flex size-8 items-center justify-center rounded-full border transition-all',
+            borderCls,
+            'group-hover:bg-current/10',
           )}>
-            <ArrowUpRight className={cn(
-              'size-3.5 transition-colors',
-              isMuted
-                ? 'text-muted-foreground/40 group-hover:text-primary'
-                : cn(textCls, 'opacity-50 group-hover:opacity-90'),
-            )} />
+            <ArrowUpRight className={cn('size-3.5 transition-colors', textCls, 'opacity-60 group-hover:opacity-100')} />
           </div>
         </div>
 
         {/* label + number */}
         <div className="mt-3">
-          <p className={cn(
-            'text-xs font-medium',
-            isMuted ? 'text-muted-foreground' : 'text-foreground/65',
-          )}>
-            {label}
-          </p>
+          <p className="text-xs font-medium text-foreground/60">{label}</p>
           {isLoading ? (
             <div className="mt-1.5 h-9 w-14 animate-pulse rounded-lg bg-foreground/[0.08]" />
           ) : (
@@ -679,15 +657,10 @@ function CompactKpiCard({
         </div>
 
         {/* subtitle */}
-        <p className={cn(
-          'mt-1.5 text-xs leading-tight',
-          isMuted ? 'text-muted-foreground' : 'text-foreground/55',
-        )}>
-          {subtitle}
-        </p>
+        <p className="mt-1.5 text-xs text-foreground/55 leading-tight">{subtitle}</p>
 
-        {/* watermark icon — large + faint in bottom-right */}
-        <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.07]">
+        {/* watermark icon */}
+        <div className="pointer-events-none absolute -bottom-3 -right-3 opacity-[0.12]">
           <Icon className={cn('size-24', textCls)} />
         </div>
       </div>
@@ -798,7 +771,7 @@ export default function DashboardPage() {
           value={ticketsQ.isLoading ? '--' : String(ticketsTotal)}
           subtitle={`${ticketsTotal} pendiente${ticketsTotal !== 1 ? 's' : ''} de resolución`}
           icon={Ticket}
-          color="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          color="bg-amber-50 border-amber-200 text-amber-600 dark:text-amber-400"
           href="/soporte"
           isLoading={ticketsQ.isLoading}
           index={showAdmin ? 1 : 0}
@@ -812,8 +785,8 @@ export default function DashboardPage() {
             icon={AlertTriangle}
             color={
               alertasTotal > 0
-                ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                : 'bg-muted text-muted-foreground'
+                ? 'bg-red-50 border-red-200 text-red-600 dark:text-red-400'
+                : 'bg-slate-50 border-slate-200 text-slate-400 dark:text-slate-500'
             }
             href="/inventario"
             isLoading={alertasQ.isLoading}
@@ -826,7 +799,7 @@ export default function DashboardPage() {
           value={equiposQ.isLoading ? '--' : String(equiposTotal)}
           subtitle={`${equiposTotal} en operación`}
           icon={Printer}
-          color="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          color="bg-sky-50 border-sky-200 text-sky-600 dark:text-sky-400"
           href="/equipos"
           isLoading={equiposQ.isLoading}
           index={showAdmin ? 3 : 1}
