@@ -7,7 +7,9 @@ import {
   Barcode,
   Boxes,
   Cable,
+  Calendar,
   Clock,
+  Copy,
   DollarSign,
   FileText,
   Folder,
@@ -22,8 +24,8 @@ import {
   Sparkles,
   Tag,
   Wrench,
-  X,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   CondicionProducto,
   RolUsuario,
@@ -44,8 +46,6 @@ import {
 import { ProductCodePreview } from "@/components/products/product-code-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Field, FieldLabel } from "@/components/ui/field";
 import {
   Dialog,
   DialogContent,
@@ -55,12 +55,16 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 interface ProductoDetalleModalProps {
   id: string | null;
   onClose: () => void;
   onEdit?: (producto: ProductoDetailItem) => void;
   canEdit?: boolean;
 }
+
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<TipoProducto, string> = {
   [TipoProducto.EQUIPO]: "Equipo",
@@ -78,6 +82,16 @@ const CONDICION_LABELS: Record<CondicionProducto, string> = {
   [CondicionProducto.RECUPERADO]: "Recuperado",
 };
 
+const TIPO_COLOR: Record<TipoProducto, string> = {
+  [TipoProducto.EQUIPO]: "bg-orange-500 shadow-orange-500/30",
+  [TipoProducto.REPUESTO]: "bg-sky-500 shadow-sky-500/30",
+  [TipoProducto.INSUMO]: "bg-emerald-500 shadow-emerald-500/30",
+  [TipoProducto.SERVICIO]: "bg-violet-500 shadow-violet-500/30",
+  [TipoProducto.ACCESORIO]: "bg-amber-500 shadow-amber-500/30",
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function formatCurrency(value: number | null | undefined) {
   if (value === null || value === undefined) return "—";
   return `S/ ${Number(value).toFixed(2)}`;
@@ -89,7 +103,6 @@ function getProductImages(
 ) {
   if (imagenes?.length) return imagenes;
   if (!legacyImage) return [];
-
   return [
     {
       id: legacyImage,
@@ -101,6 +114,102 @@ function getProductImages(
       orden: 0,
     },
   ];
+}
+
+function renderDescription(text: string) {
+  if (isRichDescriptionHtml(text)) {
+    return <RichDescriptionViewer value={text} />;
+  }
+  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>;
+}
+
+// ── Sub-components ─────────────────────────────────────────────────────────────
+
+function InfoItem({
+  label,
+  value,
+  icon: Icon,
+  mono = false,
+  copyable = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  icon?: React.ElementType;
+  mono?: boolean;
+  copyable?: boolean;
+}) {
+  const textVal = typeof value === "string" ? value : null;
+  return (
+    <div className="group flex flex-col gap-1 min-w-0 w-full">
+      <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+        {label}
+      </span>
+      <div className="flex items-start gap-1.5 min-w-0 w-full">
+        {Icon && (
+          <Icon className="size-3.5 shrink-0 text-muted-foreground/40 transition-colors mt-0.5" />
+        )}
+        <span
+          className={cn(
+            "text-sm font-medium text-foreground break-words whitespace-normal leading-normal flex-1 min-w-0",
+            mono && "font-mono",
+          )}
+        >
+          {value || (
+            <span className="text-muted-foreground/40 font-normal italic text-xs">
+              —
+            </span>
+          )}
+        </span>
+        {copyable && textVal && (
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(textVal);
+              toast.success("Copiado al portapapeles", { duration: 1500 });
+            }}
+            title="Copiar"
+            className="ml-auto shrink-0 md:opacity-0 md:group-hover:opacity-100 opacity-100 transition-colors duration-150 rounded p-1 hover:bg-muted focus:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+          >
+            <Copy className="size-3 text-muted-foreground/50" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AuditItem({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | null | undefined;
+  icon: React.ElementType;
+}) {
+  const formatted = value
+    ? new Date(value).toLocaleDateString("es-PE", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted/70 ring-1 ring-border/50">
+        <Icon className="size-3.5 text-muted-foreground" />
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
+        <span className="text-sm font-medium tabular-nums">
+          {formatted ?? "—"}
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function ProductDetailImage({ src, alt }: { src: string; alt: string }) {
@@ -130,27 +239,31 @@ function ProductDetailImage({ src, alt }: { src: string; alt: string }) {
 
 function DetailSkeleton() {
   return (
-    <div className="grid gap-6 p-4 sm:p-5 lg:grid-cols-12">
-      <div className="lg:col-span-6 space-y-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-20 rounded-xl" />
-        ))}
-      </div>
-      <div className="lg:col-span-6 space-y-4">
-        <Skeleton className="h-56 rounded-xl" />
-        <Skeleton className="h-32 rounded-xl" />
-      </div>
+    <div className="flex flex-col gap-4">
+      {Array.from({ length: 3 }).map((_, s) => (
+        <div
+          key={s}
+          className="rounded-2xl border border-border/40 bg-card/50 p-4 sm:p-6"
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <Skeleton className="size-6 rounded-full" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-2">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-36" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-function renderDescription(text: string) {
-  if (isRichDescriptionHtml(text)) {
-    return <RichDescriptionViewer value={text} />;
-  }
-
-  return <p className="whitespace-pre-wrap text-sm leading-relaxed">{text}</p>;
-}
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export function ProductoDetalleModal({
   id,
@@ -166,9 +279,7 @@ export function ProductoDetalleModal({
   const producto = productoRes?.data;
   const stockRows = stockRes?.data ?? [];
   const stockTotal = stockRows.reduce((total, row) => total + row.cantidad, 0);
-  const [manualSelectedImageUrl, setManualSelectedImageUrl] = useState<
-    string | null
-  >(null);
+  const [manualSelectedImageUrl, setManualSelectedImageUrl] = useState<string | null>(null);
 
   const images = useMemo(
     () => getProductImages(producto?.imagenes, producto?.imagen),
@@ -179,384 +290,518 @@ export function ProductoDetalleModal({
     images.some((image) => image.url === manualSelectedImageUrl)
       ? manualSelectedImageUrl
       : images.find((image) => image.esPrincipal)?.url ?? images[0]?.url ?? null;
-  const selectedImage =
-    images.find((image) => image.url === selectedImageUrl) ?? null;
+  const selectedImage = images.find((image) => image.url === selectedImageUrl) ?? null;
+
   const showQr = Boolean(
-    producto &&
-      !(producto.tipo === TipoProducto.EQUIPO || producto.tieneNumeroSerie),
+    producto && !(producto.tipo === TipoProducto.EQUIPO || producto.tieneNumeroSerie),
   );
   const isServicio = producto?.tipo === TipoProducto.SERVICIO;
+  const modelosCompatibles = producto?.modelosCompatibles ?? [];
+
+  const tipoColorClass = producto ? TIPO_COLOR[producto.tipo] : "bg-muted";
+
+  // Section numbers adjust when inventory section is hidden (services)
+  const imgSectionNum = isServicio ? 3 : 4;
+  const descSectionNum = isServicio ? 4 : 5;
+  const auditSectionNum = isServicio ? 5 : 6;
 
   return (
     <Dialog open={!!id} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="flex h-[92vh] w-[min(96vw,1180px)] max-w-[1180px] flex-col overflow-hidden rounded-3xl p-0 sm:max-w-[1180px] border-border/80 shadow-2xl">
-        <DialogHeader className="border-b border-border/70 px-5 py-4 text-left">
-          <div className="flex min-w-0 items-start justify-between gap-4 pr-8">
-            <div className="min-w-0">
-              <DialogTitle className="truncate text-lg font-semibold text-foreground">
-                {producto?.nombre ?? "Detalle del producto"}
-              </DialogTitle>
-              <DialogDescription className="mt-1 flex flex-wrap items-center gap-2">
-                {producto ? (
-                  <>
-                    <Badge variant="secondary" className="font-mono text-[10px] bg-muted/60 text-muted-foreground border-border/40">
-                      {producto.sku}
-                    </Badge>
-                    <Badge variant="outline" className="text-[10px] border-primary/20 bg-primary/2 text-primary font-semibold">
-                      {TIPO_LABELS[producto.tipo]}
-                    </Badge>
-                    <Badge variant={producto.activo ? "default" : "outline"} className="text-[10px]">
-                      {producto.activo ? "Activo" : "Inactivo"}
-                    </Badge>
-                  </>
+      <DialogContent className="flex h-[88vh] max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100vw-1rem)] sm:max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-3xl border border-border/60 bg-background p-0 shadow-2xl sm:max-w-2xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl data-[state=open]:duration-300 data-[state=open]:ease-[cubic-bezier(0.25,1.5,0.5,1)]">
+
+        {/* ── HEADER ── */}
+        <DialogHeader className="shrink-0 border-b border-border/40 bg-background px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Product type icon tile */}
+            <div
+              className={cn(
+                "flex size-12 sm:size-14 shrink-0 items-center justify-center rounded-2xl text-white shadow-md ring-2 ring-background dark:ring-border transition-all",
+                isLoading ? "bg-muted ring-0 shadow-none" : tipoColorClass,
+              )}
+            >
+              {isLoading ? (
+                <Package className="size-5 text-muted-foreground" />
+              ) : producto?.tipo === TipoProducto.EQUIPO ? (
+                <Laptop className="size-5 sm:size-6" />
+              ) : producto?.tipo === TipoProducto.REPUESTO ? (
+                <Wrench className="size-5 sm:size-6" />
+              ) : producto?.tipo === TipoProducto.INSUMO ? (
+                <Layers className="size-5 sm:size-6" />
+              ) : producto?.tipo === TipoProducto.SERVICIO ? (
+                <Sparkles className="size-5 sm:size-6" />
+              ) : (
+                <Cable className="size-5 sm:size-6" />
+              )}
+            </div>
+
+            {/* Title + badges */}
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-base sm:text-xl font-semibold leading-tight font-display break-words pr-12 sm:pr-0">
+                {isLoading ? (
+                  <Skeleton className="h-5 w-48" />
                 ) : (
-                  "Información detallada del producto."
+                  producto?.nombre ?? "Detalle del producto"
                 )}
+              </DialogTitle>
+              {producto && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {/* SKU chip */}
+                  <span className="font-mono text-[11px] text-muted-foreground bg-muted/60 rounded px-1.5 py-0.5 border border-border/40">
+                    {producto.sku}
+                  </span>
+                  {/* Tipo pill */}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white shadow-sm whitespace-nowrap",
+                      TIPO_COLOR[producto.tipo],
+                    )}
+                  >
+                    {TIPO_LABELS[producto.tipo]}
+                  </span>
+                  {/* Activo pill */}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-semibold whitespace-nowrap",
+                      producto.activo
+                        ? "bg-emerald-500 text-white shadow-sm shadow-emerald-500/30"
+                        : "bg-muted text-muted-foreground border border-border/60",
+                    )}
+                  >
+                    {producto.activo ? (
+                      <span className="relative flex size-1.5 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                        <span className="relative inline-flex size-1.5 rounded-full bg-white" />
+                      </span>
+                    ) : (
+                      <span className="size-1.5 rounded-full inline-block bg-muted-foreground/40" />
+                    )}
+                    {producto.activo ? "Activo" : "Inactivo"}
+                  </span>
+                </div>
+              )}
+              <DialogDescription className="sr-only">
+                Información detallada del producto.
               </DialogDescription>
             </div>
-            {canEdit && producto ? (
+
+            {/* Edit button */}
+            {canEdit && producto && (
               <Button
-                type="button"
                 size="sm"
-                className="shrink-0 rounded-xl text-xs gap-1.5 h-9 px-4 hover:scale-[1.02] active:scale-95 transition-all duration-300 shadow-xs"
+                className="gap-1.5 shrink-0 mr-8 sm:mr-10 h-9 rounded-xl px-3.5 bg-orange-500 hover:bg-orange-600 text-white shadow-sm shadow-orange-500/30 dark:bg-orange-500 dark:hover:bg-orange-600 transition-all duration-200 ease-out hover:scale-[1.02] active:scale-95"
                 onClick={() => onEdit?.(producto)}
+                aria-label="Editar producto"
               >
                 <Pencil className="size-3.5" />
-                Editar
+                <span className="hidden sm:inline text-xs font-semibold">Editar</span>
               </Button>
-            ) : null}
+            )}
           </div>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/15 p-4 sm:p-5">
+        {/* ── BODY ── */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4 sm:py-5">
           {isLoading ? (
             <DetailSkeleton />
           ) : isError || !producto ? (
-            <div className="flex min-h-80 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border bg-card text-center text-muted-foreground">
-              <Package className="size-10 opacity-40 text-primary" />
-              <p className="text-sm font-semibold">No se pudo cargar la información del producto.</p>
+            <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+              No se pudo cargar la información del producto.
             </div>
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs">
-              <div className="grid grid-cols-1 lg:grid-cols-12">
-                {/* Left side: Datos base, Precios, Inventario */}
-                <div className="lg:col-span-6 space-y-4 p-4 sm:p-5">
-                  <div className="flex items-center gap-2 border-b border-border/40 pb-3">
-                    <Package className="size-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Clasificación y Datos Base</h3>
+            <div className="flex flex-col gap-3 sm:gap-4">
+
+              {/* ── 1 · Clasificación ── */}
+              <section className="rounded-2xl border border-border/60 border-l-4 border-l-sky-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-sky-500 text-xs font-bold text-white shadow-sm shadow-sky-500/30">
+                    1
+                  </span>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white shadow-sm shadow-sky-500/30">
+                    <Package className="size-4" />
                   </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Field className="sm:col-span-2">
-                      <FieldLabel>{isServicio ? "Nombre del servicio" : "Nombre"}</FieldLabel>
-                      <Input value={producto.nombre} readOnly startIcon={FileText} className="bg-muted/10 cursor-default" />
-                    </Field>
-
-                    <Field>
-                      <FieldLabel>Categoría / subcategoría</FieldLabel>
-                      <Input
-                        value={
-                          producto.categoria?.padre
-                            ? `${producto.categoria.padre.nombre} / ${producto.categoria.nombre}`
-                            : producto.categoria?.nombre ?? "—"
-                        }
-                        readOnly
-                        startIcon={Folder}
-                        className="bg-muted/10 cursor-default"
-                      />
-                    </Field>
-
-                    {!isServicio && (
-                      <Field>
-                        <FieldLabel>Marca</FieldLabel>
-                        <Input value={producto.marca?.nombre ?? "Sin marca"} readOnly startIcon={Tag} className="bg-muted/10 cursor-default" />
-                      </Field>
-                    )}
-
-                    <Field>
-                      <FieldLabel>Unidad de medida</FieldLabel>
-                      <Input
-                        value={`${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`}
-                        readOnly
-                        startIcon={Boxes}
-                        className="bg-muted/10 cursor-default"
-                      />
-                    </Field>
-
-                    {!isServicio && (
-                      <Field>
-                        <FieldLabel>{producto.tipo === TipoProducto.EQUIPO ? "Modelo" : "Modelo / compatibilidad"}</FieldLabel>
-                        <Input
-                          value={producto.modeloCatalogo?.nombre ?? producto.modelo ?? "Sin modelo"}
-                          readOnly
-                          startIcon={Settings2}
-                          className="bg-muted/10 cursor-default"
-                        />
-                      </Field>
-                    )}
-
-                    {!isServicio && producto.condicion && (
-                      <Field>
-                        <FieldLabel>Condición</FieldLabel>
-                        <Input
-                          value={CONDICION_LABELS[producto.condicion] ?? "Sin condición"}
-                          readOnly
-                          startIcon={Package}
-                          className="bg-muted/10 cursor-default"
-                        />
-                      </Field>
-                    )}
-                  </div>
-
-                  {/* Precios y Finanzas */}
-                  <div className="flex items-center gap-2 border-b border-border/40 pb-3 pt-2">
-                    <DollarSign className="size-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Precios y Reglas</h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    {(!isServicio || canViewInternalCosts) && (
-                      <Field>
-                        <FieldLabel>{isServicio ? "Costo referencial" : "Precio compra"}</FieldLabel>
-                        <Input
-                          value={formatCurrency(producto.precioCompra)}
-                          readOnly
-                          startIcon={DollarSign}
-                          className="bg-muted/10 cursor-default font-mono"
-                        />
-                      </Field>
-                    )}
-
-                    <Field>
-                      <FieldLabel>{isServicio ? "Precio base" : "Precio venta"}</FieldLabel>
-                      <Input
-                        value={formatCurrency(producto.precioVenta)}
-                        readOnly
-                        startIcon={DollarSign}
-                        className="bg-muted/10 cursor-default font-mono"
-                      />
-                    </Field>
-
-                    {!isServicio && (
-                      <Field>
-                        <FieldLabel>Precio mínimo</FieldLabel>
-                        <Input
-                          value={formatCurrency(producto.precioMinimo)}
-                          readOnly
-                          startIcon={DollarSign}
-                          className="bg-muted/10 cursor-default font-mono"
-                        />
-                      </Field>
-                    )}
-
-                    <Field>
-                      <FieldLabel>{isServicio ? "Tiempo estimado" : "Stock mínimo de alerta"}</FieldLabel>
-                      <Input
-                        value={
-                          isServicio
-                            ? producto.tiempoEstimadoMin
-                              ? `${producto.tiempoEstimadoMin} min`
-                              : "—"
-                            : producto.stockMinimo ?? 0
-                        }
-                        readOnly
-                        startIcon={isServicio ? Clock : Hash}
-                        className="bg-muted/10 cursor-default"
-                      />
-                    </Field>
-                  </div>
-
-                  {/* Inventario y Códigos */}
-                  <div className="flex items-center gap-2 border-b border-border/40 pb-3 pt-2">
-                    <Boxes className="size-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Inventario y Códigos</h3>
-                  </div>
-
-                  <div className="space-y-4">
-                    {!isServicio && (
-                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Field>
-                          <FieldLabel>SKU</FieldLabel>
-                          <Input value={producto.sku} readOnly startIcon={Hash} className="bg-muted/10 cursor-default font-mono text-left" />
-                        </Field>
-                        <Field>
-                          <FieldLabel>Código de barras</FieldLabel>
-                          <Input value={producto.codigoBarras ?? "—"} readOnly startIcon={Barcode} className="bg-muted/10 cursor-default font-mono text-left" />
-                        </Field>
-                        {showQr && (
-                          <Field className="sm:col-span-2">
-                            <FieldLabel>Código QR</FieldLabel>
-                            <Input value={producto.codigoQr ?? "—"} readOnly startIcon={QrCode} className="bg-muted/10 cursor-default font-mono text-left" />
-                          </Field>
-                        )}
-                      </div>
-                    )}
-
-                    <ProductCodePreview
-                      sku={producto.sku}
-                      barcodeValue={producto.codigoBarras}
-                      qrValue={producto.codigoQr}
-                      showQr={showQr}
-                      compact
-                      className="rounded-xl border border-border bg-muted/5 p-4"
-                    />
-
-                    {!isServicio && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between items-center text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                          <span>Stock Total: {stockTotal} unidades</span>
-                          <span>Almacenes con Stock: {stockRows.filter((row) => row.cantidad > 0).length}</span>
-                        </div>
-
-                        {stockRows.length ? (
-                          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-3xs">
-                            <div className="grid grid-cols-[minmax(0,1fr)_80px_80px] gap-2 border-b border-border/50 bg-muted/20 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                              <span>Almacén</span>
-                              <span className="text-right">Stock</span>
-                              <span className="text-right">Alerta Mín.</span>
-                            </div>
-                            {stockRows.map((row) => (
-                              <div
-                                key={row.id}
-                                className="grid grid-cols-[minmax(0,1fr)_80px_80px] gap-2 border-b border-border/30 last:border-0 px-3 py-2 text-xs"
-                              >
-                                <span className="truncate font-medium text-foreground">{row.almacen.nombre}</span>
-                                <span className="font-mono font-bold text-right text-foreground">
-                                  {row.cantidad}
-                                </span>
-                                <span className="font-mono text-muted-foreground text-right">
-                                  {producto.stockMinimo}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="rounded-xl border border-dashed border-border/75 bg-muted/10 px-4 py-6 text-center text-xs text-muted-foreground">
-                            Sin stock registrado en almacenes.
-                          </div>
-                        )}
-                      </div>
-                    )}
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground font-sans">Clasificación</h3>
+                    <p className="text-[11px] text-muted-foreground">Tipo, categoría y datos de identificación</p>
                   </div>
                 </div>
-
-                {/* Right side: Imágenes, Descripción, Ficha Técnica */}
-                <div className="border-t border-border/40 lg:col-span-6 lg:border-l lg:border-t-0 space-y-4 p-4 sm:p-5">
-                  <div className="flex items-center gap-2 border-b border-border/40 pb-3">
-                    <ImageIcon className="size-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Imágenes del producto</h3>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-muted/10">
-                      {selectedImage ? (
-                        <ProductDetailImage
-                          key={selectedImage.url}
-                          src={selectedImage.url}
-                          alt={selectedImage.nombre ?? producto.nombre}
-                        />
+                <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+                  <InfoItem label="Nombre" value={producto.nombre} icon={FileText} />
+                  <InfoItem
+                    label="Categoría"
+                    value={
+                      producto.categoria?.padre
+                        ? `${producto.categoria.padre.nombre} / ${producto.categoria.nombre}`
+                        : producto.categoria?.nombre
+                    }
+                    icon={Folder}
+                  />
+                  {!isServicio && (
+                    <InfoItem
+                      label="Marca"
+                      value={producto.marca?.nombre ?? "Sin marca"}
+                      icon={Tag}
+                    />
+                  )}
+                  <InfoItem
+                    label="Unidad de medida"
+                    value={`${producto.unidadMedida.codigo} · ${producto.unidadMedida.nombre}`}
+                    icon={Boxes}
+                  />
+                  {!isServicio && (
+                    <div className="flex flex-col gap-1 min-w-0 w-full">
+                      <span className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+                        {producto.tipo === TipoProducto.EQUIPO ? "Modelo" : "Modelos compatibles"}
+                      </span>
+                      {producto.tipo === TipoProducto.EQUIPO ? (
+                        <div className="flex items-start gap-1.5">
+                          <Settings2 className="size-3.5 shrink-0 text-muted-foreground/40 mt-0.5" />
+                          <span className="text-sm font-medium text-foreground">
+                            {producto.modeloCatalogo?.nombre ?? producto.modelo ?? "Sin modelo"}
+                          </span>
+                        </div>
+                      ) : modelosCompatibles.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 mt-0.5">
+                          {modelosCompatibles.map(({ modeloCatalogo }) => (
+                            <Badge
+                              key={modeloCatalogo.id}
+                              variant="secondary"
+                              className="max-w-full truncate text-[10px]"
+                            >
+                              {modeloCatalogo.marca?.nombre
+                                ? `${modeloCatalogo.marca.nombre} · ${modeloCatalogo.nombre}`
+                                : modeloCatalogo.nombre}
+                            </Badge>
+                          ))}
+                        </div>
                       ) : (
-                        <div className="flex flex-col items-center gap-2 text-muted-foreground/60">
-                          <ImageIcon className="size-10 opacity-40 text-primary" />
-                          <span className="text-xs font-semibold">Sin imagen</span>
-                        </div>
-                      )}
-                      {selectedImage?.esPrincipal && (
-                        <Badge className="absolute left-3 top-3 bg-primary text-primary-foreground font-bold shadow-xs">
-                          Principal
-                        </Badge>
-                      )}
-                    </div>
-
-                    {images.length > 1 && (
-                      <div className="space-y-1.5">
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                          Galería ({images.length})
+                        <span className="text-muted-foreground/40 font-normal italic text-xs">
+                          Sin compatibilidades registradas
                         </span>
-                        <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
-                          {images.map((image, index) => {
-                            const isSelected = image.url === selectedImageUrl;
-                            return (
-                              <button
-                                key={`${image.url}-${index}`}
-                                type="button"
-                                className={cn(
-                                  "relative size-14 shrink-0 overflow-hidden rounded-lg border bg-card transition-all cursor-pointer",
-                                  isSelected
-                                    ? "scale-95 border-primary ring-2 ring-primary/20"
-                                    : "border-border/70 hover:border-primary/45",
-                                )}
-                                onClick={() => setManualSelectedImageUrl(image.url)}
-                              >
-                                <img
-                                  src={getApiAssetUrl(image.url)}
-                                  alt={image.nombre ?? producto.nombre}
-                                  className="size-full object-cover mix-blend-multiply"
-                                  referrerPolicy="no-referrer"
-                                />
-                                {image.esPrincipal && (
-                                  <span className="absolute right-1 top-1 size-2 rounded-full bg-primary" />
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  )}
+                  {!isServicio && producto.condicion && (
+                    <InfoItem
+                      label="Condición"
+                      value={CONDICION_LABELS[producto.condicion] ?? producto.condicion}
+                      icon={Package}
+                    />
+                  )}
+                </div>
+              </section>
 
-                    {/* Technical classifications/badges */}
-                    <div className="flex flex-wrap gap-1.5 border-t border-border/40 pt-3">
-                      {[
-                        ["Maneja inventario", producto.manejaInventario],
-                        ["Tiene N° serie", producto.tieneNumeroSerie],
-                        ["Consumible", producto.esConsumible],
-                        ["Requiere repuestos", producto.requiereRepuestos],
-                      ].map(([label, enabled]) => (
-                        <Badge
-                          key={String(label)}
-                          variant={enabled ? "secondary" : "outline"}
-                          className={cn("text-[10px] font-semibold", !enabled && "text-muted-foreground/60 border-border/50")}
-                        >
-                          {label}
-                        </Badge>
-                      ))}
+              {/* ── 2 · Precios y Reglas ── */}
+              <section className="rounded-2xl border border-border/60 border-l-4 border-l-emerald-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow-sm shadow-emerald-500/30">
+                    2
+                  </span>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+                    <DollarSign className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground font-sans">Precios y Reglas</h3>
+                    <p className="text-[11px] text-muted-foreground">Tarifas, márgenes y configuración comercial</p>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3">
+                  {(!isServicio || canViewInternalCosts) && (
+                    <InfoItem
+                      label={isServicio ? "Costo referencial" : "Precio compra"}
+                      value={formatCurrency(producto.precioCompra)}
+                      icon={DollarSign}
+                      mono
+                    />
+                  )}
+                  <InfoItem
+                    label={isServicio ? "Precio base" : "Precio venta"}
+                    value={formatCurrency(producto.precioVenta)}
+                    icon={DollarSign}
+                    mono
+                  />
+                  {!isServicio && (
+                    <InfoItem
+                      label="Precio mínimo"
+                      value={formatCurrency(producto.precioMinimo)}
+                      icon={DollarSign}
+                      mono
+                    />
+                  )}
+                  <InfoItem
+                    label={isServicio ? "Tiempo estimado" : "Stock mínimo de alerta"}
+                    value={
+                      isServicio
+                        ? producto.tiempoEstimadoMin
+                          ? `${producto.tiempoEstimadoMin} min`
+                          : null
+                        : String(producto.stockMinimo ?? 0)
+                    }
+                    icon={isServicio ? Clock : Hash}
+                  />
+                </div>
+                {/* Feature flags */}
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-border/40 pt-4">
+                  {(
+                    [
+                      ["Maneja inventario", producto.manejaInventario],
+                      ["Tiene N° serie", producto.tieneNumeroSerie],
+                      ["Consumible", producto.esConsumible],
+                      ["Requiere repuestos", producto.requiereRepuestos],
+                    ] as [string, boolean][]
+                  ).map(([label, enabled]) => (
+                    <Badge
+                      key={label}
+                      variant={enabled ? "secondary" : "outline"}
+                      className={cn(
+                        "text-[10px] font-semibold",
+                        !enabled && "text-muted-foreground/60 border-border/50",
+                      )}
+                    >
+                      {label}
+                    </Badge>
+                  ))}
+                </div>
+              </section>
+
+              {/* ── 3 · Inventario y Códigos (non-service only) ── */}
+              {!isServicio && (
+                <section className="rounded-2xl border border-border/60 border-l-4 border-l-indigo-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                  <div className="mb-5 flex items-center gap-3">
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-xs font-bold text-white shadow-sm shadow-indigo-500/30">
+                      3
+                    </span>
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500 text-white shadow-sm shadow-indigo-500/30">
+                      <Boxes className="size-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-foreground font-sans">Inventario y Códigos</h3>
+                      <p className="text-[11px] text-muted-foreground">SKU, códigos y niveles de stock por almacén</p>
                     </div>
                   </div>
 
-                  {/* Descripción comercial */}
-                  <div className="flex items-center gap-2 border-b border-border/40 pb-3 pt-2">
-                    <FileText className="size-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Descripción Comercial</h3>
-                  </div>
-
-                  <div className="rounded-xl border border-border/60 bg-muted/10 p-4 text-sm leading-relaxed text-foreground/90 animate-in fade-in duration-300">
-                    {producto.descripcion ? (
-                      renderDescription(producto.descripcion)
-                    ) : (
-                      <p className="text-xs text-muted-foreground italic">Sin descripción comercial registrada.</p>
+                  {/* Code fields */}
+                  <div className="grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3 mb-5">
+                    <InfoItem label="SKU" value={producto.sku} icon={Hash} mono copyable />
+                    <InfoItem
+                      label="Código de barras"
+                      value={producto.codigoBarras}
+                      icon={Barcode}
+                      mono
+                      copyable
+                    />
+                    {showQr && (
+                      <InfoItem
+                        label="Código QR"
+                        value={producto.codigoQr}
+                        icon={QrCode}
+                        mono
+                        copyable
+                      />
                     )}
                   </div>
 
-                  {/* Ficha técnica */}
-                  {producto.atributos && Object.keys(producto.atributos).length ? (
-                    <>
-                      <div className="flex items-center gap-2 border-b border-border/40 pb-3 pt-2">
-                        <Sparkles className="size-4 text-primary" />
-                        <h3 className="text-sm font-semibold text-foreground">Ficha Técnica</h3>
-                      </div>
+                  {/* Visual barcode / QR preview */}
+                  <ProductCodePreview
+                    sku={producto.sku}
+                    barcodeValue={producto.codigoBarras}
+                    qrValue={producto.codigoQr}
+                    showQr={showQr}
+                    compact
+                    className="rounded-xl border border-border bg-muted/5 p-4 mb-5"
+                  />
 
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        {Object.entries(producto.atributos).map(([clave, valor]) => (
-                          <Field key={clave}>
-                            <FieldLabel>{clave}</FieldLabel>
-                            <Input value={valor == null ? "" : String(valor)} readOnly className="bg-muted/10 cursor-default" />
-                          </Field>
+                  {/* Stock per warehouse */}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap justify-between items-center gap-2 rounded-xl border border-indigo-200 dark:border-indigo-800/60 border-l-4 border-l-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          Stock total:
+                        </span>
+                        <span className="text-sm font-bold text-foreground">
+                          {stockTotal} unidades
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                          Almacenes con stock:
+                        </span>
+                        <span className="text-sm font-bold text-foreground">
+                          {stockRows.filter((row) => row.cantidad > 0).length}
+                        </span>
+                      </div>
+                    </div>
+
+                    {stockRows.length ? (
+                      <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-xs">
+                        <div className="grid grid-cols-[minmax(0,1fr)_80px_80px] gap-2 border-b border-border/50 bg-muted/20 px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <span>Almacén</span>
+                          <span className="text-right">Stock</span>
+                          <span className="text-right">Alerta mín.</span>
+                        </div>
+                        {stockRows.map((row) => (
+                          <div
+                            key={row.id}
+                            className="grid grid-cols-[minmax(0,1fr)_80px_80px] gap-2 border-b border-border/30 last:border-0 px-3 py-2 text-xs"
+                          >
+                            <span className="truncate font-medium text-foreground">
+                              {row.almacen.nombre}
+                            </span>
+                            <span className="font-mono font-bold text-right text-foreground">
+                              {row.cantidad}
+                            </span>
+                            <span className="font-mono text-muted-foreground text-right">
+                              {producto.stockMinimo}
+                            </span>
+                          </div>
                         ))}
                       </div>
-                    </>
-                  ) : null}
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-border/75 bg-muted/10 px-4 py-6 text-center text-xs text-muted-foreground">
+                        Sin stock registrado en almacenes.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* ── 4 (or 3 for services) · Imágenes ── */}
+              <section className="rounded-2xl border border-border/60 border-l-4 border-l-violet-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-500 text-xs font-bold text-white shadow-sm shadow-violet-500/30">
+                    {imgSectionNum}
+                  </span>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-violet-500 text-white shadow-sm shadow-violet-500/30">
+                    <ImageIcon className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground font-sans">Imágenes</h3>
+                    <p className="text-[11px] text-muted-foreground">Galería de imágenes del producto</p>
+                  </div>
                 </div>
-              </div>
+
+                <div className="relative flex aspect-[16/9] max-h-72 items-center justify-center overflow-hidden rounded-xl border border-border/80 bg-muted/10 mb-4">
+                  {selectedImage ? (
+                    <ProductDetailImage
+                      key={selectedImage.url}
+                      src={selectedImage.url}
+                      alt={selectedImage.nombre ?? producto.nombre}
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground/60">
+                      <ImageIcon className="size-10 opacity-40 text-violet-500" />
+                      <span className="text-xs font-semibold">Sin imagen registrada</span>
+                    </div>
+                  )}
+                  {selectedImage?.esPrincipal && (
+                    <Badge className="absolute left-3 top-3 bg-violet-500 text-white font-bold shadow-xs">
+                      Principal
+                    </Badge>
+                  )}
+                </div>
+
+                {images.length > 1 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                      Galería ({images.length})
+                    </span>
+                    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+                      {images.map((image, index) => {
+                        const isSelected = image.url === selectedImageUrl;
+                        return (
+                          <button
+                            key={`${image.url}-${index}`}
+                            type="button"
+                            className={cn(
+                              "relative size-14 shrink-0 overflow-hidden rounded-lg border bg-card transition-all cursor-pointer",
+                              isSelected
+                                ? "scale-95 border-violet-500 ring-2 ring-violet-500/20"
+                                : "border-border/70 hover:border-violet-500/45",
+                            )}
+                            onClick={() => setManualSelectedImageUrl(image.url)}
+                          >
+                            <img
+                              src={getApiAssetUrl(image.url)}
+                              alt={image.nombre ?? producto.nombre}
+                              className="size-full object-cover mix-blend-multiply"
+                              referrerPolicy="no-referrer"
+                            />
+                            {image.esPrincipal && (
+                              <span className="absolute right-1 top-1 size-2 rounded-full bg-violet-500" />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              {/* ── 5 (or 4 for services) · Descripción y Ficha Técnica ── */}
+              <section className="rounded-2xl border border-border/60 border-l-4 border-l-amber-500 bg-card/85 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white shadow-sm shadow-amber-500/30">
+                    {descSectionNum}
+                  </span>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-sm shadow-amber-500/30">
+                    <FileText className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground font-sans">Descripción y Ficha Técnica</h3>
+                    <p className="text-[11px] text-muted-foreground">Descripción comercial y especificaciones técnicas</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/60 bg-muted/10 p-4 text-sm leading-relaxed text-foreground/90 animate-in fade-in duration-300">
+                  {producto.descripcion ? (
+                    renderDescription(producto.descripcion)
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">
+                      Sin descripción comercial registrada.
+                    </p>
+                  )}
+                </div>
+
+                {producto.atributos && Object.keys(producto.atributos).length > 0 && (
+                  <div className="mt-4 grid gap-4 sm:gap-5 md:grid-cols-2 lg:grid-cols-3 border-t border-border/40 pt-4">
+                    {Object.entries(producto.atributos).map(([clave, valor]) => (
+                      <InfoItem
+                        key={clave}
+                        label={clave}
+                        value={valor == null ? "—" : String(valor)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {/* ── 6 (or 5 for services) · Auditoría ── */}
+              <section className="rounded-2xl border border-border/60 border-l-4 border-l-slate-500 bg-slate-100/60 dark:bg-slate-900/40 backdrop-blur-sm p-4 sm:p-5 shadow-sm">
+                <div className="mb-5 flex items-center gap-3">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-slate-600 text-xs font-bold text-white shadow-sm shadow-slate-600/30 dark:bg-slate-500 dark:shadow-slate-500/30">
+                    {auditSectionNum}
+                  </span>
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-slate-600 text-white shadow-sm shadow-slate-600/30 dark:bg-slate-500 dark:shadow-slate-500/30">
+                    <Clock className="size-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-muted-foreground font-sans">Auditoría</h3>
+                    <p className="text-[11px] text-muted-foreground">Registro de creación y modificación</p>
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <AuditItem
+                    label="Registrado el"
+                    value={producto.createdAt}
+                    icon={Calendar}
+                  />
+                  <AuditItem
+                    label="Última actualización"
+                    value={producto.updatedAt}
+                    icon={Clock}
+                  />
+                </div>
+              </section>
+
             </div>
           )}
         </div>
