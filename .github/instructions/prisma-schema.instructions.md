@@ -5,7 +5,7 @@ applyTo: "apps/api/prisma/**"
 
 # Prisma Schema Conventions
 
-Ver mapa completo de tablas en [`otros no uties/00-MAPA-TABLAS.md`](../../otros%20no%20uties/00-MAPA-TABLAS.md).
+La fuente de verdad de las tablas es `apps/api/prisma/schema.prisma`. No hay un mapa prosaico paralelo: si necesitas la lista completa, consultá el schema.
 
 ## Campos obligatorios en todo modelo
 

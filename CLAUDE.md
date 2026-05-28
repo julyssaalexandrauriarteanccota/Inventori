@@ -69,7 +69,7 @@ pnpm --filter @erp/api exec prisma db seed
 
 Swagger docs: `http://localhost:4000/api/docs` (API must be running).
 
-Sprint 01 OpenAPI export: `pnpm --filter @erp/api swagger:export:sprint-01` → writes `docs/contracts/sprint-01-openapi.json`.
+Sprint 01 OpenAPI export: `pnpm --filter @erp/api swagger:export:sprint-01` → writes `docs/contracts/sprint-01-openapi.json` (generado en runtime; el directorio no está commiteado).
 
 ---
 
@@ -167,8 +167,6 @@ Global guards (`AppModule`): `ThrottlerGuard` (100 req / 60s) → `JwtAuthGuard`
 | `apps/web/src/proxy.ts` | Next middleware — cookie-based gate for protected routes |
 | `.env` (root) | Shared by both services. NestJS loads via `ConfigModule.forRoot({ envFilePath: '../../.env' })` |
 | `docker-compose.yml` | Local infra: postgres `:5432`, redis `:6379`, minio `:9000/:9001`, backup cron |
-| `docs/contracts/` | Per-sprint frozen API contracts (sprint-01 OpenAPI + sprint-02..09 markdown) |
-| `comprobantes sunat/` | 11-doc folder on SUNAT architecture, flows, MinIO storage, configuration |
 | `.github/instructions/` | Auto-applied scoped rules (NestJS, Prisma, Next.js) |
 
 ---
@@ -181,8 +179,3 @@ Each main folder has a verified, detailed README — prefer these over inferring
 - [`apps/api/README.md`](apps/api/README.md) — full module/endpoint/Prisma walkthrough
 - [`apps/web/README.md`](apps/web/README.md) — App Router, providers, hooks, PWA, branding
 - [`packages/shared/README.md`](packages/shared/README.md) — enums, Zod schemas, exported types
-- [`docs/README.md`](docs/README.md) — auxiliary docs index
-- [`comprobantes sunat/README.md`](comprobantes%20sunat/README.md) — SUNAT documentation index
-- [`otros no uties/README.md`](otros%20no%20uties/README.md) — historical sprint archive; use as planning context only
-
-Authoritative specs live in `docs/contracts/` and `comprobantes sunat/`. Treat anything under `otros no uties/` as historical planning context, not authoritative truth.

@@ -36,7 +36,7 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 
 - Prisma client is generated to `apps/api/generated/prisma` and `PrismaService` imports from that generated path (not `@prisma/client` directly).
 - **Prisma v7 adapter**: uses `@prisma/adapter-pg` with `PrismaPg(connectionString)` — datasource has NO `url`; config lives in `prisma.config.ts`. Never call `new PrismaClient()` without the adapter.
-- `apps/api/prisma/schema.prisma` currently has 61 `model` blocks. Historical table ownership notes live in [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md); verify against Prisma before relying on them.
+- `apps/api/prisma/schema.prisma` is the source of truth for table ownership; verify against it before relying on prose docs.
 - Migration workflow: `pnpm --filter @erp/api exec prisma migrate dev --name <description>`, then `pnpm --filter @erp/api exec prisma generate`.
 - CI API tests require PostgreSQL + Redis service containers and run `npx prisma migrate deploy` before tests.
 - `docker-compose.yml` provisions local `postgres` (pgvector/pgvector:pg16, host port `5433` mapped to container `5432`), `redis` (7-alpine, `6379`), `minio` (`9000/9001`), and cron-based `backup`/`minio-backup` services.
@@ -64,11 +64,8 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
   - API service: [`apps/api/README.md`](apps/api/README.md)
   - Web service: [`apps/web/README.md`](apps/web/README.md)
   - Shared package: [`packages/shared/README.md`](packages/shared/README.md)
-  - Supporting docs index: [`docs/README.md`](docs/README.md)
-  - SUNAT docs index: [`comprobantes sunat/README.md`](comprobantes%20sunat/README.md)
-- Historical sprint/archive index: [`otros no uties/README.md`](otros%20no%20uties/README.md) — planning context only.
-- Per-sprint API contracts: [`docs/contracts/`](docs/contracts/) — freeze payloads, filters, and frontend fields.
-- Historical table ownership map: [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md) — verify against `schema.prisma` before editing data models.
+  - Design specs: [`docs/superpowers/specs/`](docs/superpowers/specs/) — dated UX/feature design notes generadas con el skill `brainstorming`.
+- Per-sprint API contracts: el script `pnpm --filter @erp/api swagger:export:sprint-01` genera `docs/contracts/sprint-01-openapi.json` bajo demanda (no se commitea).
 - Scoped instructions (auto-applied): [`.github/instructions/`](.github/instructions/) — NestJS (`apps/api/src/**`), Prisma (`apps/api/prisma/**`), and Next.js (`apps/web/**`).
 - Frontend conventions: [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 - CI pipeline (lint -> type-check -> tests -> build, with Postgres + Redis services): [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
@@ -87,6 +84,6 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 
 ## Instruction Hygiene
 
-- Treat files in `otros no uties/` as historical planning artifacts; executable truth is in code/config/scripts.
+- Executable truth lives in code/config/scripts; READMEs y docs son resumen, no fuente de verdad.
 - If prose docs conflict with scripts/config, follow scripts/config.
 - Link to existing docs/READMEs instead of duplicating long explanations in customization files.

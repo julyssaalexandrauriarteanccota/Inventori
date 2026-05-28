@@ -2,28 +2,35 @@ node_modules/
 .env
 .env.*
 !.env.example
-.webui_secret_key
 .next/
 dist/
 build/
 coverage/
 .turbo/
 *.log
-__pycache__/
-.venv/
-.pytest_cache/
-*.pyc
 .DS_Store
+Thumbs.db
+
+# Stores generados por uploads (Multer) y la integración SUNAT/MinIO local
 uploads/
 private-fiscal-storage/
 apps/**/uploads/
 apps/**/private-fiscal-storage/
+
+# Build outputs por paquete
 apps/**/dist/
 apps/**/.next/
 apps/**/.turbo/
 packages/**/dist/
+
+# OpenAPI exportado bajo demanda (`pnpm --filter @erp/api swagger:export:sprint-01`)
+docs/contracts/
+
+# Prisma client generado
 apps/api/generated/prisma/
-design-claude/
+
+# Local state del skill brainstorming
 .superpowers/
+
+# Local-only de Claude
 .claude/settings.local.json
-Usersedard.claudeimage-cache*

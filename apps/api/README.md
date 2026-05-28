@@ -340,21 +340,28 @@ En el estado actual, la suite e2e corre sobre una app controlada por mocks, no c
 
 ## Scripts internos
 
+Los scripts vivos del API están en `src/scripts/`. Sólo se mantienen los que
+están enganchados a `package.json`; los diagnósticos one-off de SUNAT fueron
+removidos en una limpieza posterior y siempre se pueden recuperar del git
+history si hace falta reproducir un caso puntual.
+
 ### `src/scripts/export-sprint-01-openapi.ts`
 
+- expuesto como `pnpm --filter @erp/api swagger:export:sprint-01`
 - genera un documento OpenAPI filtrado para Sprint 01
 - conserva rutas de:
   - `auth`
   - `usuarios`
   - `uploads`
   - `health`
-- escribe salida en `../../docs/contracts/sprint-01-openapi.json`
+- escribe salida en `../../docs/contracts/sprint-01-openapi.json` (carpeta
+  generada en runtime; no está commiteada)
 
-### `scripts/reconcile-equipos-stock.ts`
+### `src/scripts/backfill-storage.ts`
 
-- recorre productos serializados o con número de serie
-- cuenta equipos por `productoId + almacenId`
-- sincroniza `almacenStock` con el estado real de equipos
+- expuesto como `pnpm --filter @erp/api storage:backfill`
+- recorre comprobantes con XML/CDR persistidos y los rehidrata al storage
+  configurado (MinIO o filesystem local) cuando falta el binario
 
 ## Tooling
 

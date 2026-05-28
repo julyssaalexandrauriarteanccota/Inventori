@@ -5,7 +5,7 @@ applyTo: "apps/api/src/**"
 
 # NestJS API Conventions
 
-Ver estructura de módulos y arquitectura general en [`AGENTS.md`](../../AGENTS.md) y reglas completas en [`otros no uties/00-REGLAS-AGENTS.md`](../../otros%20no%20uties/00-REGLAS-AGENTS.md).
+Ver estructura de módulos y arquitectura general en [`AGENTS.md`](../../AGENTS.md).
 
 ## Estructura de módulos
 

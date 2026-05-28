@@ -85,11 +85,9 @@ Servicios locales:
 | `.claude/` | Carpeta | Configuración compartida de Claude | La configuración local queda excluida por `.gitignore` |
 | `.github/` | Carpeta | Workflows e instrucciones de trabajo por stack | Incluye `instructions/`, `skills/` y `workflows/` |
 | `.vscode/` | Carpeta | Configuración del workspace para VS Code | Incluye `extensions.json` y `mcp.json` |
-| `.windsurf/` | Carpeta | Habilidades para Windsurf | Estructura similar a `.agents/` |
-| `SPRINTS/` | Carpeta | Planificación y secuencia de trabajo por sprint | Tiene README propio y archivos `00-19` |
-| `apps/` | Carpeta | Aplicaciones principales del sistema | Contiene `api` y `web` |
+| `apps/` | Carpeta | Aplicaciones principales del sistema | Contiene `api`, `web` y el sidecar PHP `greenter/` |
 | `docker/` | Carpeta | Dockerfiles por servicio | Tiene `Dockerfile.api` y `Dockerfile.web` |
-| `docs/` | Carpeta | Documentación auxiliar y contratos | Contiene `contracts/` y `superpowers/` |
+| `docs/` | Carpeta | Documentación auxiliar | Contiene `superpowers/` (design specs); `contracts/` se genera bajo demanda con `pnpm --filter @erp/api swagger:export:sprint-01` |
 | `packages/` | Carpeta | Paquetes compartidos del monorepo | Actualmente contiene `shared/` |
 
 ## Contenido inicial de carpetas clave
@@ -111,20 +109,7 @@ Primer nivel verificado:
 
 Primer nivel verificado:
 
-- `docs/contracts`
-- `docs/superpowers`
-
-Archivos detectados en `docs/contracts/`:
-
-- `sprint-01-openapi.json`
-- `sprint-02-master-data.md`
-- `sprint-03-inventario.md`
-- `sprint-04-equipos-garantias.md`
-- `sprint-05-compras.md`
-- `sprint-06-ventas.md`
-- `sprint-07-facturacion.md`
-- `sprint-08-soporte.md`
-- `sprint-09-config-reportes.md`
+- `docs/superpowers` — design specs (skill `brainstorming`)
 
 ### `docker/`
 
@@ -133,25 +118,11 @@ Primer nivel verificado:
 - `docker/Dockerfile.api`
 - `docker/Dockerfile.web`
 
-### `SPRINTS/`
-
-Esta carpeta ya tiene una documentación útil en `SPRINTS/README.md`.
-
-Primer nivel verificado:
-
-- `00-CHECKLIST-GLOBAL.md`
-- `00-MAPA-TABLAS.md`
-- `00-REGLAS-AGENTS.md`
-- `01-backend-auth-usuarios.md` a `19-deploy-produccion.md`
-- `_handoff-template.md`
-- `archive/`
-
 ### Carpetas de tooling y asistentes
 
 Estas carpetas no representan módulos funcionales del ERP, sino configuración y soporte del entorno:
 
 - `.agents/skills/`
-- `.windsurf/skills/`
 - `.github/instructions/`
 - `.github/skills/`
 - `.vscode/`
@@ -226,15 +197,6 @@ Toolchain verificado en CI:
 
 ## Estado de los README
 
-- `SPRINTS/README.md`: documentado
 - `apps/api/README.md`: documentado
 - `apps/web/README.md`: documentado
 - `packages/shared/README.md`: documentado
-- `docs/README.md`: documentado
-- `docs/arquitectura-escalable-erp.md`: plan de arquitectura escalable
-- `docs/handoff-arquitectura-escalable.md`: resumen actualizado para retomar el trabajo en otro chat/agente
-- `docs/configuracion-empresa-branding.md`: guía para usar `ConfigEmpresa` como branding/datos públicos
-- `docs/seguimiento-arquitectura-escalable.md`: checklist de implementación por bloques
-- `docs/auditoria-reventa-hardcoded.md`: auditoría de textos hardcodeados por rubro
-- `docs/facturacion-sunat-roadmap.md`: roadmap futuro SUNAT
-- `docs/multisede-futuro.md`: decisión actual de sede única y diseño futuro para multi-sede operativo

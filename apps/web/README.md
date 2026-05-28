@@ -94,7 +94,6 @@ Desde la raíz del repo:
 | `src/hooks/` | Hooks de dominio, auth, sockets, offline y público |
 | `src/lib/` | API client, auth storage, navegación, uploads y utilidades |
 | `src/test/` | Setup de Vitest |
-| `src/_legacy/` | Remanentes legacy |
 | `src/proxy.ts` | Guard de navegación del lado Next |
 
 ## App Router
@@ -658,8 +657,6 @@ Se detectaron 24 archivos `test/spec` dentro de `src/`.
 ## Estado actual del árbol
 
 - el branding público editable desde configuración ya está aplicado en metadata, manifest y pantallas públicas principales
-- `src/_legacy/ventas-page-legacy.tsx.bak` sigue presente
 - la ruta `/dashboard` activa proviene de `src/app/(erp)/dashboard/page.tsx`
-- `src/app/page.module.css` sigue presente y no se detectaron referencias a este archivo en `src/`
-- `src/app/page.tsx` y `src/app/(public)/page.tsx` coexisten en el árbol; la build actual expone una sola ruta `/`
+- la ruta `/` la sirve `src/app/(public)/page.tsx`
 - `src/proxy.ts` está activo y la build lo reporta como `Proxy (Middleware)`
