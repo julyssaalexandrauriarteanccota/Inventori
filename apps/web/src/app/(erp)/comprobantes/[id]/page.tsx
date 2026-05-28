@@ -441,10 +441,7 @@ export default function ComprobanteDetallePage({
   const tipoLabel = TIPO_LABEL_DETAIL[data.tipo] ?? data.tipo;
   const estadoTheme: StatCardTheme = ESTADO_THEME[data.estado] ?? "slate";
   const puedeGenerarNcNd =
-    data.tipo === TipoDocumento.FACTURA ||
-    data.tipo === TipoDocumento.BOLETA ||
-    data.tipo === TipoDocumento.NOTA_CREDITO ||
-    data.tipo === TipoDocumento.NOTA_DEBITO;
+    data.tipo === TipoDocumento.FACTURA || data.tipo === TipoDocumento.BOLETA;
 
   return (
     <div className="relative flex flex-col gap-5 w-full min-w-0 sm:flex-1 sm:min-h-0">

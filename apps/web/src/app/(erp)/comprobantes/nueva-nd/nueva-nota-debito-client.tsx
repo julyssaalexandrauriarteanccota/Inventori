@@ -125,13 +125,10 @@ export function NuevaNotaDebitoClient({
   const monto = lineas.length > 0 ? totalLineas : Number(montoStr || 0);
   const descripcionValida = motivoDescripcion.trim().length >= 10;
 
-  // §7.1 — soportar documentos relacionados 01/03/07/08 como origen.
   const origenValido =
     !!data &&
     (data.tipo === TipoDocumento.FACTURA ||
-      data.tipo === TipoDocumento.BOLETA ||
-      data.tipo === TipoDocumento.NOTA_CREDITO ||
-      data.tipo === TipoDocumento.NOTA_DEBITO);
+      data.tipo === TipoDocumento.BOLETA);
   const estadoValido =
     !!data &&
     (data.estado === EstadoComprobante.ACEPTADO ||
@@ -249,7 +246,7 @@ export function NuevaNotaDebitoClient({
               {!origenValido ? (
                 <div className="flex items-start gap-2 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200">
                   <AlertTriangle className="mt-0.5 size-4" />
-                  Sólo FACTURA, BOLETA, NC o ND admiten ND. Origen es{" "}
+                  Sólo FACTURA o BOLETA admiten ND. Origen es{" "}
                   {data.tipo}.
                 </div>
               ) : null}

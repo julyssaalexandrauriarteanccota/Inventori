@@ -1574,7 +1574,7 @@ export class FacturacionService {
    *   5. No puede haber otra NC en estado no terminal sobre el mismo origen.
    *   6. Motivo 04 (descuento global) sólo válido sobre factura.
    *   7. Plazo: regular = igual al del origen; excepcional = 10 días hábiles.
-   *   8. Origen puede ser tipo 01/03 (factura/boleta), 07 (NC) o 08 (ND) — §7.1.
+   *   8. Origen de negocio: FACTURA o BOLETA.
    */
   async crearNotaCredito(dto: CreateNotaCreditoDto) {
     const motivoCodigo = this.resolverMotivoNcCodigo(dto);
@@ -1620,6 +1620,14 @@ export class FacturacionService {
     ) {
       throw new BadRequestException(
         `Sólo se pueden emitir NCs sobre comprobantes ACEPTADOS por SUNAT (estado actual: ${estadoOrigen}).`,
+      );
+    }
+    if (
+      comprobante.tipo !== TipoDocumento.FACTURA &&
+      comprobante.tipo !== TipoDocumento.BOLETA
+    ) {
+      throw new BadRequestException(
+        `No se puede emitir NC sobre un comprobante tipo ${comprobante.tipo}. Sólo FACTURA o BOLETA.`,
       );
     }
 
@@ -1791,7 +1799,7 @@ export class FacturacionService {
   /**
    * Doc 08 §6 — Emisión de ND con todas las validaciones SUNAT:
    *   1. Origen ACEPTADO o ACEPTADO_CON_OBSERVACIONES (no RECHAZADO/ANULADO).
-   *   2. Origen puede ser FACTURA, BOLETA, NC o ND (Doc 08 §7.1).
+   *   2. Origen de negocio: FACTURA o BOLETA.
    *   3. Motivo Cat 10 válido (01, 02, 03, 10, 11). Default: 03 (penalidades).
    *   4. motivoDescripcion obligatorio (≥10 chars).
    *   5. Sin tope respecto al origen — la ND agrega cargos, no descuenta.
@@ -1817,15 +1825,12 @@ export class FacturacionService {
       );
     }
 
-    // §7.1 — SUNAT permite notas sobre documentos relacionados 01/03/07/08.
     if (
       comprobante.tipo !== TipoDocumento.FACTURA &&
-      comprobante.tipo !== TipoDocumento.BOLETA &&
-      comprobante.tipo !== TipoDocumento.NOTA_CREDITO &&
-      comprobante.tipo !== TipoDocumento.NOTA_DEBITO
+      comprobante.tipo !== TipoDocumento.BOLETA
     ) {
       throw new BadRequestException(
-        `No se puede emitir ND sobre un comprobante tipo ${comprobante.tipo}. Sólo FACTURA, BOLETA, NC o ND.`,
+        `No se puede emitir ND sobre un comprobante tipo ${comprobante.tipo}. Sólo FACTURA o BOLETA.`,
       );
     }
 
@@ -2792,9 +2797,7 @@ export class FacturacionService {
 
       const tipoSoportadoParaNc =
         tipoOrigen === TipoDocumento.FACTURA ||
-        tipoOrigen === TipoDocumento.BOLETA ||
-        tipoOrigen === TipoDocumento.NOTA_CREDITO ||
-        tipoOrigen === TipoDocumento.NOTA_DEBITO;
+        tipoOrigen === TipoDocumento.BOLETA;
       if (!tipoSoportadoParaNc) {
         bloqueos.push({
           codigo: 'TIPO_NO_PERMITIDO',
@@ -2874,12 +2877,9 @@ export class FacturacionService {
           mensaje: `Solo se pueden emitir ND sobre comprobantes ACEPTADOS por SUNAT. Estado actual: ${estadoOrigen}.`,
         });
       }
-      // Doc 08 §7.1 — origen permitido para ND: 01/03/07/08.
       const tipoSoportado =
         tipoOrigen === TipoDocumento.FACTURA ||
-        tipoOrigen === TipoDocumento.BOLETA ||
-        tipoOrigen === TipoDocumento.NOTA_CREDITO ||
-        tipoOrigen === TipoDocumento.NOTA_DEBITO;
+        tipoOrigen === TipoDocumento.BOLETA;
       if (!tipoSoportado) {
         bloqueos.push({
           codigo: 'TIPO_NO_PERMITIDO',
