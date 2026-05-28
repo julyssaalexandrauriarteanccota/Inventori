@@ -12,7 +12,12 @@ import {
   FileText,
   Hourglass,
   Plus,
+  Receipt,
+  ScrollText,
 } from "lucide-react";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import {
   EstadoComprobante,
   TipoDocumento,
@@ -20,7 +25,7 @@ import {
 } from "@erp/shared";
 
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,8 +43,8 @@ import { ComunicacionesBajaTable } from "./_components/comunicaciones-baja-table
 import { PorEmitirTable } from "./_components/por-emitir-table";
 
 type ComprobantesTab =
-  | "por-emitir"
   | "todos"
+  | "por-emitir"
   | "facturas"
   | "boletas"
   | "notas-credito"
@@ -47,8 +52,8 @@ type ComprobantesTab =
   | "bajas";
 
 const TAB_VALUES: readonly ComprobantesTab[] = [
-  "por-emitir",
   "todos",
+  "por-emitir",
   "facturas",
   "boletas",
   "notas-credito",
@@ -56,7 +61,7 @@ const TAB_VALUES: readonly ComprobantesTab[] = [
   "bajas",
 ] as const;
 
-const DEFAULT_TAB: ComprobantesTab = "por-emitir";
+const DEFAULT_TAB: ComprobantesTab = "todos";
 
 function isComprobantesTab(value: string | null): value is ComprobantesTab {
   return !!value && (TAB_VALUES as readonly string[]).includes(value);
@@ -65,11 +70,14 @@ function isComprobantesTab(value: string | null): value is ComprobantesTab {
 export default function ComprobantesHubPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isMobile = useIsMobile();
 
   // Modal de búsqueda de comprobante origen para NC/ND/Baja
   const [buscarOpen, setBuscarOpen] = useState(false);
   const [buscarProposito, setBuscarProposito] =
     useState<PropositoElegibilidadComprobante>("nc");
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 300);
 
   const activeTab = useMemo<ComprobantesTab>(() => {
     const raw = searchParams.get("tab");
@@ -78,6 +86,7 @@ export default function ComprobantesHubPage() {
 
   const handleTabChange = useCallback(
     (value: string) => {
+      setSearch("");
       const next = new URLSearchParams(searchParams.toString());
       if (value === DEFAULT_TAB) {
         next.delete("tab");
@@ -150,7 +159,7 @@ export default function ComprobantesHubPage() {
       <h1 className="sr-only">Comprobantes</h1>
 
       {/* Stats row (4 cards) */}
-      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4 shrink-0">
         <StatCard
           label="Total emitidos"
           value={statsTotal.data?.meta?.total}
@@ -185,80 +194,105 @@ export default function ComprobantesHubPage() {
         />
       </div>
 
-      {/* Tabs + tabla */}
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="gap-4">
-        <TabsList className="grid w-full grid-cols-2 min-[500px]:grid-cols-4 lg:grid-cols-7 h-auto gap-0.5 rounded-xl border border-border/70 bg-muted/70 p-0.5">
-          <TabsTrigger
-            value="por-emitir"
-            className="h-9 rounded-lg gap-1.5 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
+      {/* Toolbar — search inline-left of scrollable tabs */}
+      <div className="flex flex-col gap-2.5 w-full min-w-0 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <ToolbarSearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder={
+              activeTab === "por-emitir"
+                ? "Buscar por venta o cliente…"
+                : activeTab === "bajas"
+                  ? "Buscar por identificador o número…"
+                  : "Buscar por número, serie o cliente…"
+            }
+            className="w-full sm:w-72 lg:w-80 shrink-0"
+          />
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            className="flex-1 min-w-0"
           >
-            <Hourglass className="size-3.5" />
-            <span className="hidden min-[500px]:inline">Por emitir</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="todos"
-            className="h-9 rounded-lg gap-1.5 text-xs text-muted-foreground data-[state=active]:bg-violet-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-violet-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            <FileText className="size-3.5" />
-            <span className="hidden min-[500px]:inline">Todos</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="facturas"
-            className="h-9 rounded-lg text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            Facturas
-          </TabsTrigger>
-          <TabsTrigger
-            value="boletas"
-            className="h-9 rounded-lg text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            Boletas
-          </TabsTrigger>
-          <TabsTrigger
-            value="notas-credito"
-            className="h-9 rounded-lg text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            <span className="hidden sm:inline">Notas crédito</span>
-            <span className="sm:hidden">NC</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="notas-debito"
-            className="h-9 rounded-lg text-xs text-muted-foreground data-[state=active]:bg-rose-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-rose-500/30 data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            <span className="hidden sm:inline">Notas débito</span>
-            <span className="sm:hidden">ND</span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="bajas"
-            className="h-9 rounded-lg text-xs text-muted-foreground data-[state=active]:bg-slate-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95"
-          >
-            <span className="hidden sm:inline">Com. baja</span>
-            <span className="sm:hidden">Bajas</span>
-          </TabsTrigger>
-        </TabsList>
+            <TabsList className="scrollbar-none h-9 gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/70 p-0.5 w-full justify-start">
+              <TabsTrigger
+                value="todos"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <FileText className="size-3.5" />
+                <span>Todos</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="por-emitir"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-amber-500/30 dark:data-[state=active]:bg-amber-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Hourglass className="size-3.5" />
+                <span>Por emitir</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="facturas"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-indigo-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-indigo-500/30 dark:data-[state=active]:bg-indigo-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Receipt className="size-3.5" />
+                <span>Facturas</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="boletas"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-sky-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-sky-500/30 dark:data-[state=active]:bg-sky-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <ScrollText className="size-3.5" />
+                <span>Boletas</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="notas-credito"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-500/30 dark:data-[state=active]:bg-emerald-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <FilePlus className="size-3.5" />
+                <span>Notas crédito</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="notas-debito"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-rose-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-rose-500/30 dark:data-[state=active]:bg-rose-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <FileMinus className="size-3.5" />
+                <span>Notas débito</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="bajas"
+                className="flex-none shrink-0 h-8 gap-1.5 rounded-md px-3 text-xs text-muted-foreground data-[state=active]:bg-slate-500 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:shadow-slate-500/30 dark:data-[state=active]:bg-slate-500 dark:data-[state=active]:text-white data-[state=active]:font-semibold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:text-foreground hover:scale-[1.02] active:scale-95 active:duration-150"
+              >
+                <Ban className="size-3.5" />
+                <span>Com. baja</span>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
 
-        <TabsContent value="por-emitir" className="mt-2">
-          <PorEmitirTable />
-        </TabsContent>
-        <TabsContent value="todos" className="mt-2">
-          <ComprobantesTable storageKey="erp:comprobantes:todos" />
-        </TabsContent>
-        <TabsContent value="facturas" className="mt-2">
-          <ComprobantesTable tipo={TipoDocumento.FACTURA} />
-        </TabsContent>
-        <TabsContent value="boletas" className="mt-2">
-          <ComprobantesTable tipo={TipoDocumento.BOLETA} />
-        </TabsContent>
-        <TabsContent value="notas-credito" className="mt-2">
-          <ComprobantesTable tipo={TipoDocumento.NOTA_CREDITO} />
-        </TabsContent>
-        <TabsContent value="notas-debito" className="mt-2">
-          <ComprobantesTable tipo={TipoDocumento.NOTA_DEBITO} />
-        </TabsContent>
-        <TabsContent value="bajas" className="mt-2">
-          <ComunicacionesBajaTable />
-        </TabsContent>
-      </Tabs>
+      {/* Table content — direct render, no TabsContent → no layout shifts */}
+      <div className="w-full min-w-0 sm:flex-1 sm:min-h-0 sm:flex sm:flex-col">
+        {activeTab === "todos" && (
+          <ComprobantesTable search={debouncedSearch} storageKey="erp:comprobantes:todos" fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "por-emitir" && (
+          <PorEmitirTable search={debouncedSearch} fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "facturas" && (
+          <ComprobantesTable search={debouncedSearch} tipo={TipoDocumento.FACTURA} fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "boletas" && (
+          <ComprobantesTable search={debouncedSearch} tipo={TipoDocumento.BOLETA} fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "notas-credito" && (
+          <ComprobantesTable search={debouncedSearch} tipo={TipoDocumento.NOTA_CREDITO} fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "notas-debito" && (
+          <ComprobantesTable search={debouncedSearch} tipo={TipoDocumento.NOTA_DEBITO} fillAvailableHeight={!isMobile} />
+        )}
+        {activeTab === "bajas" && (
+          <ComunicacionesBajaTable search={debouncedSearch} fillAvailableHeight={!isMobile} />
+        )}
+      </div>
 
       <BuscarComprobanteOrigenModal
         open={buscarOpen}

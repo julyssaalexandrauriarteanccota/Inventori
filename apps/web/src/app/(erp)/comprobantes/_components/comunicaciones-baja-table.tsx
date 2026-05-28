@@ -1,45 +1,47 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { type ColumnDef } from "@tanstack/react-table";
 import { EstadoComunicacionBaja } from "@erp/shared";
 import { Download, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ErpBadge, type ErpBadgeTone } from "@/components/erp-badges";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import {
   useComunicacionesBaja,
   useConsultarEstadoBaja,
   type ComunicacionBajaListItem,
 } from "@/hooks/use-facturacion";
-import { useDebounce } from "@/hooks/use-debounce";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-const ESTADO_TONE: Record<string, string> = {
-  [EstadoComunicacionBaja.PENDIENTE]:
-    "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  [EstadoComunicacionBaja.EN_PROCESO]: "bg-primary/10 text-primary",
-  [EstadoComunicacionBaja.ACEPTADA]:
-    "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-  [EstadoComunicacionBaja.RECHAZADA]:
-    "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
+const ESTADO_TONE: Record<EstadoComunicacionBaja, ErpBadgeTone> = {
+  [EstadoComunicacionBaja.PENDIENTE]: "neutral",
+  [EstadoComunicacionBaja.EN_PROCESO]: "info",
+  [EstadoComunicacionBaja.ACEPTADA]: "success",
+  [EstadoComunicacionBaja.RECHAZADA]: "danger",
 };
 
-export function ComunicacionesBajaTable() {
-  const [search, setSearch] = useState("");
+const ESTADO_LABEL: Record<EstadoComunicacionBaja, string> = {
+  [EstadoComunicacionBaja.PENDIENTE]: "Pendiente",
+  [EstadoComunicacionBaja.EN_PROCESO]: "En proceso",
+  [EstadoComunicacionBaja.ACEPTADA]: "Aceptada",
+  [EstadoComunicacionBaja.RECHAZADA]: "Rechazada",
+};
+
+export function ComunicacionesBajaTable({ search = "", fillAvailableHeight = true }: { search?: string; fillAvailableHeight?: boolean }) {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
-  const debounced = useDebounce(search, 300);
+
+  useEffect(() => { setPage(1); }, [search]);
 
   const query = useComunicacionesBaja({
     page,
     limit,
-    search: debounced || undefined,
+    search: search || undefined,
   });
 
   const consultar = useConsultarEstadoBaja();
@@ -96,14 +98,14 @@ export function ComunicacionesBajaTable() {
       {
         accessorKey: "estado",
         header: "Estado",
-        cell: ({ row }) => (
-          <Badge
-            variant="outline"
-            className={`border-0 ${ESTADO_TONE[row.original.estado] ?? ""}`}
-          >
-            {row.original.estado}
-          </Badge>
-        ),
+        cell: ({ row }) => {
+          const estado = row.original.estado as EstadoComunicacionBaja;
+          return (
+            <ErpBadge tone={ESTADO_TONE[estado] ?? "neutral"}>
+              {ESTADO_LABEL[estado] ?? row.original.estado}
+            </ErpBadge>
+          );
+        },
       },
       {
         accessorKey: "deadline",
@@ -197,39 +199,27 @@ export function ComunicacionesBajaTable() {
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Input
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Buscar por identificador, número o cliente…"
-          className="max-w-sm rounded-lg"
-        />
-      </div>
-      <ServerDataTable
-        columns={columns}
-        data={query.data?.data ?? []}
-        total={query.data?.meta?.total ?? 0}
-        page={page}
-        limit={limit}
-        isLoading={query.isLoading}
-        isError={query.isError}
-        errorMessage="No se pudieron cargar las comunicaciones de baja."
-        onRetry={() => void query.refetch()}
-        onPageChange={setPage}
-        onLimitChange={(l) => {
-          setLimit(l);
-          setPage(1);
-        }}
-        pageSizeOptions={PAGE_SIZE_OPTIONS}
-        emptyMessage="Sin comunicaciones de baja"
-        emptyDescription="Aún no se han generado comunicaciones RA."
-        enableColumnVisibility
-        columnVisibilityStorageKey="erp:comprobantes:bajas"
-      />
-    </div>
+    <ServerDataTable
+      columns={columns}
+      data={query.data?.data ?? []}
+      total={query.data?.meta?.total ?? 0}
+      page={page}
+      limit={limit}
+      isLoading={query.isLoading}
+      isError={query.isError}
+      errorMessage="No se pudieron cargar las comunicaciones de baja."
+      onRetry={() => void query.refetch()}
+      onPageChange={setPage}
+      onLimitChange={(l) => {
+        setLimit(l);
+        setPage(1);
+      }}
+      pageSizeOptions={PAGE_SIZE_OPTIONS}
+      emptyMessage="Sin comunicaciones de baja"
+      emptyDescription="Aún no se han generado comunicaciones RA."
+      enableColumnVisibility
+      columnVisibilityStorageKey="erp:comprobantes:bajas"
+      fillAvailableHeight={fillAvailableHeight}
+    />
   );
 }

@@ -1,35 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { ArrowUpDown, FilterX, Search, Send } from "lucide-react";
+import { ArrowUpDown, Send } from "lucide-react";
 import {
   EstadoFacturacionVenta,
   EstadoVenta,
   type VentaPendienteFacturacionItem,
 } from "@erp/shared";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/ui/date-picker";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { ErpBadge } from "@/components/erp-badges";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import { useVentasPendientesFacturacion } from "@/hooks/use-facturacion";
-import { useDebounce } from "@/hooks/use-debounce";
 
 import { EmitirComprobanteModal } from "./emitir-comprobante-modal";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
-const ALL_VALUE = "__all__";
 
 const ESTADO_LABELS: Partial<Record<EstadoVenta, string>> = {
   [EstadoVenta.ORDEN_CONFIRMADA]: "Orden confirmada",
@@ -39,7 +28,7 @@ const ESTADO_LABELS: Partial<Record<EstadoVenta, string>> = {
 const FACTURACION_LABELS: Record<EstadoFacturacionVenta, string> = {
   [EstadoFacturacionVenta.SIN_COMPROBANTE]: "Sin comprobante",
   [EstadoFacturacionVenta.VENTA_INTERNA]: "Venta interna",
-  [EstadoFacturacionVenta.EN_EMISION]: "En emision",
+  [EstadoFacturacionVenta.EN_EMISION]: "En emisión",
   [EstadoFacturacionVenta.EMITIDA]: "Emitida",
   [EstadoFacturacionVenta.EMITIDA_CON_OBS]: "Emitida c/ obs.",
   [EstadoFacturacionVenta.RECHAZADA]: "Rechazada",
@@ -54,34 +43,20 @@ function formatDate(value?: string) {
   }).format(new Date(value));
 }
 
-export function PorEmitirTable() {
+export function PorEmitirTable({ search = "", fillAvailableHeight = true }: { search?: string; fillAvailableHeight?: boolean }) {
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
-  const [fechaDesde, setFechaDesde] = useState("");
-  const [fechaHasta, setFechaHasta] = useState("");
-  const [totalMin, setTotalMin] = useState("");
-  const [totalMax, setTotalMax] = useState("");
-  const [estadoComercial, setEstadoComercial] = useState<
-    EstadoVenta | undefined
-  >();
-  const [vendedor, setVendedor] = useState("");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(20);
   const [selectedVenta, setSelectedVenta] =
     useState<VentaPendienteFacturacionItem | null>(null);
   const [dismissedVentaId, setDismissedVentaId] = useState<string | null>(null);
 
-  const debounced = useDebounce(search, 300);
+  useEffect(() => { setPage(1); }, [search]);
+
   const query = useVentasPendientesFacturacion({
     page,
     limit,
-    search: debounced || undefined,
-    fechaDesde: fechaDesde || undefined,
-    fechaHasta: fechaHasta || undefined,
-    totalMin: totalMin || undefined,
-    totalMax: totalMax || undefined,
-    estadoComercial,
-    vendedor: vendedor || undefined,
+    search: search || undefined,
   });
 
   const queryVentaId = searchParams.get("ventaId");
@@ -147,17 +122,17 @@ export function PorEmitirTable() {
         },
       },
       {
-        accessorKey: "estado",
-        header: "Estados",
+        id: "facturacion",
+        header: "Facturación",
         cell: ({ row }) => (
           <div className="flex flex-wrap gap-1">
-            <Badge variant="outline" className="border-primary/20 text-primary">
+            <ErpBadge tone="info">
               {ESTADO_LABELS[row.original.estado] ?? row.original.estado}
-            </Badge>
-            <Badge variant="secondary">
+            </ErpBadge>
+            <ErpBadge tone="warning">
               {FACTURACION_LABELS[row.original.estadoFacturacion] ??
                 row.original.estadoFacturacion}
-            </Badge>
+            </ErpBadge>
           </div>
         ),
       },
@@ -166,9 +141,9 @@ export function PorEmitirTable() {
         header: "Vendedor",
         cell: ({ row }) => {
           const usuario = row.original.usuario;
-          if (!usuario) return <span className="text-muted-foreground">-</span>;
+          if (!usuario) return <span className="text-muted-foreground/50 text-xs">—</span>;
           return (
-            <span className="text-sm">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
               {[usuario.nombre, usuario.apellido].filter(Boolean).join(" ")}
             </span>
           );
@@ -178,19 +153,21 @@ export function PorEmitirTable() {
         accessorKey: "total",
         header: () => <div className="text-right">Total</div>,
         cell: ({ row }) => (
-          <div className="text-right font-semibold tabular-nums text-primary">
+          <div className="text-right font-semibold tabular-nums text-foreground">
             S/ {row.original.total.toFixed(2)}
           </div>
         ),
       },
       {
         id: "actions",
-        header: () => <div className="text-right">Accion</div>,
+        header: () => <div className="text-right">Acción</div>,
+        size: 120,
+        enableHiding: false,
         cell: ({ row }) => (
           <div className="flex justify-end">
             <Button
               size="sm"
-              className="h-8 gap-1"
+              className="h-8 gap-1.5 rounded-lg px-3 text-xs"
               onClick={() => setSelectedVenta(row.original)}
             >
               <Send className="size-3.5" /> Emitir
@@ -202,108 +179,8 @@ export function PorEmitirTable() {
     [],
   );
 
-  function clearFilters() {
-    setSearch("");
-    setFechaDesde("");
-    setFechaHasta("");
-    setTotalMin("");
-    setTotalMax("");
-    setEstadoComercial(undefined);
-    setVendedor("");
-    setPage(1);
-  }
-
   return (
-    <div className="flex flex-col gap-3">
-      <div className="grid gap-2 lg:grid-cols-[minmax(220px,1.5fr)_repeat(2,minmax(140px,0.8fr))_repeat(2,minmax(110px,0.65fr))_minmax(170px,1fr)_minmax(160px,1fr)_auto]">
-        <div className="relative flex items-center">
-          <Search className="pointer-events-none absolute left-3 size-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Buscar por venta o cliente..."
-            className="pl-8 rounded-xl border-border bg-background shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 dark:focus-visible:ring-indigo-500/25 transition-colors"
-          />
-        </div>
-        <DatePicker
-          value={fechaDesde}
-          onChange={(value) => {
-            setFechaDesde(value ?? "");
-            setPage(1);
-          }}
-          placeholder="Desde"
-        />
-        <DatePicker
-          value={fechaHasta}
-          onChange={(value) => {
-            setFechaHasta(value ?? "");
-            setPage(1);
-          }}
-          placeholder="Hasta"
-        />
-        <Input
-          value={totalMin}
-          onChange={(e) => {
-            setTotalMin(e.target.value);
-            setPage(1);
-          }}
-          inputMode="decimal"
-          placeholder="Min."
-          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
-        />
-        <Input
-          value={totalMax}
-          onChange={(e) => {
-            setTotalMax(e.target.value);
-            setPage(1);
-          }}
-          inputMode="decimal"
-          placeholder="Max."
-          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
-        />
-        <Select
-          value={estadoComercial ?? ALL_VALUE}
-          onValueChange={(value) => {
-            setEstadoComercial(
-              value === ALL_VALUE ? undefined : (value as EstadoVenta),
-            );
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus:border-indigo-500 dark:focus:border-indigo-400 focus:ring-indigo-400/25 transition-colors">
-            <SelectValue placeholder="Estado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_VALUE}>Todos</SelectItem>
-            <SelectItem value={EstadoVenta.ORDEN_CONFIRMADA}>
-              Orden confirmada
-            </SelectItem>
-            <SelectItem value={EstadoVenta.ENTREGADA}>Entregada</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          value={vendedor}
-          onChange={(e) => {
-            setVendedor(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Vendedor"
-          className="rounded-xl border-border shadow-sm hover:border-indigo-400/60 dark:hover:border-indigo-500/60 focus-visible:border-indigo-500 dark:focus-visible:border-indigo-400 focus-visible:ring-indigo-400/25 transition-colors"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          className="gap-1.5 rounded-xl h-9 border-border/70 hover:border-red-400/60 dark:hover:border-red-500/60 hover:bg-red-50 dark:hover:bg-red-950/20 hover:text-red-600 dark:hover:text-red-400 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95"
-          onClick={clearFilters}
-        >
-          <FilterX className="size-3.5" />
-          Limpiar
-        </Button>
-      </div>
-
+    <>
       <ServerDataTable
         columns={columns}
         data={query.data?.data ?? []}
@@ -324,6 +201,7 @@ export function PorEmitirTable() {
         emptyDescription="No hay ventas confirmadas o entregadas pendientes de comprobante."
         enableColumnVisibility
         columnVisibilityStorageKey="erp:comprobantes:por-emitir"
+        fillAvailableHeight={fillAvailableHeight}
       />
 
       <EmitirComprobanteModal
@@ -334,6 +212,6 @@ export function PorEmitirTable() {
         }}
         onSuccess={() => void query.refetch()}
       />
-    </div>
+    </>
   );
 }
