@@ -252,3 +252,86 @@ export type ComprobantesPaginatedResponse =
 
 export type VentasPendientesFacturacionPaginatedResponse =
   PaginatedResponse<VentaPendienteFacturacionItem>;
+
+/**
+ * Doc 04 / Doc 07 / Doc 08 — Propósitos para los que se consulta elegibilidad
+ * de un comprobante origen: NC (nota de crédito), ND (nota de débito) o BAJA
+ * (comunicación de baja / RA).
+ */
+export type PropositoElegibilidadComprobante = "nc" | "nd" | "baja";
+
+/**
+ * Doc 08 §3 — Códigos de razón de bloqueo expuestos por el endpoint de
+ * elegibilidad. La UI los mapea a iconos / acciones sugeridas y los muestra
+ * en el modal `Buscar comprobante origen`.
+ */
+export type RazonBloqueoElegibilidad =
+  | "ESTADO_INVALIDO"
+  | "TIPO_NO_PERMITIDO"
+  | "SALDO_AGOTADO"
+  | "NC_EN_PROCESO"
+  | "BAJA_EN_PROCESO"
+  | "BAJA_NO_APLICA_BOLETA"
+  | "PLAZO_BAJA_VENCIDO"
+  | "PLAZO_NC_REGULAR_VENCIDO"
+  | "MOTIVO_NO_APLICA";
+
+export interface BloqueoElegibilidad {
+  codigo: RazonBloqueoElegibilidad;
+  mensaje: string;
+}
+
+export interface MotivoAplicable {
+  codigo: string;
+  label: string;
+  esExcepcional?: boolean;
+  soloFactura?: boolean;
+}
+
+export interface OperacionEnProcesoElegibilidad {
+  id: string;
+  numero: string;
+  estado: string;
+  tipo: "NOTA_CREDITO" | "COMUNICACION_BAJA";
+}
+
+/**
+ * Respuesta de `GET /facturacion/comprobantes/:id/elegibilidad?proposito=...`.
+ * Centraliza saldo, plazo, bloqueos y motivos aplicables en una sola llamada
+ * para que la UI no recalcule lógica fiscal en distintos lugares.
+ */
+export interface ElegibilidadComprobante {
+  comprobanteId: string;
+  proposito: PropositoElegibilidadComprobante;
+
+  puede: boolean;
+  bloqueos: BloqueoElegibilidad[];
+
+  numero: string;
+  tipoOrigen: string;
+  estadoOrigen: string;
+  fechaEmision: string;
+  cdrRecibidaAt: string | null;
+  totalOrigen: number;
+  moneda: string;
+
+  /** Solo cuando proposito=nc. */
+  saldoNoAcreditado?: number;
+  /** Solo cuando proposito=nc. */
+  acreditado?: number;
+
+  /** Cuando proposito=baja: 7 días calendario desde la CDR. */
+  plazoVenceAt?: string | null;
+  /** Cuando proposito=baja: ms restantes hasta plazoVenceAt (negativo si vencido). */
+  remainingMs?: number | null;
+
+  /** Cuando proposito=nc: plazo de la NC excepcional (10 días hábiles). */
+  plazoNcExcepcionalVenceAt?: string | null;
+  plazoNcExcepcionalVencido?: boolean;
+
+  /** NC u operación en proceso que bloquea esta operación. */
+  bloqueoPorOperacionEnProceso: OperacionEnProcesoElegibilidad | null;
+
+  /** Motivos válidos para la operación según tipo origen / plazo / saldo. */
+  motivosAplicables: MotivoAplicable[];
+}

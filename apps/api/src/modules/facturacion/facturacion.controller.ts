@@ -52,6 +52,7 @@ import {
   UpdateConfigEmpresaDto,
   UpdateConfigEmpresaFiscalDto,
   AnularComprobanteDto,
+  QueryElegibilidadComprobanteDto,
   QueryComunicacionBajaDto,
   CreateFeriadoNacionalDto,
   QueryFeriadoNacionalDto,
@@ -193,6 +194,21 @@ export class FacturacionController {
   })
   getDocumento(@Param('id', ParseUUIDPipe) id: string) {
     return this.facturacionService.getDocumentoSoporte(id);
+  }
+
+  @Get('comprobantes/:id/elegibilidad')
+  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO)
+  @ApiOperation({
+    summary:
+      'Doc 04/07/08 — Elegibilidad unificada del comprobante para NC, ND o comunicación de baja',
+    description:
+      'Centraliza saldo no acreditado, plazo (NC excepcional 10 días hábiles, baja 7 días calendario), bloqueos por operaciones en proceso y motivos aplicables. La UI debe consultar este endpoint antes de abrir el formulario respectivo para mostrar todas las razones de bloqueo en un solo lugar.',
+  })
+  getElegibilidad(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: QueryElegibilidadComprobanteDto,
+  ) {
+    return this.facturacionService.getElegibilidad(id, query.proposito);
   }
 
   @Get('comprobantes/:id/saldo-nc')

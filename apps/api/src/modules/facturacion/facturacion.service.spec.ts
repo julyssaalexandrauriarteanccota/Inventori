@@ -1495,4 +1495,198 @@ describe('FacturacionService', () => {
       );
     });
   });
+
+  describe('getElegibilidad', () => {
+    const facturaAceptada = {
+      id: 'comp-1',
+      numero: 'F001-00000001',
+      tipo: TipoDocumento.FACTURA,
+      estado: EstadoComprobante.ACEPTADO,
+      total: 1180,
+      moneda: 'PEN',
+      fechaEmision: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      cdrRecibidaAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+    };
+
+    const boletaAceptada = {
+      ...facturaAceptada,
+      id: 'comp-2',
+      numero: 'B001-00000001',
+      tipo: TipoDocumento.BOLETA,
+    };
+
+    it('lanza 404 si el comprobante no existe', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(null);
+      await expect(service.getElegibilidad('no-existe', 'nc')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('proposito=nc: factura aceptada con saldo completo es elegible', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+      mockPrisma.comprobante.findFirst.mockResolvedValue(null); // no NC en proceso
+      mockPrisma.comprobante.aggregate.mockResolvedValue({
+        _sum: { total: 0 },
+      });
+      mockPrisma.feriadoNacional.findMany.mockResolvedValue([]);
+
+      const result = await service.getElegibilidad('comp-1', 'nc');
+
+      expect(result.puede).toBe(true);
+      expect(result.bloqueos).toEqual([]);
+      expect(result.saldoNoAcreditado).toBe(1180);
+      expect(result.acreditado).toBe(0);
+      expect(result.motivosAplicables.length).toBeGreaterThan(0);
+      expect(result.motivosAplicables.some((m) => m.codigo === '04')).toBe(
+        true,
+      ); // descuento global aplica a factura
+      expect(result.bloqueoPorOperacionEnProceso).toBeNull();
+    });
+
+    it('proposito=nc: rechazado se bloquea con ESTADO_INVALIDO', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue({
+        ...facturaAceptada,
+        estado: EstadoComprobante.RECHAZADO,
+      });
+      mockPrisma.feriadoNacional.findMany.mockResolvedValue([]);
+
+      const result = await service.getElegibilidad('comp-1', 'nc');
+
+      expect(result.puede).toBe(false);
+      expect(result.bloqueos[0].codigo).toBe('ESTADO_INVALIDO');
+    });
+
+    it('proposito=nc: saldo agotado por NC previa aceptada bloquea', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+      mockPrisma.comprobante.findFirst.mockResolvedValue(null);
+      mockPrisma.comprobante.aggregate.mockResolvedValue({
+        _sum: { total: 1180 }, // saldo agotado
+      });
+      mockPrisma.feriadoNacional.findMany.mockResolvedValue([]);
+
+      const result = await service.getElegibilidad('comp-1', 'nc');
+
+      expect(result.puede).toBe(false);
+      expect(result.saldoNoAcreditado).toBe(0);
+      expect(result.bloqueos.some((b) => b.codigo === 'SALDO_AGOTADO')).toBe(
+        true,
+      );
+    });
+
+    it('proposito=nc: NC en proceso bloquea con NC_EN_PROCESO', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+      mockPrisma.comprobante.findFirst.mockResolvedValue({
+        id: 'nc-1',
+        numero: 'FC01-00000001',
+        estado: EstadoComprobante.PENDIENTE_ENVIO,
+      });
+      mockPrisma.comprobante.aggregate.mockResolvedValue({
+        _sum: { total: 0 },
+      });
+      mockPrisma.feriadoNacional.findMany.mockResolvedValue([]);
+
+      const result = await service.getElegibilidad('comp-1', 'nc');
+
+      expect(result.puede).toBe(false);
+      expect(result.bloqueoPorOperacionEnProceso).toEqual(
+        expect.objectContaining({
+          id: 'nc-1',
+          numero: 'FC01-00000001',
+          tipo: 'NOTA_CREDITO',
+        }),
+      );
+      expect(result.bloqueos.some((b) => b.codigo === 'NC_EN_PROCESO')).toBe(
+        true,
+      );
+    });
+
+    it('proposito=nc: motivo 04 (descuento global) NO aparece sobre boleta', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(boletaAceptada);
+      mockPrisma.comprobante.findFirst.mockResolvedValue(null);
+      mockPrisma.comprobante.aggregate.mockResolvedValue({
+        _sum: { total: 0 },
+      });
+      mockPrisma.feriadoNacional.findMany.mockResolvedValue([]);
+
+      const result = await service.getElegibilidad('comp-2', 'nc');
+
+      expect(result.puede).toBe(true);
+      expect(result.motivosAplicables.some((m) => m.codigo === '04')).toBe(
+        false,
+      );
+    });
+
+    it('proposito=nd: factura aceptada es elegible y devuelve motivos ND', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+
+      const result = await service.getElegibilidad('comp-1', 'nd');
+
+      expect(result.puede).toBe(true);
+      expect(result.motivosAplicables.length).toBeGreaterThan(0);
+      expect(result.motivosAplicables.map((m) => m.codigo)).toEqual(
+        expect.arrayContaining(['01', '02', '03']),
+      );
+      // ND no maneja saldo
+      expect(result.saldoNoAcreditado).toBeUndefined();
+    });
+
+    it('proposito=baja: factura aceptada dentro del plazo es elegible', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+      mockPrisma.comunicacionBaja.findFirst.mockResolvedValue(null);
+
+      const result = await service.getElegibilidad('comp-1', 'baja');
+
+      expect(result.puede).toBe(true);
+      expect(result.plazoVenceAt).toBeTruthy();
+      expect(result.remainingMs).toBeGreaterThan(0);
+    });
+
+    it('proposito=baja: boleta se bloquea con BAJA_NO_APLICA_BOLETA', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(boletaAceptada);
+      mockPrisma.comunicacionBaja.findFirst.mockResolvedValue(null);
+
+      const result = await service.getElegibilidad('comp-2', 'baja');
+
+      expect(result.puede).toBe(false);
+      expect(
+        result.bloqueos.some((b) => b.codigo === 'BAJA_NO_APLICA_BOLETA'),
+      ).toBe(true);
+    });
+
+    it('proposito=baja: plazo vencido bloquea con PLAZO_BAJA_VENCIDO', async () => {
+      const facturaVieja = {
+        ...facturaAceptada,
+        fechaEmision: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+        cdrRecibidaAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+      };
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaVieja);
+      mockPrisma.comunicacionBaja.findFirst.mockResolvedValue(null);
+
+      const result = await service.getElegibilidad('comp-1', 'baja');
+
+      expect(result.puede).toBe(false);
+      expect(
+        result.bloqueos.some((b) => b.codigo === 'PLAZO_BAJA_VENCIDO'),
+      ).toBe(true);
+    });
+
+    it('proposito=baja: baja activa bloquea con BAJA_EN_PROCESO', async () => {
+      mockPrisma.comprobante.findUnique.mockResolvedValue(facturaAceptada);
+      mockPrisma.comunicacionBaja.findFirst.mockResolvedValue({
+        id: 'baja-1',
+        estado: EstadoComunicacionBaja.EN_PROCESO,
+        identificadorBaja: 'RA-20260528-001',
+      });
+
+      const result = await service.getElegibilidad('comp-1', 'baja');
+
+      expect(result.puede).toBe(false);
+      expect(result.bloqueoPorOperacionEnProceso?.tipo).toBe(
+        'COMUNICACION_BAJA',
+      );
+      expect(result.bloqueos.some((b) => b.codigo === 'BAJA_EN_PROCESO')).toBe(
+        true,
+      );
+    });
+  });
 });

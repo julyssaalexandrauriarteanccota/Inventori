@@ -24,4 +24,8 @@ export { CreateConfigEmpresaFiscalDto } from './create-config-empresa-fiscal.dto
 export { UpdateConfigEmpresaFiscalDto } from './update-config-empresa-fiscal.dto';
 export { UpdateConfigEmpresaDto } from './update-config-empresa.dto';
 export { AnularComprobanteDto } from './anular-comprobante.dto';
+export {
+  QueryElegibilidadComprobanteDto,
+  PropositoElegibilidad,
+} from './query-elegibilidad-comprobante.dto';
 export { QueryComunicacionBajaDto } from './query-comunicacion-baja.dto';
