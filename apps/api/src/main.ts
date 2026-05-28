@@ -47,6 +47,14 @@ async function bootstrap() {
   const httpAdapter = app.getHttpAdapter().getInstance() as Express;
   app.enableShutdownHooks();
 
+  // Detrás de un proxy/CDN (nginx, cloudflare, vercel), confiar en X-Forwarded-*
+  // para que el rate limiter, los logs y `req.ip` reflejen la IP real del cliente.
+  // Sólo se activa cuando explícitamente se configura para evitar IP spoofing
+  // en entornos sin proxy.
+  if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+    httpAdapter.set('trust proxy', 1);
+  }
+
   // Make the API root browser-friendly by sending users to the docs instead of a 404.
   httpAdapter.get('/', (_req: Request, res: Response) => {
     res.redirect('/api/docs');
@@ -70,9 +78,21 @@ async function bootstrap() {
     },
   );
 
-  // CORS
+  // CORS — admite una lista de orígenes separada por coma en FRONTEND_URL para
+  // soportar varios entornos (dev, staging, prod) sin reconfigurar el server.
+  const corsOriginEnv = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const allowedOrigins = corsOriginEnv
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Permitir peticiones sin Origin (curl, mobile apps, health checks)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error(`Origin ${origin} no permitido por CORS`), false);
+    },
     credentials: true,
   });
 
