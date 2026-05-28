@@ -7,6 +7,7 @@ import type {
   ClienteValidacionSunatPayload,
   ComprobantesPaginatedResponse,
   ConfigEmpresaFiscalPayload,
+  ElegibilidadComprobante,
   EmpresaSedeFiscalPayload,
   EmitirComprobantePayload,
   EstadoVenta,
@@ -14,6 +15,7 @@ import type {
   EstadoValidacionSunat,
   FormatoImpresionDocumento,
   PaginatedResponse,
+  PropositoElegibilidadComprobante,
   QueryComprobanteFilters,
   ResultadoValidacion,
   SerieDocumentoPayload,
@@ -536,6 +538,28 @@ export function useSaldoNoAcreditado(comprobanteId: string | undefined) {
         `/facturacion/comprobantes/${comprobanteId}/saldo-nc`,
       ),
     enabled: !!comprobanteId,
+  });
+}
+
+/**
+ * Doc 04 / Doc 07 / Doc 08 — Elegibilidad unificada del comprobante para
+ * NC, ND o comunicación de baja. Devuelve saldo, plazo y bloqueos en una
+ * sola llamada. Usado por `BuscarComprobanteOrigenModal` para deshabilitar
+ * filas que no pueden originar la operación.
+ */
+export function useElegibilidadComprobante(
+  comprobanteId: string | undefined,
+  proposito: PropositoElegibilidadComprobante,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: [FACTURACION_KEY, "elegibilidad", comprobanteId, proposito],
+    queryFn: () =>
+      api.get<ApiEnvelope<ElegibilidadComprobante>>(
+        `/facturacion/comprobantes/${comprobanteId}/elegibilidad?proposito=${proposito}`,
+      ),
+    enabled: enabled && !!comprobanteId,
+    staleTime: 30_000,
   });
 }
 
