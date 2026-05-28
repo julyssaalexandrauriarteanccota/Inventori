@@ -26,23 +26,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConfirmarBajaModal } from "@/components/modals/confirmar-baja-modal";
 import {
   ThermalReceiptDialog,
   type ThermalReceiptData,
 } from "@/components/pos/thermal-receipt";
 import {
-  useAnularComprobante,
   useComprobante,
   useComprobanteEnvios,
   useConfigFiscal,
@@ -303,11 +293,9 @@ export default function ComprobanteDetallePage({
   const enviosQuery = useComprobanteEnvios(id);
   const reintentar = useReintentarComprobante();
   const consultar = useConsultarSunatComprobante();
-  const anular = useAnularComprobante();
   const saldoQuery = useSaldoNoAcreditado(id);
 
   const [anularOpen, setAnularOpen] = useState(false);
-  const [motivoBaja, setMotivoBaja] = useState("");
   const [downloadingArtifact, setDownloadingArtifact] =
     useState<ArtifactKind | null>(null);
   const [printOpen, setPrintOpen] = useState(false);
@@ -406,29 +394,6 @@ export default function ComprobanteDetallePage({
       }) ?? null
     );
   }, [data]);
-
-  const motivoTrimmed = motivoBaja.trim();
-  const motivoValido = motivoTrimmed.length >= 10 && motivoTrimmed.length <= 200;
-
-  const handleAnular = () => {
-    if (!motivoValido) {
-      toast.error("El motivo debe tener entre 10 y 200 caracteres");
-      return;
-    }
-    anular.mutate(
-      { id, motivo: motivoTrimmed },
-      {
-        onSuccess: () => {
-          toast.success("Comunicación de baja iniciada");
-          setAnularOpen(false);
-          setMotivoBaja("");
-        },
-        onError: (e) => {
-          toast.error(e instanceof Error ? e.message : "Error al anular");
-        },
-      },
-    );
-  };
 
   if (detalleQuery.isLoading) {
     return (
@@ -1032,53 +997,11 @@ export default function ComprobanteDetallePage({
         </TabsContent>
       </Tabs>
 
-      {/* Modal anular */}
-      <Dialog open={anularOpen} onOpenChange={setAnularOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Comunicar baja a SUNAT</DialogTitle>
-            <DialogDescription>
-              Se generará un resumen RA. Esta acción no se puede revertir.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="motivo">
-              Motivo <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="motivo"
-              value={motivoBaja}
-              onChange={(e) => setMotivoBaja(e.target.value)}
-              placeholder="Ej. Error en datos del cliente"
-              minLength={10}
-              maxLength={200}
-              required
-            />
-            <p className="text-xs text-muted-foreground">
-              Entre 10 y 200 caracteres ({motivoTrimmed.length}/200).
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAnularOpen(false)}
-              disabled={anular.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={anular.isPending || !motivoValido}
-              onClick={handleAnular}
-            >
-              {anular.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : null}
-              Comunicar baja
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmarBajaModal
+        open={anularOpen}
+        onOpenChange={setAnularOpen}
+        comprobanteId={id}
+      />
 
       <ThermalReceiptDialog
         open={printOpen}
