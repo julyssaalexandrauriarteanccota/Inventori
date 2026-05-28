@@ -11,17 +11,12 @@ import { ConfigService } from '@nestjs/config';
 @Controller('health')
 export class HealthController implements OnModuleDestroy {
   private readonly redis: Redis;
-  private readonly aiServiceUrl: string;
 
   constructor(
     private health: HealthCheckService,
     private prisma: PrismaService,
     configService: ConfigService,
   ) {
-    this.aiServiceUrl = configService.get<string>(
-      'AI_SERVICE_URL',
-      'http://ai-service:8000',
-    );
     this.redis = new Redis(
       configService.get<string>('REDIS_URL', 'redis://localhost:6379'),
       { maxRetriesPerRequest: 1, lazyConnect: true, enableOfflineQueue: false },
@@ -58,19 +53,6 @@ export class HealthController implements OnModuleDestroy {
           return { redis: { status: 'up' as const } };
         } catch {
           return { redis: { status: 'down' as const } };
-        }
-      },
-      async () => {
-        try {
-          const response = await fetch(
-            `${this.aiServiceUrl.replace(/\/$/, '')}/health`,
-          );
-          if (!response.ok) {
-            throw new Error(`AI health returned ${response.status}`);
-          }
-          return { 'ai-service': { status: 'up' as const } };
-        } catch {
-          return { 'ai-service': { status: 'down' as const } };
         }
       },
     ]);

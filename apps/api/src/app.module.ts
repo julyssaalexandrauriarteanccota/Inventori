@@ -29,7 +29,6 @@ import { AdminConfigModule } from './modules/config/config.module';
 import { ReportesModule } from './modules/reportes/reportes.module';
 import { UbicacionesModule } from './modules/ubicaciones/ubicaciones.module';
 import { WebsocketsModule } from './websockets';
-import { AiModule } from './modules/ai/ai.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import {
@@ -75,7 +74,6 @@ import {
     ReportesModule,
     UbicacionesModule,
     WebsocketsModule,
-    AiModule,
     HealthModule,
   ],
   providers: [

@@ -26,7 +26,6 @@ Detalle completo en [`apps/web/AGENTS.md`](../../apps/web/AGENTS.md). Reglas de 
 
 - Rutas ERP nuevas **deben** registrarse en `src/lib/erp-navigation.ts`; rutas no registradas redirigen a access denied.
 - Roles permitidos (de `@erp/shared`): `ADMIN`, `ENCARGADO`, `TECNICO` — no agregar roles nuevos sin actualizar el enum compartido.
-- Web **nunca** llama directamente al servicio AI (`apps/ai`); siempre vía la API.
 
 ## Tipos y schemas compartidos
 

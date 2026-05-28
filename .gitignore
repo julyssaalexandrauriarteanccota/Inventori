@@ -22,9 +22,6 @@ apps/**/dist/
 apps/**/.next/
 apps/**/.turbo/
 packages/**/dist/
-apps/ai/.venv/
-apps/ai/**/__pycache__/
-apps/ai/**/*.pyc
 apps/api/generated/prisma/
 design-claude/
 .superpowers/

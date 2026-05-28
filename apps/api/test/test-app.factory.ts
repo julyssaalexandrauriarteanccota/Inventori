@@ -56,7 +56,6 @@ export async function createTestApp() {
   process.env.JWT_REFRESH_EXPIRES_IN = '30d';
   process.env.FRONTEND_URL = 'http://localhost:3000';
   process.env.REDIS_URL = 'redis://localhost:6379';
-  process.env.AI_SERVICE_URL = 'http://localhost:8000';
 
   const adminPassword = await bcrypt.hash('Admin123!', 10);
   const tecnicoPassword = await bcrypt.hash('Tecnico123!', 10);

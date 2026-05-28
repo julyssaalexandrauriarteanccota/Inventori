@@ -24,8 +24,6 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { SoporteService } from './soporte.service';
 import { UploadsService } from '../uploads/uploads.service';
-import { AiService } from '../ai/ai.service';
-import { ClasificarTicketDto } from '../ai/dto/clasificar-ticket.dto';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -43,7 +41,6 @@ export class SoporteController {
   constructor(
     private readonly soporteService: SoporteService,
     private readonly uploadsService: UploadsService,
-    private readonly aiService: AiService,
   ) {}
 
   @Post('tickets')
@@ -225,14 +222,5 @@ export class SoporteController {
     @CurrentUser('rol') userRol: RolUsuario,
   ) {
     return this.soporteService.remove(id, userId, userRol);
-  }
-
-  @Post('clasificar-ticket')
-  @Roles(RolUsuario.ADMIN, RolUsuario.ENCARGADO, RolUsuario.TECNICO)
-  @ApiOperation({
-    summary: 'Clasificar ticket con IA (sugiere prioridad y tipo de servicio)',
-  })
-  clasificarTicket(@Body() dto: ClasificarTicketDto) {
-    return this.aiService.classifyTicket(dto);
   }
 }

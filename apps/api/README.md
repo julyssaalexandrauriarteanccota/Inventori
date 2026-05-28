@@ -183,16 +183,15 @@ Expone:
 
 ## Módulos en `src/modules/`
 
-`src/modules/` contiene 24 carpetas.
+`src/modules/` contiene más de 24 carpetas (consulta el árbol actual para el listado exacto).
 
 ### Infraestructura y core
 
 | Carpeta | Prefijo | Función actual |
 | --- | --- | --- |
-| `ai/` | `ai` | Proxy hacia `apps/ai` para OCR y clasificación |
 | `auditoria/` | — | Servicio global para registrar auditoría |
 | `auth/` | `auth` | Login, register, refresh, forgot/reset password, perfil y logout |
-| `health/` | `health` | Health check de base de datos, Redis y servicio AI |
+| `health/` | `health` | Health check de base de datos y Redis |
 | `uploads/` | `uploads` | Carpeta presente, pero sin archivos visibles en el árbol actual |
 
 ### Administración y catálogos
@@ -217,11 +216,11 @@ Expone:
 | `inventario/` | `inventario` | Almacenes, stock y movimientos |
 | `equipos/` | `equipos` | Equipos serializados y lecturas SNMP |
 | `garantias/` | `garantias` | Garantías y casos de garantía, con verificación pública por QR |
-| `compras/` | `compras` | Órdenes de compra, recepciones y OCR de factura vía AI |
+| `compras/` | `compras` | Órdenes de compra y recepciones |
 | `ventas/` | `ventas` | Cotizaciones, confirmación, entrega, cancelación y envío |
 | `caja/` | `caja` | Cajas, aperturas, movimientos y arqueos |
 | `facturacion/` | `facturacion` | Comprobantes, notas y envío asíncrono directo a SUNAT vía SOAP |
-| `soporte/` | `soporte` | Tickets, adjuntos, repuestos, cierre y clasificación con AI |
+| `soporte/` | `soporte` | Tickets, adjuntos, repuestos y cierre |
 | `reportes/` | `reportes` | Dashboard, ventas, stock, tickets, clientes y telemetría |
 
 ### Patrón general observado
@@ -233,7 +232,6 @@ Excepciones visibles:
 - `auditoria/` tiene `module` + `service`, sin controller
 - `health/` tiene `module` + `controller`, sin service propio
 - `facturacion/` agrega `sunat.processor.ts`
-- `ai/` es integración, no CRUD clásico
 - `uploads/` está vacío en el árbol actual
 
 ## Endpoints públicos verificados
@@ -293,18 +291,6 @@ Referencia: `docs/configuracion-empresa-branding.md`.
 
 ## Integraciones especiales
 
-### AI desde API
-
-`src/modules/ai/`:
-
-- usa `HttpModule` con timeout `30000`
-- reenvía archivos a:
-  - `/ocr/invoice`
-  - `/ocr/serial`
-- reenvía clasificación a:
-  - `/clasificar/ticket`
-- envía `X-Internal-Key` al servicio AI
-
 ### Facturación asíncrona
 
 `src/modules/facturacion/`:
@@ -324,15 +310,13 @@ Referencia: `docs/configuracion-empresa-branding.md`.
 
 - PostgreSQL con `SELECT 1`
 - Redis con `PING`
-- servicio AI con `fetch(<AI_SERVICE_URL>/health)`
 
 ## Tests
 
 ### Unit tests
 
 - Ubicación: `src/**/*.spec.ts`
-- Cantidad detectada: 29 archivos `.spec.ts`
-- Incluyen servicios, guards, interceptors, websockets, auth, AI y DTOs puntuales
+- Incluyen servicios, guards, interceptors, websockets, auth y DTOs puntuales
 
 ### E2E tests
 

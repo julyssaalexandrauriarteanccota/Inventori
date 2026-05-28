@@ -5,11 +5,9 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 ## Workspace Shape
 
 - Monorepo uses `pnpm-workspace.yaml` with `apps/api`, `apps/web`, and `packages/*`.
-- `apps/ai` is **not** a pnpm workspace package; it is a standalone Python service.
-- Root dev entrypoint runs all 3 services concurrently: `pnpm dev`.
+- Root dev entrypoint runs both services concurrently: `pnpm dev`.
   - `dev:web`: `pnpm --filter @erp/web dev` (Next.js, default `3000`)
   - `dev:api`: `pnpm --filter @erp/api start:dev` (NestJS, `PORT_API` default `4000`)
-  - `dev:ai`: `cd apps/ai && .venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000` (FastAPI, `8000`). The venv must exist at `apps/ai/.venv`.
 
 ## Verified Command Source of Truth
 
@@ -25,7 +23,6 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 - Web only: `pnpm --filter @erp/web test` (Vitest, jsdom, `src/**/*.{test,spec}.{ts,tsx}`).
 - API unit specs only: `pnpm --filter @erp/api test` (Jest on `src/**/*.spec.ts`).
 - API e2e only: `pnpm --filter @erp/api test:e2e` (config `apps/api/test/jest-e2e.json`, matches `.e2e-spec.ts`).
-- AI tests: `cd apps/ai && pytest --tb=short` (matches CI behavior).
 
 ## Architecture Constraints That Affect Edits
 
@@ -34,7 +31,6 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 - API uses global prefix `api/v1` (`apps/api/src/main.ts`); web client default base URL is `http://localhost:4000/api/v1` (`apps/web/src/lib/api.ts`).
 - API wraps non-paginated responses as `{ data, meta.timestamp }` via global `TransformInterceptor`; errors are normalized to `{ error: { code, message, statusCode } }` via global exception filter.
 - API config loads env from repo root `.env` (`ConfigModule.forRoot({ envFilePath: '../../.env' })`).
-- AI config also loads repo root `.env` (`SettingsConfigDict(env_file='../../.env')`).
 
 ## Data/Infra Quirks
 
@@ -46,14 +42,6 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 - `docker-compose.yml` provisions local `postgres` (pgvector/pgvector:pg16, host port `5433` mapped to container `5432`), `redis` (7-alpine, `6379`), `minio` (`9000/9001`), and cron-based `backup`/`minio-backup` services.
 - Swagger API docs available at `http://localhost:4000/api/docs` when API is running.
 
-## AI Service (apps/ai)
-
-- Standalone FastAPI service (Python 3.12, **not** a pnpm workspace member).
-- Endpoints: `/ocr`, `/clasificar`, `/health`. Internal-only via `X-Internal-Key` header.
-- `web` never calls `ai` directly; always routes through `api`.
-- Async tasks use Celery + Redis. Anthropic/OpenAI for OCR classification.
-- Tests: `cd apps/ai && pytest --tb=short`.
-
 ## Web-Specific Guardrails
 
 - Follow `apps/web/AGENTS.md` for frontend conventions.
@@ -62,8 +50,8 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
 
 ## Module / Feature Patterns
 
-- **API modules** (25 total) follow `module/controller/service/dto/` structure inside `apps/api/src/modules/<name>/`:
-  `ai`, `auditoria`, `auth`, `caja`, `categorias`, `clientes`, `compras`, `config`, `equipos`, `facturacion`, `garantias`, `health`, `inventario`, `marcas`, `modelos`, `portal-cliente`, `productos`, `proveedores`, `reportes`, `soporte`, `ubicaciones`, `unidades-medida`, `uploads`, `usuarios`, `ventas`.
+- **API modules** follow `module/controller/service/dto/` structure inside `apps/api/src/modules/<name>/`:
+  `alquileres`, `auditoria`, `auth`, `caja`, `categorias`, `clientes`, `compras`, `config`, `equipos`, `facturacion`, `garantias`, `health`, `inventario`, `marcas`, `modelos`, `portal-cliente`, `productos`, `proveedores`, `reportes`, `soporte`, `ubicaciones`, `unidades-medida`, `uploads`, `usuarios`, `ventas`.
 - **Web route groups** under `apps/web/src/app/`: `(public)` (sitio público sin auth), `(erp)` (ERP interno con auth + roles), `(pos)` (punto de venta), `auth/` (login/signup/recovery).
 - **Web features** live under `apps/web/src/app/(erp)/<name>/` with hooks in `src/hooks/`, forms in `src/components/forms/`, tables in `src/components/tables/`.
 - **Web capabilities**: PWA via Serwist, WebSockets via socket.io-client, PDF generation via @react-pdf/renderer.
@@ -75,14 +63,13 @@ High-signal repo notes for AI coding agents. Keep this file strict: only verifie
   - Root map: [`README.md`](README.md)
   - API service: [`apps/api/README.md`](apps/api/README.md)
   - Web service: [`apps/web/README.md`](apps/web/README.md)
-  - AI service: [`apps/ai/README.md`](apps/ai/README.md)
   - Shared package: [`packages/shared/README.md`](packages/shared/README.md)
   - Supporting docs index: [`docs/README.md`](docs/README.md)
   - SUNAT docs index: [`comprobantes sunat/README.md`](comprobantes%20sunat/README.md)
 - Historical sprint/archive index: [`otros no uties/README.md`](otros%20no%20uties/README.md) — planning context only.
 - Per-sprint API contracts: [`docs/contracts/`](docs/contracts/) — freeze payloads, filters, and frontend fields.
 - Historical table ownership map: [`otros no uties/00-MAPA-TABLAS.md`](otros%20no%20uties/00-MAPA-TABLAS.md) — verify against `schema.prisma` before editing data models.
-- Scoped instructions (auto-applied): [`.github/instructions/`](.github/instructions/) — NestJS (`apps/api/src/**`), FastAPI (`apps/ai/**/*.py`), Prisma (`apps/api/prisma/**`), and Next.js (`apps/web/**`).
+- Scoped instructions (auto-applied): [`.github/instructions/`](.github/instructions/) — NestJS (`apps/api/src/**`), Prisma (`apps/api/prisma/**`), and Next.js (`apps/web/**`).
 - Frontend conventions: [`apps/web/AGENTS.md`](apps/web/AGENTS.md).
 - CI pipeline (lint -> type-check -> tests -> build, with Postgres + Redis services): [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 

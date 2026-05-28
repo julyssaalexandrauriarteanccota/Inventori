@@ -66,10 +66,6 @@ vi.mock('@/hooks/use-productos', () => ({
   }),
 }))
 
-vi.mock('@/components/clasificar-ticket-button', () => ({
-  ClasificarTicketButton: () => null,
-}))
-
 import { TicketForm } from './ticket-form'
 import { CerrarTicketForm } from './cerrar-ticket-form'
 

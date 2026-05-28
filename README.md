@@ -6,7 +6,7 @@ Guía inicial de la raíz del repositorio.
 
 Este documento cubre la **estructura de la raíz** y el **arranque local completo** del proyecto.
 
-Para detalles internos de `apps/ai`, `apps/api`, `apps/web` y `packages/shared`, revisa los README propios de cada carpeta.
+Para detalles internos de `apps/api`, `apps/web` y `packages/shared`, revisa los README propios de cada carpeta.
 
 La información aquí fue verificada contra la estructura real del repositorio y estos archivos de configuración:
 
@@ -23,14 +23,12 @@ La información aquí fue verificada contra la estructura real del repositorio y
 
 - `apps/web`: frontend en Next.js.
 - `apps/api`: backend en NestJS.
-- `apps/ai`: servicio independiente en FastAPI para OCR y clasificación.
 - `packages/shared`: paquete compartido para enums, tipos y esquemas.
 
 Importante:
 
-- `apps/ai` **no** forma parte del workspace de `pnpm`.
 - El workspace de `pnpm` incluye `apps/api`, `apps/web` y `packages/*`.
-- El comando raíz `pnpm dev` levanta `web`, `api` y `ai` en paralelo.
+- El comando raíz `pnpm dev` levanta `web` y `api` en paralelo.
 
 ## Instalación rápida en otro equipo
 
@@ -38,7 +36,6 @@ Requisitos:
 
 - Node.js `24`.
 - pnpm `10`.
-- Python `3.12`.
 - Docker Desktop o Docker Engine con Compose.
 
 Pasos desde una terminal en la raíz del proyecto:
@@ -47,13 +44,12 @@ Pasos desde una terminal en la raíz del proyecto:
 pnpm install
 Copy-Item .env.example .env
 docker compose up -d postgres redis minio minio-init
-pnpm setup:ai
 pnpm prisma:generate
 pnpm db:migrate
 pnpm dev
 ```
 
-Antes de ejecutar `pnpm dev`, completa en `.env` los secretos vacíos que correspondan a tu entorno: `JWT_SECRET`, `JWT_REFRESH_SECRET`, `AI_INTERNAL_KEY`, credenciales SMTP, claves de IA y credenciales SUNAT si vas a probar emisión fiscal real.
+Antes de ejecutar `pnpm dev`, completa en `.env` los secretos vacíos que correspondan a tu entorno: `JWT_SECRET`, `JWT_REFRESH_SECRET`, credenciales SMTP y credenciales SUNAT si vas a probar emisión fiscal real.
 
 ### Base de datos y Prisma
 
@@ -76,20 +72,10 @@ Servicios locales:
 - Web: `http://localhost:3000`
 - API: `http://localhost:4000/api/v1`
 - Swagger API: `http://localhost:4000/api/docs`
-- AI: `http://localhost:8000`
 - PostgreSQL local: `localhost:5433`
 - Redis local: `localhost:6379`
 - MinIO API: `http://localhost:9000`
 - MinIO consola: `http://localhost:9001`
-
-Si clonas en Linux/macOS, crea el entorno de AI con estos comandos equivalentes:
-
-```bash
-cd apps/ai
-python3.12 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-cd ../..
-```
 
 ## Mapa de la raíz
 
@@ -101,8 +87,8 @@ cd ../..
 | `.vscode/` | Carpeta | Configuración del workspace para VS Code | Incluye `extensions.json` y `mcp.json` |
 | `.windsurf/` | Carpeta | Habilidades para Windsurf | Estructura similar a `.agents/` |
 | `SPRINTS/` | Carpeta | Planificación y secuencia de trabajo por sprint | Tiene README propio y archivos `00-19` |
-| `apps/` | Carpeta | Aplicaciones principales del sistema | Contiene `ai`, `api` y `web` |
-| `docker/` | Carpeta | Dockerfiles por servicio | Tiene `Dockerfile.ai`, `Dockerfile.api`, `Dockerfile.web` |
+| `apps/` | Carpeta | Aplicaciones principales del sistema | Contiene `api` y `web` |
+| `docker/` | Carpeta | Dockerfiles por servicio | Tiene `Dockerfile.api` y `Dockerfile.web` |
 | `docs/` | Carpeta | Documentación auxiliar y contratos | Contiene `contracts/` y `superpowers/` |
 | `packages/` | Carpeta | Paquetes compartidos del monorepo | Actualmente contiene `shared/` |
 
@@ -112,7 +98,6 @@ cd ../..
 
 Primer nivel verificado:
 
-- `apps/ai`
 - `apps/api`
 - `apps/web`
 
@@ -145,7 +130,6 @@ Archivos detectados en `docs/contracts/`:
 
 Primer nivel verificado:
 
-- `docker/Dockerfile.ai`
 - `docker/Dockerfile.api`
 - `docker/Dockerfile.web`
 
@@ -184,7 +168,7 @@ Estas carpetas no representan módulos funcionales del ERP, sino configuración 
 | `pnpm-workspace.yaml` | Define el workspace: `apps/api`, `apps/web` y `packages/*` |
 | `pnpm-lock.yaml` | Lockfile del monorepo |
 | `docker-compose.yml` | Infraestructura local: PostgreSQL, Redis, MinIO y backups |
-| `.gitignore` | Exclusiones de secretos, archivos generados y artefactos locales como `node_modules`, `.env`, `.venv`, `.next`, `dist`, uploads y cliente Prisma generado |
+| `.gitignore` | Exclusiones de secretos, archivos generados y artefactos locales como `node_modules`, `.env`, `.next`, `dist`, uploads y cliente Prisma generado |
 | `opencode.json` | Configuración MCP local para `shadcn` |
 
 
@@ -194,7 +178,6 @@ Estas carpetas no representan módulos funcionales del ERP, sino configuración 
 Desde la raíz del repositorio:
 
 - Instalar dependencias: `pnpm install`
-- Preparar entorno Python de AI: `pnpm setup:ai`
 - Generar cliente Prisma: `pnpm prisma:generate`
 - Revisar estado de migraciones: `pnpm db:status`
 - Ejecutar migraciones en desarrollo: `pnpm db:migrate`
@@ -204,7 +187,6 @@ Desde la raíz del repositorio:
 - Levantar todo: `pnpm dev`
 - Levantar web: `pnpm dev:web`
 - Levantar api: `pnpm dev:api`
-- Levantar ai: `pnpm dev:ai`
 - Build completo: `pnpm build`
 - Lint general: `pnpm lint`
 - Verificación de tipos: `pnpm type-check`
@@ -235,21 +217,18 @@ Secuencia observada:
 3. `test-shared`
 4. `test-api`
 5. `test-web`
-6. `test-ai`
-7. `build`
+6. `build`
 
 Toolchain verificado en CI:
 
 - Node `24`
 - `pnpm` `10`
-- Python `3.12` para `apps/ai`
 
 ## Estado de los README
 
 - `SPRINTS/README.md`: documentado
 - `apps/api/README.md`: documentado
 - `apps/web/README.md`: documentado
-- `apps/ai/README.md`: documentado
 - `packages/shared/README.md`: documentado
 - `docs/README.md`: documentado
 - `docs/arquitectura-escalable-erp.md`: plan de arquitectura escalable

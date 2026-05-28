@@ -49,7 +49,6 @@ export * from "./types/master-data.type";
 export * from "./types/soporte.type";
 export * from "./types/ventas.type";
 export * from "./types/socket-events.type";
-export * from "./types/ai.type";
 export * from "./types/sunat-deadline.type";
 export * from "./types/dias-habiles.type";
 export * from "./types/validacion-fiscal.type";

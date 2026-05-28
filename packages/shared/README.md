@@ -157,7 +157,6 @@ Schemas de dominio detectados:
 - `facturacion.schema.ts`
 - `config-reportes.schema.ts`
 - `soporte.schema.ts`
-- `ai.schema.ts`
 - `location.schema.ts`
 
 ### Cobertura funcional observada
@@ -222,14 +221,6 @@ Incluye schemas para:
 - filtros de tickets
 - respuesta pública de tracking de ticket
 
-#### `ai.schema.ts`
-
-Incluye schemas para:
-
-- OCR de factura
-- OCR de serie
-- clasificación de ticket
-
 #### `location.schema.ts`
 
 Incluye schemas para:
@@ -252,7 +243,6 @@ Tipos detectados por dominio:
 - `facturacion.type.ts`
 - `config-reportes.type.ts`
 - `soporte.type.ts`
-- `ai.type.ts`
 - `location.type.ts`
 - `pagination.type.ts`
 - `socket-events.type.ts`
@@ -313,14 +303,6 @@ Además de contratos actuales de comprobantes, define contratos fiscales futuros
 - `ClienteValidacionSunatPayload`
 
 Los tipos de certificado/proveedor SUNAT no se definieron todavía porque dependen de una decisión futura de proveedor y almacenamiento seguro.
-
-#### `ai.type.ts`
-
-Define tipos compartidos para:
-
-- resultado OCR de factura
-- resultado OCR de serie
-- resultado de clasificación de ticket
 
 ## Tests
 

@@ -427,7 +427,6 @@ El patrón dominante es:
 Hooks detectados:
 
 - auth: `use-auth.ts`
-- AI: `use-ai.ts`
 - caja: `use-caja.ts`
 - clientes: `use-clientes.ts`
 - compras: `use-compras.ts`
@@ -564,9 +563,7 @@ Subcarpetas detectadas:
   - `toolbar-search-input.tsx`
   - `toolbar-filters-button.tsx`
   - `auto-refresh-control.tsx`
-- soporte y AI:
-  - `ocr-invoice-upload.tsx`
-  - `clasificar-ticket-button.tsx`
+- notificaciones y conectividad:
   - `notification-center.tsx`
   - `offline-banner.tsx`
 - datos y formularios:

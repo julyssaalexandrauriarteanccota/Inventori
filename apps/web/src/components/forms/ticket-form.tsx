@@ -25,7 +25,6 @@ import {
   type ClienteEquipoListItem,
   type EquipoListItem,
   type TicketFormPayload,
-  type TicketClassificationResult,
 } from "@erp/shared";
 
 import { cn } from "@/lib/utils";
@@ -64,7 +63,6 @@ import { useClientes } from "@/hooks/use-clientes";
 import { useClienteEquipos, useEquipos } from "@/hooks/use-equipos";
 import { useProductos } from "@/hooks/use-productos";
 import { useUsuarios } from "@/hooks/use-configuracion";
-import { ClasificarTicketButton } from "@/components/clasificar-ticket-button";
 import { EquipoQuickCreateModal } from "@/components/modals/equipo-quick-create-modal";
 import { ClienteQuickCreateModal } from "@/components/modals/cliente-quick-create-modal";
 import { Plus } from "lucide-react";
@@ -173,26 +171,9 @@ export function TicketForm({
   const equipoId = useWatch({ control, name: "equipoId" });
   const clienteEquipoId = useWatch({ control, name: "clienteEquipoId" });
   const tecnicoId = useWatch({ control, name: "tecnicoId" });
-  const titulo = useWatch({ control, name: "titulo" });
-  const descripcion = useWatch({ control, name: "descripcion" });
   const fechaPromesa = useWatch({ control, name: "fechaPromesa" });
   const detallesIniciales = useWatch({ control, name: "detalles" });
   const allowQuickCreate = mode === "create";
-
-  const [aiSuggestion, setAiSuggestion] =
-    useState<TicketClassificationResult | null>(null);
-
-  const handleAiResult = (result: TicketClassificationResult) => {
-    setAiSuggestion(result);
-    setValue("prioridad", result.prioridadSugerida as PrioridadTicket);
-    if (
-      Object.values(TipoServicio).includes(
-        result.tipoServicioSugerido as TipoServicio,
-      )
-    ) {
-      setValue("tipoServicio", result.tipoServicioSugerido as TipoServicio);
-    }
-  };
 
   const [clienteOpen, setClienteOpen] = useState(false);
   const [clienteSearch, setClienteSearch] = useState("");
@@ -966,31 +947,17 @@ export function TicketForm({
 
         {/* === SECCIÓN 3: CLASIFICACIÓN === */}
         <div className="border-t border-border/60 border-l-[3px] border-l-orange-400 p-4 dark:border-l-orange-800 sm:p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 ring-2 ring-orange-100 dark:ring-orange-900/30">
-                3
-              </span>
-              <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
-                <Settings2 className="size-3.5 text-orange-600 dark:text-orange-400" />
-              </div>
-              <h3 className="text-sm font-semibold text-foreground">
-                Clasificación
-              </h3>
+          <div className="mb-4 flex items-center gap-2.5">
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[11px] font-bold text-orange-600 dark:bg-orange-900/40 dark:text-orange-400 ring-2 ring-orange-100 dark:ring-orange-900/30">
+              3
+            </span>
+            <div className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-orange-100 dark:bg-orange-900/40">
+              <Settings2 className="size-3.5 text-orange-600 dark:text-orange-400" />
             </div>
-            <ClasificarTicketButton
-              titulo={titulo ?? ""}
-              descripcion={descripcion ?? ""}
-              onResult={handleAiResult}
-              disabled={isLoading}
-            />
+            <h3 className="text-sm font-semibold text-foreground">
+              Clasificación
+            </h3>
           </div>
-          {aiSuggestion && (
-            <p className="mb-3 text-xs text-muted-foreground">
-              IA sugirió: <strong>{aiSuggestion.categoriaFalla}</strong> —
-              confianza {aiSuggestion.confianza}%
-            </p>
-          )}
           <div className="grid gap-4 sm:gap-6 md:grid-cols-2">
             <Field data-invalid={errors.prioridad ? true : undefined}>
               <FieldLabel>Prioridad</FieldLabel>
