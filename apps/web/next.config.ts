@@ -56,6 +56,18 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: buildRemotePatterns(),
   },
+  // Tree-shake imports nominales de paquetes con muchísimos sub-módulos.
+  // Reduce drásticamente el coste de compilar en dev (HMR/turbopack) y el
+  // tamaño del bundle en prod. Sólo se listan paquetes que el repo ya usa
+  // ampliamente como imports nominales.
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      '@tanstack/react-table',
+      '@tanstack/react-query',
+      'date-fns',
+    ],
+  },
 };
 
 export default withSerwist({
