@@ -6,12 +6,17 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Ban,
+  CheckCircle2,
+  Coins,
   Download,
   FileMinus,
   FilePlus,
+  FileText,
   Loader2,
+  MoreHorizontal,
   Printer,
   RefreshCw,
+  Wallet,
 } from "lucide-react";
 import type { FormatoImpresionDocumento } from "@erp/shared";
 import { toast } from "sonner";
@@ -27,6 +32,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { StatCard, type StatCardTheme } from "@/components/layout/stat-card";
 import { ConfirmarBajaModal } from "@/components/modals/confirmar-baja-modal";
 import {
   explainSunatRejectMessage,
@@ -135,6 +148,23 @@ const ESTADO_TONE: Record<string, string> = {
     "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300",
   [EstadoComprobante.ANULADO]:
     "bg-neutral-100 text-neutral-600 dark:bg-neutral-900 dark:text-neutral-400",
+};
+
+const TIPO_LABEL_DETAIL: Record<TipoDocumento, string> = {
+  [TipoDocumento.FACTURA]: "Factura",
+  [TipoDocumento.BOLETA]: "Boleta",
+  [TipoDocumento.NOTA_CREDITO]: "Nota de crédito",
+  [TipoDocumento.NOTA_DEBITO]: "Nota de débito",
+};
+
+const ESTADO_THEME: Record<string, StatCardTheme> = {
+  [EstadoComprobante.PENDIENTE_ENVIO]: "slate",
+  [EstadoComprobante.EN_PROCESO_SUNAT]: "sky",
+  [EstadoComprobante.ACEPTADO]: "emerald",
+  [EstadoComprobante.ACEPTADO_CON_OBSERVACIONES]: "emerald",
+  [EstadoComprobante.RECHAZADO]: "rose",
+  [EstadoComprobante.BAJA_PENDIENTE]: "amber",
+  [EstadoComprobante.ANULADO]: "slate",
 };
 
 function toMoneyNumber(value: MoneyValue) {
@@ -408,38 +438,43 @@ export default function ComprobanteDetallePage({
     );
   }
 
+  const tipoLabel = TIPO_LABEL_DETAIL[data.tipo] ?? data.tipo;
+  const estadoTheme: StatCardTheme = ESTADO_THEME[data.estado] ?? "slate";
+  const puedeGenerarNcNd =
+    data.tipo === TipoDocumento.FACTURA ||
+    data.tipo === TipoDocumento.BOLETA ||
+    data.tipo === TipoDocumento.NOTA_CREDITO ||
+    data.tipo === TipoDocumento.NOTA_DEBITO;
+
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header con acciones */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+    <div className="relative flex flex-col gap-5 w-full min-w-0 sm:flex-1 sm:min-h-0">
+      {/* Decorative glows */}
+      <div className="pointer-events-none absolute -z-10 bg-indigo-400/6 dark:bg-indigo-500/6 blur-[140px] top-0 left-1/4 size-[420px] rounded-full" />
+      <div className="pointer-events-none absolute -z-10 bg-sky-400/5 dark:bg-sky-500/5 blur-[130px] bottom-1/4 right-12 size-[380px] rounded-full" />
+
+      {/* Header: back + numero + estado + meta */}
+      <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="size-8"
+            className="size-9 rounded-xl shrink-0"
             onClick={() => router.back()}
           >
             <ArrowLeft className="size-4" />
+            <span className="sr-only">Volver</span>
           </Button>
-          <div>
-            <h2 className="font-mono text-2xl font-semibold tracking-tight">
-              {data.numero}
-            </h2>
-            <div className="mt-1 flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="truncate font-mono text-xl font-semibold tracking-tight sm:text-2xl">
+                {data.numero}
+              </h1>
               <Badge
                 variant="outline"
                 className={`border-0 ${ESTADO_TONE[data.estado] ?? ""}`}
               >
                 {data.estado}
               </Badge>
-              <span className="text-xs text-muted-foreground">
-                {new Date(data.fechaEmision).toLocaleString("es-PE")}
-              </span>
-              {data.ambiente ? (
-                <Badge variant="outline" className="text-[10px]">
-                  {data.ambiente}
-                </Badge>
-              ) : null}
               {notaCreditoAnulacion ? (
                 <Link href="#notas-credito-vinculadas">
                   <Badge
@@ -451,133 +486,61 @@ export default function ComprobanteDetallePage({
                 </Link>
               ) : null}
             </div>
+            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 truncate text-xs text-muted-foreground">
+              <span>{tipoLabel}</span>
+              <span aria-hidden>·</span>
+              <span>
+                {new Date(data.fechaEmision).toLocaleString("es-PE")}
+              </span>
+              {data.clienteNombre ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="truncate">{data.clienteNombre}</span>
+                </>
+              ) : null}
+              {data.ambiente ? (
+                <>
+                  <span aria-hidden>·</span>
+                  <span className="font-medium uppercase tracking-wide text-[10px]">
+                    {data.ambiente}
+                  </span>
+                </>
+              ) : null}
+            </p>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {data.venta ? (
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/ventas/${data.venta.id}`}>Ver venta</Link>
-            </Button>
-          ) : null}
+
+        {/* Actions: primary (visible) + secondary (dropdown) + destructive */}
+        <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+          {/* Primary: Imprimir A4 + Ticket */}
           <Button
             variant="outline"
             size="sm"
-            className="rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            className="h-9 rounded-lg gap-1.5"
             disabled={!data}
             onClick={() => openPrintPreview("A4")}
           >
             <Printer className="size-3.5" />
-            A4
+            <span className="hidden sm:inline">A4</span>
           </Button>
           <Button
             variant="outline"
             size="sm"
-            className="rounded-lg transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.02] active:scale-95 active:duration-150"
+            className="h-9 rounded-lg gap-1.5"
             disabled={!data}
             onClick={() => openPrintPreview("TICKET")}
           >
             <Printer className="size-3.5" />
-            Ticket
+            <span className="hidden sm:inline">Ticket</span>
           </Button>
-          {data.xmlUrl ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={downloadingArtifact === "xml"}
-              onClick={() => downloadArtifact("xml")}
-            >
-              {downloadingArtifact === "xml" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Download className="size-3.5" />
-              )}
-              XML
-            </Button>
-          ) : null}
-          {data.cdrUrl ? (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={downloadingArtifact === "cdr"}
-              onClick={() => downloadArtifact("cdr")}
-            >
-              {downloadingArtifact === "cdr" ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Download className="size-3.5" />
-              )}
-              CDR
-            </Button>
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={consultar.isPending}
-            onClick={() =>
-              consultar.mutate(id, {
-                onSuccess: () => toast.success("Consulta SUNAT realizada"),
-                onError: (e) =>
-                  toast.error(
-                    e instanceof Error ? e.message : "Error al consultar",
-                  ),
-              })
-            }
-          >
-            <RefreshCw
-              className={`size-3.5 ${consultar.isPending ? "animate-spin" : ""}`}
-            />
-            Consultar SUNAT
-          </Button>
-          {data.estado === EstadoComprobante.RECHAZADO ? (
-            <Button
-              size="sm"
-              disabled={reintentar.isPending}
-              onClick={() =>
-                reintentar.mutate(id, {
-                  onSuccess: () => toast.success("Reintento encolado"),
-                  onError: (e) =>
-                    toast.error(
-                      e instanceof Error ? e.message : "Error al reintentar",
-                    ),
-                })
-              }
-            >
-              {reintentar.isPending ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : null}
-              Reintentar envío
-            </Button>
-          ) : null}
-          {puedeAnular ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setAnularOpen(true)}
-            >
-              <Ban className="size-3.5" /> Comunicar baja
-            </Button>
-          ) : null}
-          {puedeAnularConNc ? (
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() =>
-                router.push(
-                  `/comprobantes/nueva-nc?origen=${id}&motivo=01&anula=1`,
-                )
-              }
-            >
-              <Ban className="size-3.5" /> Anular con NC
-            </Button>
-          ) : null}
-          {data.tipo === TipoDocumento.FACTURA ||
-          data.tipo === TipoDocumento.BOLETA ||
-          data.tipo === TipoDocumento.NOTA_CREDITO ||
-          data.tipo === TipoDocumento.NOTA_DEBITO ? (
+
+          {/* NC/ND quick actions inline si aplica */}
+          {puedeGenerarNcNd ? (
             <>
               <Button
                 variant="outline"
                 size="sm"
+                className="h-9 rounded-lg gap-1.5 border-emerald-300/70 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 dark:border-emerald-700/40 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
                 disabled={!estadoAceptadoSunat || !saldoNoAcreditado?.puedeEmitirNc}
                 title={
                   saldoNoAcreditado?.bloqueoPorNcEnProceso
@@ -588,21 +551,203 @@ export default function ComprobanteDetallePage({
                   router.push(`/comprobantes/nueva-nc?origen=${id}&motivo=03`)
                 }
               >
-                <FileMinus className="size-3.5" /> Generar NC
+                <FileMinus className="size-3.5" />
+                <span className="hidden sm:inline">NC</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
+                className="h-9 rounded-lg gap-1.5 border-rose-300/70 text-rose-700 hover:bg-rose-50 hover:text-rose-800 dark:border-rose-700/40 dark:text-rose-300 dark:hover:bg-rose-950/40"
                 disabled={!estadoAceptadoSunat}
                 onClick={() =>
                   router.push(`/comprobantes/nueva-nd?origen=${id}&motivo=03`)
                 }
               >
-                <FilePlus className="size-3.5" /> Generar ND
+                <FilePlus className="size-3.5" />
+                <span className="hidden sm:inline">ND</span>
               </Button>
             </>
           ) : null}
+
+          {/* Destructive: Comunicar baja / Anular con NC */}
+          {puedeAnular ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-9 rounded-lg gap-1.5"
+              onClick={() => setAnularOpen(true)}
+            >
+              <Ban className="size-3.5" />
+              <span className="hidden sm:inline">Comunicar baja</span>
+              <span className="sm:hidden">Baja</span>
+            </Button>
+          ) : null}
+          {puedeAnularConNc ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-9 rounded-lg gap-1.5"
+              onClick={() =>
+                router.push(
+                  `/comprobantes/nueva-nc?origen=${id}&motivo=01&anula=1`,
+                )
+              }
+            >
+              <Ban className="size-3.5" />
+              <span className="hidden sm:inline">Anular con NC</span>
+              <span className="sm:hidden">Anular</span>
+            </Button>
+          ) : null}
+
+          {/* Secondary: dropdown 'Más' */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-lg gap-1.5"
+                aria-label="Más acciones"
+              >
+                <MoreHorizontal className="size-3.5" />
+                <span className="hidden sm:inline">Más</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {data.venta ? (
+                <DropdownMenuItem
+                  onClick={() => router.push(`/ventas/${data.venta!.id}`)}
+                >
+                  <FileText className="size-4" />
+                  Ver venta de origen
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                disabled={consultar.isPending}
+                onClick={() =>
+                  consultar.mutate(id, {
+                    onSuccess: () => toast.success("Consulta SUNAT realizada"),
+                    onError: (e) =>
+                      toast.error(
+                        e instanceof Error ? e.message : "Error al consultar",
+                      ),
+                  })
+                }
+              >
+                <RefreshCw
+                  className={`size-4 ${consultar.isPending ? "animate-spin" : ""}`}
+                />
+                Consultar SUNAT
+              </DropdownMenuItem>
+              {data.estado === EstadoComprobante.RECHAZADO ? (
+                <DropdownMenuItem
+                  disabled={reintentar.isPending}
+                  onClick={() =>
+                    reintentar.mutate(id, {
+                      onSuccess: () => toast.success("Reintento encolado"),
+                      onError: (e) =>
+                        toast.error(
+                          e instanceof Error
+                            ? e.message
+                            : "Error al reintentar",
+                        ),
+                    })
+                  }
+                >
+                  <RefreshCw
+                    className={`size-4 ${reintentar.isPending ? "animate-spin" : ""}`}
+                  />
+                  Reintentar envío
+                </DropdownMenuItem>
+              ) : null}
+              {data.xmlUrl || data.cdrUrl ? (
+                <DropdownMenuSeparator />
+              ) : null}
+              {data.xmlUrl ? (
+                <DropdownMenuItem
+                  disabled={downloadingArtifact === "xml"}
+                  onClick={() => downloadArtifact("xml")}
+                >
+                  {downloadingArtifact === "xml" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  Descargar XML
+                </DropdownMenuItem>
+              ) : null}
+              {data.cdrUrl ? (
+                <DropdownMenuItem
+                  disabled={downloadingArtifact === "cdr"}
+                  onClick={() => downloadArtifact("cdr")}
+                >
+                  {downloadingArtifact === "cdr" ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Download className="size-4" />
+                  )}
+                  Descargar CDR
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+      </div>
+
+      {/* Stats row: Tipo / Total / Estado / Saldo */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="Tipo"
+          value={tipoLabel}
+          icon={FileText}
+          theme="indigo"
+          subtitle={`Serie ${data.serie ?? "—"}`}
+        />
+        <StatCard
+          label="Total"
+          value={fmtMoney(data.total, data.moneda)}
+          icon={Coins}
+          theme="sky"
+          subtitle={`IGV ${fmtMoney(data.igv, data.moneda)}`}
+        />
+        <StatCard
+          label="Estado SUNAT"
+          value={data.estado.replace(/_/g, " ")}
+          icon={CheckCircle2}
+          theme={estadoTheme}
+          subtitle={
+            data.cdrRecibidaAt
+              ? `CDR ${new Date(data.cdrRecibidaAt).toLocaleDateString("es-PE")}`
+              : data.ambiente ?? "Pendiente CDR"
+          }
+        />
+        {mostrarSaldoNoAcreditado ? (
+          <StatCard
+            label="Saldo no acreditado"
+            value={fmtMoney(
+              saldoNoAcreditado?.saldoNoAcreditado,
+              data.moneda,
+            )}
+            icon={Wallet}
+            theme={
+              (saldoNoAcreditado?.saldoNoAcreditado ?? 0) > 0
+                ? "amber"
+                : "emerald"
+            }
+            subtitle={
+              saldoNoAcreditado?.bloqueoPorNcEnProceso
+                ? `NC ${saldoNoAcreditado.bloqueoPorNcEnProceso.numero} en proceso`
+                : "Disponible para NC"
+            }
+          />
+        ) : (
+          <StatCard
+            label="Saldo no acreditado"
+            value={"—"}
+            icon={Wallet}
+            theme="slate"
+            subtitle={"Aplica solo a aceptados"}
+          />
+        )}
       </div>
 
       <Tabs defaultValue="detalle" className="w-full">

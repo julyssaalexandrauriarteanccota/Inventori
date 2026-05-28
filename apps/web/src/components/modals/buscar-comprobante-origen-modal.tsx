@@ -145,21 +145,36 @@ function BuscarComprobanteOrigenModalContent({
   // Filters
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const debouncedSearch = useDebounce(search, 300);
+
+  // Allowed tipo options per proposito — SUNAT rules:
+  //  · NC origen: FACTURA o BOLETA (no se emite NC sobre otra NC/ND).
+  //  · ND origen: FACTURA o BOLETA (no se emite ND sobre otra NC/ND).
+  //  · Baja (RA): sólo FACTURA. Boletas se anulan con NC.
+  const tipoOptions = useMemo<TipoDocumento[]>(() => {
+    if (proposito === "baja") return [TipoDocumento.FACTURA];
+    return [TipoDocumento.FACTURA, TipoDocumento.BOLETA];
+  }, [proposito]);
+
   const [tipoFilter, setTipoFilter] = useState<TipoDocumento | "todos">(
     "todos",
   );
-  const debouncedSearch = useDebounce(search, 300);
 
   // Selection
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // Query comprobantes
+  // Query comprobantes — siempre limita el listado a los tipos válidos según
+  // propósito y a estados aceptados (con o sin observaciones), para evitar
+  // mostrar candidatos no elegibles (NC sobre NC, anulados, en proceso, etc.).
+  const tiposCsv =
+    tipoFilter === "todos" ? tipoOptions.join(",") : undefined;
   const query = useComprobantes({
     page,
     limit: 8,
     search: debouncedSearch || undefined,
-    estado: EstadoComprobante.ACEPTADO,
+    estados: `${EstadoComprobante.ACEPTADO},${EstadoComprobante.ACEPTADO_CON_OBSERVACIONES}`,
     tipo: tipoFilter === "todos" ? undefined : tipoFilter,
+    tipos: tiposCsv,
   });
 
   const comprobantes = query.data?.data ?? [];
@@ -174,19 +189,6 @@ function BuscarComprobanteOrigenModalContent({
   );
   const elegibilidad = elegibilidadQ.data?.data ?? null;
   const elegibilidadLoading = elegibilidadQ.isLoading && !!selectedId;
-
-  // Allowed tipo options per proposito
-  const tipoOptions = useMemo(() => {
-    if (proposito === "baja") {
-      return [TipoDocumento.FACTURA];
-    }
-    return [
-      TipoDocumento.FACTURA,
-      TipoDocumento.BOLETA,
-      TipoDocumento.NOTA_CREDITO,
-      TipoDocumento.NOTA_DEBITO,
-    ];
-  }, [proposito]);
 
   const handleRowClick = useCallback((id: string) => {
     setSelectedId((prev) => (prev === id ? null : id));
@@ -205,102 +207,131 @@ function BuscarComprobanteOrigenModalContent({
   }, [selectedId, elegibilidad, proposito, router, onClose]);
 
   return (
-    <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col rounded-2xl">
-        <DialogHeader>
-          <DialogTitle className={cn("flex items-center gap-2", config.accent)}>
-            <FileText className="size-5" />
-            {config.title}
-          </DialogTitle>
-          <DialogDescription>{config.description}</DialogDescription>
-        </DialogHeader>
+    <DialogContent
+      className={cn(
+        // Responsive: usa todo el viewport en móvil, hasta 4xl en desktop.
+        // El cuerpo es flex-col con secciones scrollable internas.
+        "w-[calc(100vw-1rem)] sm:max-w-2xl lg:max-w-4xl",
+        "max-h-[calc(100dvh-2rem)] sm:max-h-[85vh]",
+        "flex flex-col gap-3 p-0 overflow-hidden rounded-2xl",
+      )}
+    >
+      {/* Header */}
+      <DialogHeader className="px-5 pt-5 pb-3 border-b border-border/60">
+        <DialogTitle className={cn("flex items-center gap-2", config.accent)}>
+          <FileText className="size-5" />
+          {config.title}
+        </DialogTitle>
+        <DialogDescription className="text-xs">
+          {config.description}
+        </DialogDescription>
+      </DialogHeader>
 
-        {/* Filters */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-                setSelectedId(null);
-              }}
-              placeholder="Buscar por número, serie o cliente…"
-              className="pl-9 rounded-lg"
-            />
-          </div>
-          {tipoOptions.length > 1 && (
-            <Select
-              value={tipoFilter}
-              onValueChange={(v) => {
-                setTipoFilter(v as TipoDocumento | "todos");
-                setPage(1);
-                setSelectedId(null);
-              }}
-            >
-              <SelectTrigger className="w-[160px] rounded-lg">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los tipos</SelectItem>
-                {tipoOptions.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {TIPO_LABEL[t]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
+      {/* Filters */}
+      <div className="flex flex-col gap-2 px-5 sm:flex-row sm:items-center">
+        <div className="relative flex-1 min-w-0">
+          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+              setSelectedId(null);
+            }}
+            placeholder="Buscar por número, serie o cliente…"
+            className="pl-9 rounded-lg"
+          />
         </div>
+        {tipoOptions.length > 1 ? (
+          <Select
+            value={tipoFilter}
+            onValueChange={(v) => {
+              setTipoFilter(v as TipoDocumento | "todos");
+              setPage(1);
+              setSelectedId(null);
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-[160px] rounded-lg">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los tipos</SelectItem>
+              {tipoOptions.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {TIPO_LABEL[t]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <Badge
+            variant="outline"
+            className="h-9 px-3 rounded-lg text-xs justify-center sm:w-[160px]"
+          >
+            {TIPO_LABEL[tipoOptions[0]]} (único tipo válido)
+          </Badge>
+        )}
+      </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto border rounded-xl">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="text-xs">Número</TableHead>
-                <TableHead className="text-xs">Tipo</TableHead>
-                <TableHead className="text-xs">Cliente</TableHead>
-                <TableHead className="text-xs">Emisión</TableHead>
-                <TableHead className="text-xs text-right">Total</TableHead>
-                <TableHead className="text-xs">Estado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {query.isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 w-full" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : comprobantes.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="text-center text-muted-foreground py-8"
-                  >
-                    No se encontraron comprobantes aceptados.
-                  </TableCell>
+      {/* Table — scroll interno + flex-1 para llenar el espacio disponible */}
+      <div className="flex-1 min-h-0 overflow-auto border-y border-border/60 mx-0">
+        <Table>
+          <TableHeader className="sticky top-0 z-10 bg-background">
+            <TableRow className="bg-muted/70 hover:bg-muted/70">
+              <TableHead className="text-xs">Número</TableHead>
+              <TableHead className="text-xs hidden sm:table-cell">Tipo</TableHead>
+              <TableHead className="text-xs">Cliente</TableHead>
+              <TableHead className="text-xs hidden md:table-cell">Emisión</TableHead>
+              <TableHead className="text-xs text-right">Total</TableHead>
+              <TableHead className="text-xs hidden lg:table-cell">Estado</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {query.isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 6 }).map((_, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
                 </TableRow>
-              ) : (
-                comprobantes.map((c) => (
-                  <ComprobanteRow
-                    key={c.id}
-                    comprobante={c}
-                    selected={selectedId === c.id}
-                    onClick={() => handleRowClick(c.id)}
-                  />
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            ) : comprobantes.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className="text-center text-muted-foreground py-10"
+                >
+                  {proposito === "baja" ? (
+                    <>
+                      No hay facturas aceptadas disponibles para baja.
+                      <br />
+                      <span className="text-xs">Boletas se anulan vía nota de crédito.</span>
+                    </>
+                  ) : (
+                    <>
+                      No hay facturas o boletas aceptadas para usar como origen.
+                    </>
+                  )}
+                </TableCell>
+              </TableRow>
+            ) : (
+              comprobantes.map((c) => (
+                <ComprobanteRow
+                  key={c.id}
+                  comprobante={c}
+                  selected={selectedId === c.id}
+                  onClick={() => handleRowClick(c.id)}
+                />
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
 
-        {/* Pagination */}
+      {/* Footer: pagination + elegibility panel */}
+      <div className="flex flex-col gap-2 px-5 pb-5">
         {totalPages > 1 && (
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
@@ -335,7 +366,6 @@ function BuscarComprobanteOrigenModalContent({
           </div>
         )}
 
-        {/* Elegibilidad panel */}
         {selectedId && (
           <ElegibilidadPanel
             elegibilidad={elegibilidad}
@@ -345,6 +375,7 @@ function BuscarComprobanteOrigenModalContent({
             onContinue={handleContinue}
           />
         )}
+      </div>
     </DialogContent>
   );
 }

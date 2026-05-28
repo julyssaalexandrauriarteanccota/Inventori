@@ -45,7 +45,11 @@ export interface CrearNotaDebitoPayload {
 
 export interface QueryComprobanteFilters extends QueryParams {
   tipo?: TipoDocumento;
+  /** Lista CSV (`FACTURA,BOLETA`) — OR de tipos. Ignorado si `tipo` está. */
+  tipos?: string;
   estado?: EstadoComprobante;
+  /** Lista CSV — OR de estados. Ignorado si `estado` está. */
+  estados?: string;
 }
 
 export interface FacturacionConfigPayload {

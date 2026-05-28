@@ -518,8 +518,19 @@ export class FacturacionService {
 
     const where: Record<string, unknown> = {};
 
-    if (query.tipo) where.tipo = query.tipo;
-    if (query.estado) where.estado = query.estado;
+    // `tipo` (singular, exacto) tiene prioridad sobre `tipos` (lista).
+    if (query.tipo) {
+      where.tipo = query.tipo;
+    } else if (query.tipos && query.tipos.length > 0) {
+      where.tipo = { in: query.tipos };
+    }
+
+    // Idem para `estado` singular vs `estados` lista.
+    if (query.estado) {
+      where.estado = query.estado;
+    } else if (query.estados && query.estados.length > 0) {
+      where.estado = { in: query.estados };
+    }
 
     if (query.search) {
       where.OR = [
