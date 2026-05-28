@@ -22,15 +22,23 @@ import {
   TipoAfectacionIgv,
   TipoFiscalProducto,
   MOTIVOS_NC_TODOS,
+  MOTIVOS_NC_REGULAR,
+  MOTIVOS_NC_EXCEPCIONAL,
   type MotivoNCCodigo,
   esMotivoNcExcepcional,
   PLAZO_NC_EXCEPCIONAL_DIAS_HABILES,
   plazoDiasHabilesVencido,
+  MOTIVOS_ND,
   MOTIVOS_ND_TODOS,
   type MotivoNDCodigo,
   calcularDeadlineComunicacionBaja,
   calcularDeadlineEnvio as calcularDeadlineEnvioShared,
   normalizeSunatUnidadMedidaCode,
+  type ElegibilidadComprobante,
+  type PropositoElegibilidadComprobante,
+  type BloqueoElegibilidad,
+  type MotivoAplicable,
+  type OperacionEnProcesoElegibilidad,
 } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { ComprobanteDetalleService } from './comprobante-detalle.service';
@@ -2707,5 +2715,255 @@ export class FacturacionService {
         (origen.estado === EstadoComprobante.ACEPTADO ||
           origen.estado === EstadoComprobante.ACEPTADO_CON_OBSERVACIONES),
     };
+  }
+
+  // ── Elegibilidad para NC / ND / Baja ─────────────────────────────────
+
+  /**
+   * Doc 04 §5 / Doc 07 / Doc 08 §3 — Endpoint unificado de elegibilidad para
+   * emitir una NC, ND o comunicación de baja sobre un comprobante origen.
+   *
+   * Centraliza saldo no acreditado, plazos (baja=7 días calendario, NC
+   * excepcional=10 días hábiles), bloqueos por operaciones en proceso y
+   * motivos aplicables. La UI debe consultar este endpoint **antes** de
+   * abrir el formulario de NC/ND/Baja para mostrarle al operador, en un
+   * solo lugar, todas las razones por las que la operación está permitida
+   * o bloqueada.
+   */
+  async getElegibilidad(
+    comprobanteId: string,
+    proposito: PropositoElegibilidadComprobante,
+  ): Promise<ElegibilidadComprobante> {
+    const comprobante = await this.prisma.comprobante.findUnique({
+      where: { id: comprobanteId },
+      select: {
+        id: true,
+        numero: true,
+        tipo: true,
+        estado: true,
+        total: true,
+        fechaEmision: true,
+        cdrRecibidaAt: true,
+      },
+    });
+    if (!comprobante) {
+      throw new NotFoundException(`Comprobante ${comprobanteId} no encontrado`);
+    }
+
+    const tipoOrigen = comprobante.tipo as TipoDocumento;
+    const estadoOrigen = comprobante.estado as EstadoComprobante;
+    const totalOrigen = Number(comprobante.total);
+    const fechaEmision = comprobante.fechaEmision;
+    const cdrRecibidaAt = comprobante.cdrRecibidaAt ?? null;
+
+    const bloqueos: BloqueoElegibilidad[] = [];
+    let saldoNoAcreditado: number | undefined;
+    let acreditado: number | undefined;
+    let plazoVenceAt: string | null = null;
+    let remainingMs: number | null = null;
+    let plazoNcExcepcionalVenceAt: string | null = null;
+    let plazoNcExcepcionalVencido: boolean | undefined;
+    let bloqueoPorOperacionEnProceso: OperacionEnProcesoElegibilidad | null =
+      null;
+    let motivosAplicables: MotivoAplicable[] = [];
+
+    const estadoAceptado =
+      estadoOrigen === EstadoComprobante.ACEPTADO ||
+      estadoOrigen === EstadoComprobante.ACEPTADO_CON_OBSERVACIONES;
+
+    if (proposito === 'nc') {
+      if (!estadoAceptado) {
+        bloqueos.push({
+          codigo: 'ESTADO_INVALIDO',
+          mensaje: `Solo se pueden emitir NC sobre comprobantes ACEPTADOS por SUNAT. Estado actual: ${estadoOrigen}.`,
+        });
+      }
+
+      const tipoSoportadoParaNc =
+        tipoOrigen === TipoDocumento.FACTURA ||
+        tipoOrigen === TipoDocumento.BOLETA ||
+        tipoOrigen === TipoDocumento.NOTA_CREDITO ||
+        tipoOrigen === TipoDocumento.NOTA_DEBITO;
+      if (!tipoSoportadoParaNc) {
+        bloqueos.push({
+          codigo: 'TIPO_NO_PERMITIDO',
+          mensaje: `Tipo de comprobante origen ${String(tipoOrigen)} no admite nota de crédito.`,
+        });
+      }
+
+      if (estadoAceptado && tipoSoportadoParaNc) {
+        const saldo = await this.calcularSaldoNoAcreditado(comprobanteId);
+        saldoNoAcreditado = saldo;
+        acreditado = +(totalOrigen - saldo).toFixed(2);
+        if (saldo <= 0) {
+          bloqueos.push({
+            codigo: 'SALDO_AGOTADO',
+            mensaje:
+              'El comprobante ya fue acreditado en su totalidad mediante NCs previas.',
+          });
+        }
+        const ncEnProceso = await this.existeNcEnProceso(comprobanteId);
+        if (ncEnProceso) {
+          bloqueoPorOperacionEnProceso = {
+            id: ncEnProceso.id,
+            numero: ncEnProceso.numero,
+            estado: String(ncEnProceso.estado),
+            tipo: 'NOTA_CREDITO',
+          };
+          bloqueos.push({
+            codigo: 'NC_EN_PROCESO',
+            mensaje: `Ya hay una NC ${ncEnProceso.numero} en estado ${ncEnProceso.estado} sobre este comprobante.`,
+          });
+        }
+      }
+
+      // Plazo NC excepcional (10 días hábiles desde emisión origen).
+      const feriados = await this.prisma.feriadoNacional.findMany({
+        select: { fecha: true },
+      });
+      plazoNcExcepcionalVencido = plazoDiasHabilesVencido(
+        fechaEmision,
+        PLAZO_NC_EXCEPCIONAL_DIAS_HABILES,
+        feriados,
+      );
+      plazoNcExcepcionalVenceAt = this.calcularDeadlineDiasHabiles(
+        fechaEmision,
+        PLAZO_NC_EXCEPCIONAL_DIAS_HABILES,
+        feriados,
+      ).toISOString();
+
+      // Motivos aplicables: regulares (filtrados por tipo origen) +
+      // excepcionales (01/02) si el plazo aún no venció.
+      const regulares: MotivoAplicable[] = MOTIVOS_NC_REGULAR.filter(
+        (m) => !m.soloFactura || tipoOrigen === TipoDocumento.FACTURA,
+      ).map((m) => ({
+        codigo: m.codigo,
+        label: m.label,
+        soloFactura: m.soloFactura,
+      }));
+      // Motivo 01 (anulación) también aplica como regular en el catálogo
+      // visible para boletas. Lo añadimos manualmente porque el descriptor
+      // canónico vive en el catálogo excepcional.
+      const anulacionRegular: MotivoAplicable = {
+        codigo: '01',
+        label: 'Anulación de la operación',
+      };
+      const excepcionales: MotivoAplicable[] = plazoNcExcepcionalVencido
+        ? []
+        : MOTIVOS_NC_EXCEPCIONAL.map((m) => ({
+            codigo: m.codigo,
+            label: m.label,
+            esExcepcional: true,
+          }));
+      motivosAplicables = [anulacionRegular, ...regulares, ...excepcionales];
+    } else if (proposito === 'nd') {
+      if (!estadoAceptado) {
+        bloqueos.push({
+          codigo: 'ESTADO_INVALIDO',
+          mensaje: `Solo se pueden emitir ND sobre comprobantes ACEPTADOS por SUNAT. Estado actual: ${estadoOrigen}.`,
+        });
+      }
+      // Doc 08 §7.1 — origen permitido para ND: 01/03/07/08.
+      const tipoSoportado =
+        tipoOrigen === TipoDocumento.FACTURA ||
+        tipoOrigen === TipoDocumento.BOLETA ||
+        tipoOrigen === TipoDocumento.NOTA_CREDITO ||
+        tipoOrigen === TipoDocumento.NOTA_DEBITO;
+      if (!tipoSoportado) {
+        bloqueos.push({
+          codigo: 'TIPO_NO_PERMITIDO',
+          mensaje: `Tipo de comprobante origen ${String(tipoOrigen)} no admite nota de débito.`,
+        });
+      }
+      motivosAplicables = MOTIVOS_ND.map((m) => ({
+        codigo: m.codigo,
+        label: m.label,
+      }));
+    } else {
+      // proposito === 'baja'
+      // Doc 04 §1+§3 — boletas no se anulan vía RA, sino vía NC motivo 01.
+      if (tipoOrigen === TipoDocumento.BOLETA) {
+        bloqueos.push({
+          codigo: 'BAJA_NO_APLICA_BOLETA',
+          mensaje:
+            'Las boletas se anulan emitiendo una nota de crédito motivo 01 (anulación), no comunicación de baja.',
+        });
+      }
+      if (!estadoAceptado) {
+        bloqueos.push({
+          codigo: 'ESTADO_INVALIDO',
+          mensaje: `Solo se pueden comunicar bajas de comprobantes ACEPTADOS por SUNAT. Estado actual: ${estadoOrigen}.`,
+        });
+      }
+
+      // Plazo: 7 días calendario desde CDR (o fechaEmision como fallback).
+      const baseDeadline = cdrRecibidaAt ?? fechaEmision;
+      const deadline = calcularDeadlineComunicacionBaja(new Date(baseDeadline));
+      plazoVenceAt = deadline.deadline.toISOString();
+      remainingMs = deadline.remainingMs;
+      if (deadline.isVencido) {
+        bloqueos.push({
+          codigo: 'PLAZO_BAJA_VENCIDO',
+          mensaje:
+            'El plazo para comunicar la baja venció (7 días calendario desde la CDR). Emite una nota de crédito motivo 01 en su lugar.',
+        });
+      }
+
+      // Duplicidad: ya existe una baja PENDIENTE/EN_PROCESO/ACEPTADA.
+      const bajaActiva = await this.prisma.comunicacionBaja.findFirst({
+        where: {
+          comprobanteId,
+          estado: {
+            in: [
+              EstadoComunicacionBaja.PENDIENTE,
+              EstadoComunicacionBaja.EN_PROCESO,
+              EstadoComunicacionBaja.ACEPTADA,
+            ],
+          },
+        },
+        select: { id: true, estado: true, identificadorBaja: true },
+      });
+      if (bajaActiva) {
+        bloqueoPorOperacionEnProceso = {
+          id: bajaActiva.id,
+          numero: bajaActiva.identificadorBaja,
+          estado: String(bajaActiva.estado),
+          tipo: 'COMUNICACION_BAJA',
+        };
+        bloqueos.push({
+          codigo: 'BAJA_EN_PROCESO',
+          mensaje: `Ya existe una comunicación de baja ${bajaActiva.identificadorBaja} en estado ${bajaActiva.estado} para este comprobante.`,
+        });
+      }
+    }
+
+    const result: ElegibilidadComprobante = {
+      comprobanteId,
+      proposito,
+      puede: bloqueos.length === 0,
+      bloqueos,
+      numero: comprobante.numero,
+      tipoOrigen: String(tipoOrigen),
+      estadoOrigen: String(estadoOrigen),
+      fechaEmision: fechaEmision.toISOString(),
+      cdrRecibidaAt: cdrRecibidaAt ? cdrRecibidaAt.toISOString() : null,
+      totalOrigen,
+      // Doc 04 §2 — todos los CPE locales se emiten en PEN. Si en el
+      // futuro se soporta exportación, leer la moneda del snapshot.
+      moneda: 'PEN',
+      bloqueoPorOperacionEnProceso,
+      motivosAplicables,
+    };
+    if (proposito === 'nc') {
+      result.saldoNoAcreditado = saldoNoAcreditado;
+      result.acreditado = acreditado;
+      result.plazoNcExcepcionalVenceAt = plazoNcExcepcionalVenceAt;
+      result.plazoNcExcepcionalVencido = plazoNcExcepcionalVencido;
+    }
+    if (proposito === 'baja') {
+      result.plazoVenceAt = plazoVenceAt;
+      result.remainingMs = remainingMs;
+    }
+    return result;
   }
 }
