@@ -10,6 +10,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AmbienteBadge } from "@/components/layout/ambiente-badge";
 import { BuscarComprobanteOrigenModal } from "@/components/modals/buscar-comprobante-origen-modal";
 
 import { ComprobantesTable } from "./_components/comprobantes-table";
@@ -86,6 +87,7 @@ export default function ComprobantesHubPage() {
 
       {/* Acciones rápidas: NC / ND / Baja sobre comprobante existente */}
       <div className="flex flex-wrap items-center gap-2">
+        <AmbienteBadge className="mr-1" />
         <Button
           variant="outline"
           size="sm"

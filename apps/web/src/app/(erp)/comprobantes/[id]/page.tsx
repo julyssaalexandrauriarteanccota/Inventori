@@ -29,6 +29,10 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConfirmarBajaModal } from "@/components/modals/confirmar-baja-modal";
 import {
+  explainSunatRejectMessage,
+  type SunatErrorExplanation,
+} from "@/lib/sunat-errors";
+import {
   ThermalReceiptDialog,
   type ThermalReceiptData,
 } from "@/components/pos/thermal-receipt";
@@ -150,19 +154,7 @@ function isComprobanteAceptadoSunat(estado?: EstadoComprobante) {
   );
 }
 
-function explainSunatRejectMessage(message?: string | null) {
-  const text = message ?? "";
-  if (/unitCode.+invalid value 'UND'|invalid value 'UND'.+unitCode/i.test(text)) {
-    return "Motivo: unidad de medida SUNAT inválida. Se envió UND; para bienes usa NIU y para servicios ZZ.";
-  }
-  if (/undefined attribute Id/i.test(text)) {
-    return "Motivo: XML firmado con atributo Id no permitido en el nodo Invoice. Reintenta para regenerar el XML.";
-  }
-  if (/No se puede leer \(parsear\) el archivo XML/i.test(text)) {
-    return "Motivo: SUNAT no pudo leer el XML. Revisa los campos fiscales del comprobante antes de reintentar.";
-  }
-  return null;
-}
+
 
 function JsonBlock({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
@@ -820,11 +812,7 @@ export default function ComprobanteDetallePage({
                           {log.mensaje}
                         </p>
                       ) : null}
-                      {explainSunatRejectMessage(log.mensaje) ? (
-                        <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
-                          {explainSunatRejectMessage(log.mensaje)}
-                        </p>
-                      ) : null}
+                      <SunatExplanation message={log.mensaje} />
                       <SunatDiagnostics log={log} />
                     </div>
                   ))}
@@ -1034,6 +1022,30 @@ function Row({
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+function SunatExplanation({ message }: { message?: string | null }) {
+  const exp: SunatErrorExplanation | null = explainSunatRejectMessage(message);
+  if (!exp) return null;
+  const tone =
+    exp.severidad === "config"
+      ? "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200"
+      : exp.severidad === "tecnico"
+        ? "border-sky-200 bg-sky-50 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200"
+        : "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200";
+  return (
+    <div className={`mt-2 rounded-md border p-2 ${tone}`}>
+      <p className="text-xs font-semibold uppercase tracking-wide opacity-70">
+        Motivo
+      </p>
+      <p className="text-sm">{exp.motivo}</p>
+      {exp.accion ? (
+        <p className="mt-1 text-xs opacity-90">
+          <strong>Sugerido:</strong> {exp.accion}
+        </p>
+      ) : null}
     </div>
   );
 }

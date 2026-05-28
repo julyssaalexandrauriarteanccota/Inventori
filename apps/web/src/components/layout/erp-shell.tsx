@@ -11,6 +11,7 @@ import { NotificationCenter } from "@/components/notification-center"
 import { OfflineBanner } from "@/components/offline-banner"
 import { SettingsDialogProvider } from "@/components/settings-dialog-provider"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { AmbienteBadge } from "@/components/layout/ambiente-badge"
 import {
   TopbarActionsProvider,
   useTopbarActions,
@@ -187,8 +188,9 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
 
-              {/* ── Right: search + notifications + theme + user chip + page actions ─ */}
+              {/* ── Right: ambiente + search + notifications + theme + user chip + page actions ─ */}
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                <AmbienteBadge compact className="hidden sm:inline-flex" />
                 <AppCommand />
                 <NotificationCenter />
                 <ThemeToggle />
