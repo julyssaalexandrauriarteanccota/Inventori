@@ -44,6 +44,24 @@ describe('erp-navigation', () => {
     expect(canAccessErpPath('/ruta/inventada', RolUsuario.ADMIN)).toBe(false)
   })
 
+  it('permite /configuracion a ENCARGADO y lo bloquea para TECNICO', () => {
+    expect(canAccessErpPath('/configuracion', RolUsuario.ENCARGADO)).toBe(true)
+    expect(canAccessErpPath('/configuracion', RolUsuario.ADMIN)).toBe(true)
+    expect(canAccessErpPath('/configuracion', RolUsuario.TECNICO)).toBe(false)
+  })
+
+  it('configuraion aparece en navegacion de ENCARGADO pero no de TECNICO', () => {
+    const navEncargado = getNavigationForRole(RolUsuario.ENCARGADO)
+    const navTecnico = getNavigationForRole(RolUsuario.TECNICO)
+    expect(navEncargado.find((item) => item.url === '/configuracion')).toBeDefined()
+    expect(navTecnico.find((item) => item.url === '/configuracion')).toBeUndefined()
+  })
+
+  it('mantiene /configuracion/tributario bloqueado para ENCARGADO', () => {
+    expect(canAccessErpPath('/configuracion/tributario', RolUsuario.ENCARGADO)).toBe(false)
+    expect(canAccessErpPath('/configuracion/tributario', RolUsuario.ADMIN)).toBe(true)
+  })
+
   it('permite accesos directos registrados para formularios core', () => {
     expect(canAccessErpPath('/clientes/nuevo', RolUsuario.ADMIN)).toBe(true)
     expect(canAccessErpPath('/productos/nuevo', RolUsuario.ENCARGADO)).toBe(true)
@@ -74,7 +92,7 @@ describe('erp-navigation', () => {
     expect(canAccessErpPath('/ventas/facturacion', RolUsuario.ADMIN)).toBe(true)
     // /ventas/facturacion IS registered → denied for TECNICO
     expect(canAccessErpPath('/ventas/facturacion', RolUsuario.TECNICO)).toBe(false)
-    // /compras/proveedores IS registered → allowed for ENCARGADO
-    expect(canAccessErpPath('/compras/proveedores', RolUsuario.ENCARGADO)).toBe(true)
+    // /proveedores IS registered at root level → allowed for ENCARGADO
+    expect(canAccessErpPath('/proveedores', RolUsuario.ENCARGADO)).toBe(true)
   })
 })

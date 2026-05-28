@@ -921,6 +921,7 @@ function CategoriasContent({
                 categoria={cat}
                 depth={0}
                 canManage={canManage}
+                canDelete={user?.rol === RolUsuario.ADMIN}
                 editingItem={editingItem}
                 onView={setViewingItem}
                 onEdit={setEditingItem}
@@ -1003,6 +1004,7 @@ function CategoriaRow({
   categoria,
   depth,
   canManage,
+  canDelete,
   editingItem,
   onView,
   onEdit,
@@ -1012,6 +1014,7 @@ function CategoriaRow({
   categoria: CategoriaItem;
   depth: number;
   canManage: boolean;
+  canDelete: boolean;
   editingItem: CategoriaItem | null;
   onView: (cat: CategoriaItem) => void;
   onEdit: (cat: CategoriaItem) => void;
@@ -1092,7 +1095,7 @@ function CategoriaRow({
                 <Pencil className="size-4" />
                 Editar
               </DropdownMenuItem>
-              {hijos.length === 0 && (
+              {canDelete && hijos.length === 0 && (
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => onDelete(categoria.id)}
@@ -1112,6 +1115,7 @@ function CategoriaRow({
             categoria={hijo}
             depth={depth + 1}
             canManage={canManage}
+            canDelete={canDelete}
             editingItem={editingItem}
             onView={onView}
             onEdit={onEdit}
@@ -1769,6 +1773,7 @@ function MarcasContent({
                 key={m.id}
                 marca={m}
                 canManage={canManage}
+                canDelete={user?.rol === RolUsuario.ADMIN}
                 onView={() => setViewingItem(m)}
                 onEdit={() => setEditingItem(m)}
                 onDelete={() => onRequestDelete(m.id)}
@@ -1842,19 +1847,21 @@ function MarcasContent({
 function MarcaCard({
   marca,
   canManage,
+  canDelete,
   onView,
   onEdit,
   onDelete,
 }: {
   marca: SettingsMarcaItem;
   canManage: boolean;
+  canDelete: boolean;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
   return (
     <div className="group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm transition-all duration-150 hover:border-ring/50 hover:shadow-md">
-      {canManage ? (
+      {canDelete ? (
         <button
           type="button"
           onClick={onDelete}

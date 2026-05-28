@@ -129,6 +129,7 @@ export function ModelosSettingsContent({
   const { user } = useAuth();
   const canManage =
     user?.rol === RolUsuario.ADMIN || user?.rol === RolUsuario.ENCARGADO;
+  const canDelete = user?.rol === RolUsuario.ADMIN;
   const [selectedTipo, setSelectedTipo] =
     React.useState<ProductTypeFilterValue>("all");
   const [selectedMarcaFilter, setSelectedMarcaFilter] =
@@ -258,20 +259,22 @@ export function ModelosSettingsContent({
                     <Pencil className="size-4" />
                     Editar
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    className="text-destructive focus:text-destructive"
-                    onClick={() => onRequestDeleteAction(row.original.id)}
-                  >
-                    <Trash2 className="size-4" />
-                    Eliminar
-                  </DropdownMenuItem>
+                  {canDelete && (
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => onRequestDeleteAction(row.original.id)}
+                    >
+                      <Trash2 className="size-4" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           ) : null,
       },
     ],
-    [canManage, onRequestDeleteAction],
+    [canDelete, canManage, onRequestDeleteAction],
   );
 
   const countByTipo = React.useMemo(() => {

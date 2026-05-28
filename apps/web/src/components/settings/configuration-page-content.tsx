@@ -7,10 +7,10 @@ import { toast } from "sonner";
 
 import { SectionContent } from "@/components/settings-dialog";
 import {
-  DEFAULT_CONFIGURATION_SECTION,
-  isConfigurationSectionId,
+  resolveConfigurationSectionForRole,
 } from "@/components/settings/configuration-nav";
 import { type ConfigurationSectionId } from "@/components/settings/settings-sections";
+import { useAuth } from "@/hooks/use-auth";
 import { useDeleteUsuario } from "@/hooks/use-configuracion";
 import { useDeleteAlmacen } from "@/hooks/use-inventario";
 import {
@@ -55,6 +55,7 @@ const DELETE_LABEL_BY_TYPE: Record<DeleteTargetType, string> = {
 };
 
 export function ConfigurationPageContent() {
+  const { user } = useAuth();
   const searchParams = useSearchParams();
   const [deleteTarget, setDeleteTarget] = React.useState<{
     id: string;
@@ -68,11 +69,11 @@ export function ConfigurationPageContent() {
   const deleteUsuarioMutation = useDeleteUsuario();
 
   const activeSection = React.useMemo<ConfigurationSectionId>(() => {
-    const section = searchParams.get("section");
-    return isConfigurationSectionId(section)
-      ? section
-      : DEFAULT_CONFIGURATION_SECTION;
-  }, [searchParams]);
+    return (
+      resolveConfigurationSectionForRole(searchParams.get("section"), user?.rol) ??
+      "categorias"
+    );
+  }, [searchParams, user?.rol]);
 
   const activeMutation =
     deleteTarget?.type === "almacen"

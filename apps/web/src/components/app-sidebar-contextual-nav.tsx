@@ -4,6 +4,7 @@ import * as React from 'react'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import type { RolUsuario } from '@erp/shared'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
 import { NavMain } from '@/components/nav-main'
@@ -13,11 +14,10 @@ import {
 } from '@/components/nav-main-primitives'
 import type { NavItem } from '@/components/nav-main.types'
 import {
-  CONFIGURATION_SECTION_GROUPS,
   CONFIGURATION_SECTION_MAP,
-  DEFAULT_CONFIGURATION_SECTION,
+  getConfigurationSectionGroupsForRole,
   getConfigurationSectionHref,
-  isConfigurationSectionId,
+  resolveConfigurationSectionForRole,
 } from '@/components/settings/configuration-nav'
 import type { ConfigurationSectionId } from '@/components/settings/settings-sections'
 import {
@@ -27,6 +27,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
+import { useAuth } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
 
 type ContextView = 'primary' | 'config'
@@ -44,10 +45,13 @@ function SidebarPrimaryView({ items }: { items: NavItem[] }) {
 function SidebarConfigView({
   activeSection,
   onBack,
+  userRole,
 }: {
   activeSection: ConfigurationSectionId
   onBack: () => void
+  userRole?: RolUsuario | null
 }) {
+  const sectionGroups = getConfigurationSectionGroupsForRole(userRole)
   return (
     <div className="flex h-full flex-col">
       <SidebarGroup className="pb-1 pt-1 group-data-[collapsible=icon]:px-0">
@@ -69,7 +73,7 @@ function SidebarConfigView({
       </SidebarGroup>
 
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-4 pr-1 [scrollbar-gutter:stable]">
-        {CONFIGURATION_SECTION_GROUPS.map((group, idx) => (
+        {sectionGroups.map((group, idx) => (
           <SidebarGroup
             key={group.label}
             className={cn(
@@ -121,6 +125,7 @@ function SidebarConfigView({
 }
 
 export function AppSidebarContextualNav({ items }: { items: NavItem[] }) {
+  const { user } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -151,11 +156,11 @@ export function AppSidebarContextualNav({ items }: { items: NavItem[] }) {
   }, [pathname])
 
   const activeSection = React.useMemo<ConfigurationSectionId>(() => {
-    const section = searchParams.get('section')
-    return isConfigurationSectionId(section)
-      ? section
-      : DEFAULT_CONFIGURATION_SECTION
-  }, [searchParams])
+    return (
+      resolveConfigurationSectionForRole(searchParams.get('section'), user?.rol) ??
+      'categorias'
+    )
+  }, [searchParams, user?.rol])
 
   const handleBack = React.useCallback(() => {
     const storedPath = window.sessionStorage.getItem(LAST_PRIMARY_PATH_KEY)
@@ -215,6 +220,7 @@ export function AppSidebarContextualNav({ items }: { items: NavItem[] }) {
             <SidebarConfigView
               activeSection={activeSection}
               onBack={handleBack}
+              userRole={user?.rol}
             />
           ) : (
             <SidebarPrimaryView items={items} />

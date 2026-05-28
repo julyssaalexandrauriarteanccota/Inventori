@@ -191,7 +191,7 @@ export const ERP_NAVIGATION: ErpNavigationItem[] = [
     url: "/configuracion",
     icon: Settings2,
     description: "Empresa, SUNAT, usuarios y catálogos en una vista dedicada.",
-    roles: ADMIN_ONLY,
+    roles: ADMIN_AND_ENCARGADO,
   },
 ]
 

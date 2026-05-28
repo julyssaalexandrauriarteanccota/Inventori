@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 import withSerwist from "@serwist/next";
 
-function buildRemotePatterns(): NonNullable<NonNullable<NextConfig['images']>['remotePatterns']> {
+function buildRemotePatterns(): NonNullable<
+  NonNullable<NextConfig['images']>['remotePatterns']
+> {
   const defaults = [
     'http://localhost:4000/api/v1',
     'http://127.0.0.1:4000/api/v1',
@@ -35,8 +37,18 @@ function buildRemotePatterns(): NonNullable<NonNullable<NextConfig['images']>['r
   })
 }
 
+function buildAllowedDevOrigins(): string[] {
+  const defaults = ['172.28.64.1']
+  const extra = (process.env.ALLOWED_DEV_ORIGINS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  return Array.from(new Set([...defaults, ...extra]))
+}
+
 const nextConfig: NextConfig = {
-  allowedDevOrigins: ['172.28.64.1'],
+  allowedDevOrigins: buildAllowedDevOrigins(),
   // NOTE: turbopack.root removed — apuntaba al monorepo root (../../) lo que
   // hacía que Turbopack observara demasiados archivos en Windows y rompía HMR.
   // @erp/shared se resuelve via node_modules symlink de pnpm workspaces.
