@@ -39,6 +39,7 @@ describe('ReportesService', () => {
       usuario: {
         findMany: jest.fn(),
       },
+      $queryRaw: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -170,33 +171,26 @@ describe('ReportesService', () => {
     });
 
     it('debe incluir stock bajo cuando se solicita', async () => {
+      // El filtro stockBajo ahora se ejecuta en SQL (compara cantidad vs stockMinimo
+      // en la misma query) y devuelve directamente las filas que están bajo el mínimo.
       mockPrisma.alertaStock.findMany.mockResolvedValue([]);
-      mockPrisma.almacenStock.findMany.mockResolvedValue([
+      mockPrisma.$queryRaw.mockResolvedValue([
         {
+          id: 's-1',
           cantidad: 3,
-          producto: {
-            id: 'p-1',
-            nombre: 'Toner',
-            sku: 'TON-001',
-            stockMinimo: 10,
-          },
-          almacen: { id: 'alm-1', nombre: 'Principal' },
-        },
-        {
-          cantidad: 50,
-          producto: {
-            id: 'p-2',
-            nombre: 'Papel',
-            sku: 'PAP-001',
-            stockMinimo: 5,
-          },
-          almacen: { id: 'alm-1', nombre: 'Principal' },
+          productoId: 'p-1',
+          almacenId: 'alm-1',
+          productoNombre: 'Toner',
+          productoSku: 'TON-001',
+          productoStockMinimo: 10,
+          almacenNombre: 'Principal',
         },
       ]);
 
       const result = await service.getReporteStock({ stockBajo: true });
 
       expect(result.stockBajo).toHaveLength(1); // solo el toner está bajo
+      expect(result.stockBajo?.[0].producto.sku).toBe('TON-001');
     });
   });
 

@@ -153,6 +153,8 @@ export function useCategorias(tipo?: CategoriaListItem["tipo"]) {
       api.get<{ data: CategoriaItem[]; meta: { timestamp: string } }>(
         `/categorias${tipo ? `?tipo=${tipo}` : ""}`,
       ),
+    // Datos de referencia: cambian poco y las mutaciones invalidan la cache
+    staleTime: 15 * 60 * 1000,
   });
 }
 
@@ -212,6 +214,8 @@ export function useMarcas(tipo?: TipoProducto) {
       api.get<{ data: MarcaItem[]; meta: { timestamp: string } }>(
         `/marcas${tipo ? `?tipo=${tipo}` : ""}`,
       ),
+    // Datos de referencia: cambian poco y las mutaciones invalidan la cache
+    staleTime: 15 * 60 * 1000,
   });
 }
 
@@ -319,6 +323,8 @@ export function useUnidadesMedida() {
       api.get<{ data: UnidadMedidaItem[]; meta: { timestamp: string } }>(
         "/unidades-medida",
       ),
+    // Datos de referencia: cambian poco y las mutaciones invalidan la cache
+    staleTime: 30 * 60 * 1000,
   });
 }
 

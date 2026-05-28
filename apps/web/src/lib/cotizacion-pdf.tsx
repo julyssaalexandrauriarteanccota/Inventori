@@ -1,21 +1,32 @@
 "use client";
 
-import { pdf } from "@react-pdf/renderer";
 import type { ConfigEmpresaPayload } from "@erp/shared";
 
-import {
-  CotizacionPDF,
-  type CotizacionPdfData,
-} from "@/components/pdf/cotizacion-pdf";
+import type { CotizacionPdfData } from "@/components/pdf/cotizacion-pdf";
+
+// @react-pdf/renderer pesa varios cientos de KB; lo cargamos sólo al generar el PDF
+// para que las páginas que importan estos helpers no incluyan el bundle inicial.
+async function buildCotizacionBlob(
+  data: CotizacionPdfData,
+  empresa: ConfigEmpresaPayload,
+  igvPercent: number,
+): Promise<Blob> {
+  const [{ pdf }, { CotizacionPDF }] = await Promise.all([
+    import("@react-pdf/renderer"),
+    import("@/components/pdf/cotizacion-pdf"),
+  ]);
+
+  return pdf(
+    <CotizacionPDF data={data} empresa={empresa} igvPercent={igvPercent} />,
+  ).toBlob();
+}
 
 export async function generateCotizacionPdfBlobUrl(
   data: CotizacionPdfData,
   empresa: ConfigEmpresaPayload,
   igvPercent = 18,
 ): Promise<string> {
-  const blob = await pdf(
-    <CotizacionPDF data={data} empresa={empresa} igvPercent={igvPercent} />,
-  ).toBlob();
+  const blob = await buildCotizacionBlob(data, empresa, igvPercent);
   return URL.createObjectURL(blob);
 }
 

@@ -151,6 +151,8 @@ export function useConfigEmpresa() {
       api.get<{ data: ConfigEmpresaPayload; meta: { timestamp: string } }>(
         "/config/empresa",
       ),
+    // Configuración rara vez cambia; las mutaciones invalidan la cache
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -173,6 +175,7 @@ export function useSeriesDocumentos() {
       api.get<{ data: SeriesDocumentosPayload; meta: { timestamp: string } }>(
         "/config/series",
       ),
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -194,6 +197,7 @@ export function useMetodosPago() {
       api.get<{ data: MetodoPagoListItem[]; meta: { timestamp: string } }>(
         "/config/metodos-pago",
       ),
+    staleTime: 30 * 60 * 1000,
   });
 }
 
@@ -237,6 +241,7 @@ export function useTiposMovimientoConfig() {
         data: TipoMovimientoConfigListItem[];
         meta: { timestamp: string };
       }>("/config/tipos-movimiento"),
+    staleTime: 30 * 60 * 1000,
   });
 }
 

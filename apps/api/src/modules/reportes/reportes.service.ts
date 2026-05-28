@@ -47,13 +47,6 @@ type ReporteTelemetriaWhere = Omit<LecturaSNMPWhereInput, 'timestamp'> & {
   timestamp?: DateRangeWhere;
 };
 
-type StockConProducto = {
-  cantidad: number;
-  producto?: {
-    stockMinimo: number;
-  } | null;
-};
-
 type TecnicoResumen = {
   id: string;
   nombre: string | null;
@@ -323,23 +316,68 @@ export class ReportesService {
     // Total de alertas activas
     const totalAlertas = alertas.length;
 
-    // Productos con stock bajo mínimo
-    let stockBajo: StockConProducto[] = [];
+    // Productos con stock bajo mínimo: la comparación columna-vs-columna se hace
+    // en SQL para no traer toda la tabla a memoria y filtrarla luego en JS.
+    type StockBajoRow = {
+      id: string;
+      cantidad: number;
+      productoId: string;
+      almacenId: string;
+      productoNombre: string;
+      productoSku: string;
+      productoStockMinimo: number;
+      almacenNombre: string;
+    };
+
+    let stockBajoRows: StockBajoRow[] = [];
     if (query.stockBajo) {
-      const allStock = await this.prisma.almacenStock.findMany({
-        where,
-        include: {
-          producto: {
-            select: { id: true, nombre: true, sku: true, stockMinimo: true },
-          },
-          almacen: { select: { id: true, nombre: true } },
-        },
-      });
-      // Filter in JS since Prisma doesn't easily compare two columns
-      stockBajo = allStock.filter(
-        (stock) => stock.cantidad <= (stock.producto?.stockMinimo ?? 0),
-      );
+      stockBajoRows = query.almacenId
+        ? await this.prisma.$queryRaw<StockBajoRow[]>`
+            SELECT
+              s.id,
+              s.cantidad,
+              s."productoId",
+              s."almacenId",
+              p.nombre AS "productoNombre",
+              p.sku AS "productoSku",
+              p."stockMinimo" AS "productoStockMinimo",
+              a.nombre AS "almacenNombre"
+            FROM almacen_stocks s
+            INNER JOIN productos p ON p.id = s."productoId"
+            INNER JOIN almacenes a ON a.id = s."almacenId"
+            WHERE s.cantidad <= p."stockMinimo"
+              AND s."almacenId" = ${query.almacenId}
+          `
+        : await this.prisma.$queryRaw<StockBajoRow[]>`
+            SELECT
+              s.id,
+              s.cantidad,
+              s."productoId",
+              s."almacenId",
+              p.nombre AS "productoNombre",
+              p.sku AS "productoSku",
+              p."stockMinimo" AS "productoStockMinimo",
+              a.nombre AS "almacenNombre"
+            FROM almacen_stocks s
+            INNER JOIN productos p ON p.id = s."productoId"
+            INNER JOIN almacenes a ON a.id = s."almacenId"
+            WHERE s.cantidad <= p."stockMinimo"
+          `;
     }
+
+    const stockBajo = stockBajoRows.map((row) => ({
+      id: row.id,
+      cantidad: row.cantidad,
+      productoId: row.productoId,
+      almacenId: row.almacenId,
+      producto: {
+        id: row.productoId,
+        nombre: row.productoNombre,
+        sku: row.productoSku,
+        stockMinimo: row.productoStockMinimo,
+      },
+      almacen: { id: row.almacenId, nombre: row.almacenNombre },
+    }));
 
     return {
       totalAlertas,

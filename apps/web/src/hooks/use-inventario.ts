@@ -80,6 +80,8 @@ export function useAlmacenes() {
   return useQuery({
     queryKey: [INVENTARIO_KEY, ALMACENES_KEY],
     queryFn: () => api.get<{ data: { id: string; nombre: string; descripcion: string | null; esPrincipal: boolean; activo: boolean }[]; meta: { timestamp: string } }>('/inventario/almacenes'),
+    // Datos de referencia: cambian muy poco; las mutaciones invalidan la cache
+    staleTime: 30 * 60 * 1000,
   })
 }
 

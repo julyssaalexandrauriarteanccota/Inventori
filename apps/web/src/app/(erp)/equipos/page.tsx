@@ -2,7 +2,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { type ColumnDef } from "@tanstack/react-table";
-import { pdf } from "@react-pdf/renderer";
 import {
   Calendar,
   CheckCircle2,
@@ -97,7 +96,6 @@ import { EquipoForm } from "@/components/forms/equipo-form";
 import { EquipoDetalleModal } from "@/components/modals/equipo-detalle-modal";
 import { SearchableSelect } from "@/components/searchable-select";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { EtiquetaProductoPdfDocument } from "@/components/products/etiqueta-producto-pdf";
 import { api } from "@/lib/api";
 import {
   fetchFirstAssetAsDataUrl,
@@ -929,8 +927,14 @@ export default function EquiposPage() {
           throw new Error("El producto no tiene código de barras ni SKU.");
         }
 
-        const [barcodeDataUrl, qrDataUrl, imageDataUrl, lecturasResp] =
-          await Promise.all([
+        const [
+          barcodeDataUrl,
+          qrDataUrl,
+          imageDataUrl,
+          lecturasResp,
+          { pdf },
+          { EtiquetaProductoPdfDocument },
+        ] = await Promise.all([
             generateBarcodeDataUrl(barcodeValue),
             qrValue ? generateQrDataUrl(qrValue) : Promise.resolve(null),
             fetchFirstAssetAsDataUrl(
@@ -952,6 +956,8 @@ export default function EquiposPage() {
                 `/equipos/${encodeURIComponent(equipo.numeroSerie)}/lecturas-snmp?limit=1`,
               )
               .catch(() => ({ data: [] })),
+            import("@react-pdf/renderer"),
+            import("@/components/products/etiqueta-producto-pdf"),
           ]);
 
         const ultimaLectura = lecturasResp.data?.[0] ?? null;

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { pdf } from "@react-pdf/renderer";
 import { type ColumnDef } from "@tanstack/react-table";
 import {
   Check,
@@ -48,7 +47,6 @@ import { ToolbarSearchInput } from "@/components/layout/toolbar-search-input";
 import { ErpBadge, ErpStatusBadge } from "@/components/erp-badges";
 import { ProductoCard } from "@/components/products/producto-card";
 import { ProductoDetalleModal } from "@/components/modals/producto-detalle-modal";
-import { EtiquetaProductoPdfDocument } from "@/components/products/etiqueta-producto-pdf";
 import { ProductoThumbnail } from "@/components/products/producto-thumbnail";
 import { ServerDataTable } from "@/components/tables/ServerDataTable";
 import {
@@ -333,10 +331,12 @@ export default function ProductosPage() {
       setPrintingProductId(producto.id);
 
       try {
-        const [barcodeDataUrl, qrDataUrl, imageDataUrl] = await Promise.all([
+        const [barcodeDataUrl, qrDataUrl, imageDataUrl, { pdf }, { EtiquetaProductoPdfDocument }] = await Promise.all([
           generateBarcodeDataUrl(barcodeValue),
           qrValue ? generateQrDataUrl(qrValue) : Promise.resolve(null),
           fetchAssetAsDataUrl(getPrimaryProductImage(producto)),
+          import("@react-pdf/renderer"),
+          import("@/components/products/etiqueta-producto-pdf"),
         ]);
         const blob = await pdf(
           <EtiquetaProductoPdfDocument

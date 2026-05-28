@@ -1,10 +1,6 @@
 "use client";
 
-import { pdf } from "@react-pdf/renderer";
 import type { ConfigEmpresaPayload, TicketDetalle } from "@erp/shared";
-import QRCode from "qrcode";
-
-import { TicketSoportePDF } from "@/components/pdf/ticket-soporte-pdf";
 
 /**
  * Generates the tracking URL for a given ticket.
@@ -16,10 +12,12 @@ function getTrackingUrl(codigo: string): string {
 
 /**
  * Generates the QR code data URL for a ticket.
+ * Carga `qrcode` dinámicamente para no incluirlo en el bundle inicial.
  */
 async function generateQrCode(codigo: string, primaryColor?: string | null): Promise<string> {
   const url = getTrackingUrl(codigo);
   try {
+    const { default: QRCode } = await import("qrcode");
     return await QRCode.toDataURL(url, {
       margin: 1,
       width: 120,
@@ -36,12 +34,18 @@ async function generateQrCode(codigo: string, primaryColor?: string | null): Pro
 
 /**
  * Generates a local preview Blob URL for the ticket PDF.
+ * Tanto `@react-pdf/renderer` como el componente de PDF se cargan dinámicamente
+ * para reducir el bundle de las páginas que sólo enlazan a estas funciones.
  */
 export async function generateTicketSoporteBlobUrl(
   ticket: TicketDetalle,
   empresa?: ConfigEmpresaPayload | null,
 ): Promise<string> {
-  const qrCodeUrl = await generateQrCode(ticket.codigo, empresa?.colorPrimario);
+  const [qrCodeUrl, { pdf }, { TicketSoportePDF }] = await Promise.all([
+    generateQrCode(ticket.codigo, empresa?.colorPrimario),
+    import("@react-pdf/renderer"),
+    import("@/components/pdf/ticket-soporte-pdf"),
+  ]);
   const blob = await pdf(
     <TicketSoportePDF ticket={ticket} empresa={empresa} qrCodeUrl={qrCodeUrl} />,
   ).toBlob();
