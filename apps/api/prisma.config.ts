@@ -11,6 +11,10 @@ export default defineConfig({
     seed: 'npx tsx src/database/seed.ts',
   },
   datasource: {
-    url: process.env['DATABASE_URL'],
+    // Prisma CLI (migrate / db push / studio) prefiere `DIRECT_URL` cuando
+    // existe — necesario en Supabase/PgBouncer porque el pooler en modo
+    // transaction no soporta sentencias preparadas que usa `prisma migrate`.
+    // El runtime de la API sigue usando `DATABASE_URL` (pooler) vía PrismaPg.
+    url: process.env['DIRECT_URL'] ?? process.env['DATABASE_URL'],
   },
 });

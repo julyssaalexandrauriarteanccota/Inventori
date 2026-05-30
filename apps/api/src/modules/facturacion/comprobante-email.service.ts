@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import nodemailer = require('nodemailer');
 import { randomUUID } from 'crypto';
 import { EstadoComprobante } from '@erp/shared';
 import { PrismaService } from '../../database/prisma.service';
 import { FiscalStorageService } from './fiscal-storage.service';
+import { MailerService } from '../auth/mailer.service';
 
 interface EmailAttachment {
   filename: string;
@@ -20,6 +20,7 @@ export class ComprobanteEmailService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly storage: FiscalStorageService,
+    private readonly mailer: MailerService,
   ) {}
 
   async enviarComprobanteAceptado(comprobanteId: string) {
@@ -58,19 +59,15 @@ export class ComprobanteEmailService {
       return { estado: 'OMITIDO_SIN_EMAIL' };
     }
 
-    const smtpHost = this.config.get<string>('SMTP_HOST');
-    const smtpFrom =
-      this.config.get<string>('SMTP_FROM') ??
-      this.config.get<string>('SMTP_USER');
-    if (!smtpHost || !smtpFrom) {
+    if (!this.mailer.isConfigured()) {
       await this.log(
         comprobante.id,
         destinatario,
         asunto,
-        'OMITIDO_CONFIG_SMTP',
-        'Configura SMTP_HOST y SMTP_FROM para enviar comprobantes al receptor.',
+        'OMITIDO_CONFIG_MAIL',
+        'Configura RESEND_API_KEY y MAIL_FROM para enviar comprobantes al receptor.',
       );
-      return { estado: 'OMITIDO_CONFIG_SMTP' };
+      return { estado: 'OMITIDO_CONFIG_MAIL' };
     }
 
     try {
@@ -79,19 +76,19 @@ export class ComprobanteEmailService {
         comprobante.tokenConsulta,
       );
       const attachments = await this.buildAttachments(comprobante);
-      const transporter = nodemailer.createTransport({
-        host: smtpHost,
-        port: Number(this.config.get<string>('SMTP_PORT', '587')),
-        secure: this.config.get<string>('SMTP_SECURE', 'false') === 'true',
-        auth: this.smtpAuth(),
-      });
-      const info = await transporter.sendMail({
-        from: smtpFrom,
+      const result = await this.mailer.send({
         to: destinatario,
         subject: asunto,
         html: this.renderHtml(comprobante, tokenConsulta),
         attachments,
       });
+
+      if (!result.delivered) {
+        const message =
+          result.errorMessage ?? `Falló envío (${result.reason ?? 'unknown'})`;
+        await this.log(comprobante.id, destinatario, asunto, 'ERROR', message);
+        return { estado: 'ERROR' };
+      }
 
       await this.log(
         comprobante.id,
@@ -99,9 +96,9 @@ export class ComprobanteEmailService {
         asunto,
         'ENVIADO',
         undefined,
-        typeof info.messageId === 'string' ? info.messageId : undefined,
+        result.messageId,
       );
-      return { estado: 'ENVIADO', messageId: info.messageId };
+      return { estado: 'ENVIADO', messageId: result.messageId };
     } catch (error) {
       await this.log(
         comprobante.id,
@@ -115,12 +112,6 @@ export class ComprobanteEmailService {
       );
       return { estado: 'ERROR' };
     }
-  }
-
-  private smtpAuth() {
-    const user = this.config.get<string>('SMTP_USER');
-    const pass = this.config.get<string>('SMTP_PASS');
-    return user && pass ? { user, pass } : undefined;
   }
 
   private async ensureTokenConsulta(id: string, token?: string | null) {

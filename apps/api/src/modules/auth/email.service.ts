@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
 import { PrismaService } from '../../database/prisma.service';
+import { MailerService } from './mailer.service';
 import type { EmailBrand, EmailTemplate } from './email-templates';
 
 /**
  * Servicio centralizado de envío de correos transaccionales del módulo auth.
  *
- * - Lee SMTP_* de configuración. Si falta config, hace warn y NO envía
- *   (no rompe el flujo de auth).
  * - Resuelve el branding desde `ConfigEmpresa` (logo, razonSocial, colorPrimario)
  *   con cache en memoria para evitar pegarle a BD en cada correo.
+ * - Delega el envío a `MailerService` (Resend SDK). Si Resend no está
+ *   configurado, devuelve `false` sin romper el flujo de auth.
  * - Las plantillas viven en `email-templates.ts`; este servicio solo orquesta.
  */
 @Injectable()
@@ -23,6 +23,7 @@ export class EmailService {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly mailer: MailerService,
   ) {}
 
   async getBrand(): Promise<EmailBrand> {
@@ -68,42 +69,12 @@ export class EmailService {
   }
 
   async send(to: string, template: EmailTemplate): Promise<boolean> {
-    const smtpHost = this.configService.get<string>('SMTP_HOST');
-    const smtpPort = this.configService.get<number>('SMTP_PORT');
-    const smtpUser = this.configService.get<string>('SMTP_USER');
-    const smtpPass = this.configService.get<string>('SMTP_PASS');
-    const smtpFrom = this.configService.get<string>('SMTP_FROM') || smtpUser;
-
-    if (!smtpHost || !smtpPort || !smtpUser || !smtpPass) {
-      this.logger.warn(
-        `SMTP no configurado. Correo "${template.subject}" para ${to} NO enviado.`,
-      );
-      return false;
-    }
-
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: Number(smtpPort),
-      secure: Number(smtpPort) === 465,
-      auth: { user: smtpUser, pass: smtpPass },
+    const result = await this.mailer.send({
+      to,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
     });
-
-    try {
-      await transporter.sendMail({
-        from: smtpFrom,
-        to,
-        subject: template.subject,
-        html: template.html,
-        text: template.text,
-      });
-      this.logger.log(`Email "${template.subject}" enviado a ${to}`);
-      return true;
-    } catch (err) {
-      this.logger.error(
-        `Falla al enviar email "${template.subject}" a ${to}`,
-        err instanceof Error ? err.stack : undefined,
-      );
-      return false;
-    }
+    return result.delivered;
   }
 }
