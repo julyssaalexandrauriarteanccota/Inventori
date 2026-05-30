@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { DatabaseModule } from '../../database/database.module';
 import { MailModule } from '../auth/mail.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { VentasModule } from '../ventas/ventas.module';
 import { FacturacionController } from './facturacion.controller';
 import { CertificadoDigitalService } from './certificado-digital.service';
@@ -37,6 +38,7 @@ import { SunatXmlSigner } from './sunat-xml.signer';
   imports: [
     DatabaseModule,
     MailModule,
+    NotificationsModule,
     forwardRef(() => VentasModule),
     BullModule.forRootAsync({
       imports: [ConfigModule],

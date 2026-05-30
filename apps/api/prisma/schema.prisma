@@ -1131,6 +1131,7 @@ model Comprobante {
   envioLogs          ComprobanteEnvioLog[]
   portalAccessLogs   PortalAccessLog[]
   emailLogs          ComprobanteEmailLog[]
+  whatsappLogs       ComprobanteWhatsappLog[]
   comunicacionesBaja ComunicacionBaja[]
 
   @@index([ventaId])
@@ -1222,6 +1223,28 @@ model PortalAccessLog {
   @@index([comprobanteId, createdAt])
   @@index([ipOrigen, createdAt])
   @@map("portal_access_logs")
+}
+
+// Log de notificaciones del comprobante por WhatsApp (Evolution API).
+// Análogo a ComprobanteEmailLog para canal email. Permite auditar reintentos,
+// errores del proveedor (apikey inválida, número no existe, etc.) y consultas
+// del cliente "¿llegó mi comprobante por WhatsApp?".
+model ComprobanteWhatsappLog {
+  id            String    @id @default(uuid())
+  comprobanteId String
+  destinatario  String    // Número normalizado E.164 sin "+" (ej. 51999...)
+  estado        String    // ENVIADO | ERROR | OMITIDO_SIN_TELEFONO | OMITIDO_CONFIG | OMITIDO_NUMERO_INVALIDO
+  errorMessage  String?
+  messageId     String?   // key.id devuelto por Evolution API
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  comprobante Comprobante @relation(fields: [comprobanteId], references: [id])
+
+  @@index([comprobanteId, createdAt])
+  @@index([destinatario])
+  @@map("comprobante_whatsapp_logs")
 }
 
 model ComprobanteEmailLog {

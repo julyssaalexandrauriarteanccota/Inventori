@@ -17,6 +17,7 @@ import { createHash, randomBytes } from 'crypto';
 import { JwtPayload } from '../../common/types';
 import { PrismaService } from '../../database/prisma.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import { LoginDto, RegisterDto, UpdateOwnProfileDto } from './dto';
 import { EmailService } from './email.service';
 import {
@@ -50,7 +51,52 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly usuariosService: UsuariosService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
+
+  private isWhatsappAuthEnabled(): boolean {
+    return (
+      this.configService.get<string>('AUTH_NOTIFICATIONS_VIA_WHATSAPP') ===
+        'true' && this.whatsappService.isConfigured()
+    );
+  }
+
+  /**
+   * Envía un mensaje informativo por WhatsApp si:
+   *   - `AUTH_NOTIFICATIONS_VIA_WHATSAPP=true` está activo
+   *   - Evolution API está configurada
+   *   - El usuario tiene un número en `usuarios.whatsapp`
+   * Cualquier error se loggea y se traga (el correo es la fuente de verdad).
+   */
+  private async notifyAuthViaWhatsapp(
+    usuarioId: string,
+    message: string,
+  ): Promise<void> {
+    if (!this.isWhatsappAuthEnabled()) return;
+    try {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuarioId },
+        select: { whatsapp: true },
+      });
+      const phone = usuario?.whatsapp ?? null;
+      if (!phone) return;
+      const result = await this.whatsappService.sendText({
+        to: phone,
+        text: message,
+      });
+      if (!result.delivered) {
+        this.logger.warn(
+          `WhatsApp auth omitido (${result.reason ?? 'unknown'}): ${
+            result.errorMessage ?? ''
+          }`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error enviando WhatsApp de auth: ${(error as Error).message}`,
+      );
+    }
+  }
 
   async login(dto: LoginDto) {
     const usuario = await this.prisma.usuario.findFirst({
@@ -181,6 +227,11 @@ export class AuthService {
       brand,
     });
     await this.emailService.send(email, template);
+
+    await this.notifyAuthViaWhatsapp(
+      usuarioId,
+      `Hola ${nombre}, tu código de verificación de ${brand.nombre} es ${codigo}. Vence en ${EMAIL_OTP_EXPIRES_IN_MINUTES} minutos.`,
+    );
   }
 
   private generateNumericCode(digits: number): string {
@@ -348,6 +399,10 @@ export class AuthService {
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     await this.sendPasswordResetEmail(usuario.email, usuario.nombre, resetUrl);
+    await this.notifyAuthViaWhatsapp(
+      usuario.id,
+      `Hola ${usuario.nombre}, recibimos una solicitud para restablecer tu contraseña. Si fuiste tú, abre este enlace (vence en ${PASSWORD_RESET_EXPIRES_IN_MINUTES} minutos): ${resetUrl}`,
+    );
 
     const isDevelopment =
       this.configService.get<string>('NODE_ENV', 'development') !==

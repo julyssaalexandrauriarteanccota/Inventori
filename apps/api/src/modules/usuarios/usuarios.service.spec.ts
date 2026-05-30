@@ -6,6 +6,7 @@ import { RolUsuario } from '@erp/shared';
 import { UsuariosService } from './usuarios.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../auth/email.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 
 const mockPrismaService = {
   usuario: {
@@ -32,6 +33,14 @@ const mockEmailService = {
   send: jest.fn().mockResolvedValue(true),
 };
 
+const mockWhatsappService = {
+  isConfigured: jest.fn().mockReturnValue(false),
+  normalize: jest.fn((p: string | null) => p),
+  sendText: jest
+    .fn()
+    .mockResolvedValue({ delivered: true, provider: 'evolution' }),
+};
+
 describe('UsuariosService', () => {
   let service: UsuariosService;
 
@@ -42,6 +51,7 @@ describe('UsuariosService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: EmailService, useValue: mockEmailService },
+        { provide: WhatsappService, useValue: mockWhatsappService },
       ],
     }).compile();
 

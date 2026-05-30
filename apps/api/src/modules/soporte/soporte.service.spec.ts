@@ -4,10 +4,12 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SoporteService } from './soporte.service';
 import { PrismaService } from '../../database/prisma.service';
 import { EventsService } from '../../websockets/events.service';
 import { InventarioService } from '../inventario/inventario.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import {
   EstadoTicket,
   EstadoGarantia,
@@ -128,6 +130,20 @@ describe('SoporteService', () => {
             emitToRoles: jest.fn(),
             emitToAll: jest.fn(),
           },
+        },
+        {
+          provide: WhatsappService,
+          useValue: {
+            isConfigured: jest.fn().mockReturnValue(false),
+            normalize: jest.fn((p: string | null) => p),
+            sendText: jest
+              .fn()
+              .mockResolvedValue({ delivered: true, provider: 'evolution' }),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
         },
       ],
     }).compile();

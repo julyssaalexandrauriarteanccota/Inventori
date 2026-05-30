@@ -20,9 +20,11 @@ import type {
   TicketUpdateInput,
   TicketWhereInput,
 } from '../../../generated/prisma/models/Ticket';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { EventsService } from '../../websockets/events.service';
 import { InventarioService } from '../inventario/inventario.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import {
   CreateTicketDto,
   UpdateTicketDto,
@@ -71,7 +73,57 @@ export class SoporteService {
     private readonly prisma: PrismaService,
     private readonly events: EventsService,
     private readonly inventarioService: InventarioService,
+    private readonly whatsappService: WhatsappService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /**
+   * Envía una notificación WhatsApp al cliente del ticket si:
+   *   - Evolution API está configurada
+   *   - El cliente tiene `celular` o `telefono`
+   * Errores no propagan: el ticket se persiste igual aunque WhatsApp falle.
+   */
+  private async notifyClienteWhatsapp(args: {
+    cliente: { celular?: string | null; telefono?: string | null } | null;
+    codigo: string;
+    titulo: string;
+    estado: EstadoTicket;
+    extra?: string;
+  }): Promise<void> {
+    if (!this.whatsappService.isConfigured()) return;
+    const phone = args.cliente?.celular ?? args.cliente?.telefono ?? null;
+    if (!phone) return;
+
+    const baseUrl = this.configService.get<string>(
+      'PUBLIC_WEB_URL',
+      this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000'),
+    );
+    const consultaUrl = `${baseUrl.replace(/\/$/, '')}/ticket?codigo=${encodeURIComponent(args.codigo)}`;
+    const lines = [
+      `Ticket ${args.codigo}: ${args.titulo}`,
+      `Estado: ${args.estado}`,
+    ];
+    if (args.extra) lines.push(args.extra);
+    lines.push(`Consulta: ${consultaUrl}`);
+
+    try {
+      const result = await this.whatsappService.sendText({
+        to: phone,
+        text: lines.join('\n'),
+      });
+      if (!result.delivered) {
+        this.logger.warn(
+          `WhatsApp ticket ${args.codigo} omitido (${
+            result.reason ?? 'unknown'
+          }): ${result.errorMessage ?? ''}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error enviando WhatsApp del ticket ${args.codigo}: ${(error as Error).message}`,
+      );
+    }
+  }
 
   private async validateEquipoPropioAsignadoCliente(
     equipoId: string,
@@ -194,6 +246,8 @@ export class SoporteService {
             razonSocial: true,
             dni: true,
             ruc: true,
+            celular: true,
+            telefono: true,
           },
         },
         equipo: { select: { id: true, numeroSerie: true, productoId: true } },
@@ -296,6 +350,14 @@ export class SoporteService {
         payload,
       );
     }
+
+    await this.notifyClienteWhatsapp({
+      cliente: ticket.cliente,
+      codigo: ticket.codigo,
+      titulo: ticket.titulo,
+      estado: ticket.estado as EstadoTicket,
+      extra: 'Te notificaremos cuando avance el estado.',
+    });
 
     return {
       data: { ...ticket, garantiaAplicada },
@@ -684,6 +746,8 @@ export class SoporteService {
               nombre: true,
               apellido: true,
               razonSocial: true,
+              celular: true,
+              telefono: true,
             },
           },
           tecnico: { select: { id: true, nombre: true } },
@@ -1355,7 +1419,14 @@ export class SoporteService {
           notas: dto.notas ?? ticket.notas,
         },
         include: {
-          cliente: { select: { id: true, nombre: true } },
+          cliente: {
+            select: {
+              id: true,
+              nombre: true,
+              celular: true,
+              telefono: true,
+            },
+          },
           tecnico: { select: { id: true, nombre: true } },
         },
       });
@@ -1402,6 +1473,14 @@ export class SoporteService {
         payload,
       );
     }
+
+    await this.notifyClienteWhatsapp({
+      cliente: updated.cliente,
+      codigo: ticket.codigo,
+      titulo: ticket.titulo,
+      estado: EstadoTicket.CERRADO,
+      extra: `Total: S/ ${montoTotal}. Gracias por confiar en nosotros.`,
+    });
 
     return { data: updated, meta: { timestamp: new Date().toISOString() } };
   }

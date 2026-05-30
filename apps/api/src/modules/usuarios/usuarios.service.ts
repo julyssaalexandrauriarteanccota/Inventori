@@ -15,6 +15,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { EmailService } from '../auth/email.service';
 import { buildAccountActivatedEmail } from '../auth/email-templates';
+import { WhatsappService } from '../notifications/whatsapp.service';
 import {
   CreateUsuarioDto,
   UpdateUsuarioDto,
@@ -58,7 +59,37 @@ export class UsuariosService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly whatsappService: WhatsappService,
   ) {}
+
+  private async notifyWhatsapp(
+    whatsapp: string | null | undefined,
+    message: string,
+  ): Promise<void> {
+    if (
+      this.configService.get<string>('AUTH_NOTIFICATIONS_VIA_WHATSAPP') !==
+      'true'
+    )
+      return;
+    if (!this.whatsappService.isConfigured() || !whatsapp) return;
+    try {
+      const result = await this.whatsappService.sendText({
+        to: whatsapp,
+        text: message,
+      });
+      if (!result.delivered) {
+        this.logger.warn(
+          `WhatsApp bienvenida omitido (${
+            result.reason ?? 'unknown'
+          }): ${result.errorMessage ?? ''}`,
+        );
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Error enviando WhatsApp de bienvenida: ${(error as Error).message}`,
+      );
+    }
+  }
 
   /**
    * Activa una cuenta previamente registrada y verificada por email.
@@ -94,9 +125,10 @@ export class UsuariosService {
       return { id: usuario.id, message: 'La cuenta ya estaba activa.' };
     }
 
-    await this.prisma.usuario.update({
+    const updated = await this.prisma.usuario.update({
       where: { id },
       data: { activo: true },
+      select: { whatsapp: true },
     });
 
     const frontendUrl =
@@ -111,6 +143,10 @@ export class UsuariosService {
       brand,
     });
     await this.emailService.send(usuario.email, template);
+    await this.notifyWhatsapp(
+      updated.whatsapp,
+      `Hola ${usuario.nombre}, tu cuenta en ${brand.nombre} fue activada. Ingresa aquí: ${loginUrl}`,
+    );
 
     this.logger.log(`Cuenta activada y bienvenida enviada: ${usuario.email}`);
     return {

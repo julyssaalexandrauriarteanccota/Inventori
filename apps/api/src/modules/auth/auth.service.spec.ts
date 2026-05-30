@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { EmailService } from './email.service';
 import { PrismaService } from '../../database/prisma.service';
 import { UsuariosService } from '../usuarios/usuarios.service';
+import { WhatsappService } from '../notifications/whatsapp.service';
 
 const mockUsuariosService = {
   changePassword: jest.fn(),
@@ -17,6 +18,17 @@ const mockEmailService = {
     .fn()
     .mockResolvedValue({ nombre: 'Inventori', colorPrimario: '#D2691E' }),
   send: jest.fn().mockResolvedValue(true),
+};
+
+const mockWhatsappService = {
+  isConfigured: jest.fn().mockReturnValue(false),
+  normalize: jest.fn((p: string | null) => p),
+  sendText: jest
+    .fn()
+    .mockResolvedValue({ delivered: true, provider: 'evolution' }),
+  sendMedia: jest
+    .fn()
+    .mockResolvedValue({ delivered: true, provider: 'evolution' }),
 };
 
 const mockPrismaService = {
@@ -69,6 +81,7 @@ describe('AuthService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: UsuariosService, useValue: mockUsuariosService },
         { provide: EmailService, useValue: mockEmailService },
+        { provide: WhatsappService, useValue: mockWhatsappService },
       ],
     }).compile();
 
