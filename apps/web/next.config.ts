@@ -38,7 +38,7 @@ function buildRemotePatterns(): NonNullable<
 }
 
 function buildAllowedDevOrigins(): string[] {
-  const defaults = ['172.28.64.1']
+  const defaults = ['172.28.64.1', '10.81.205.114']
   const extra = (process.env.ALLOWED_DEV_ORIGINS || '')
     .split(',')
     .map((value) => value.trim())

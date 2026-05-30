@@ -54,7 +54,10 @@ const SocketContext = createContext<SocketContextValue | null>(null)
 
 const MAX_NOTIFICATIONS = 50
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+const _RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+const API_URL = (() => {
+  try { const u = new URL(_RAW_API_URL); return `${u.protocol}//${u.host}` } catch { return 'http://localhost:4000' }
+})()
 
 // ── Helpers ─────────────────────────────────────────────────────
 

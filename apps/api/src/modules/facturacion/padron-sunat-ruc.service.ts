@@ -15,7 +15,7 @@ import { EventsService } from '../../websockets/events.service';
 const DEFAULT_PADRON_URL =
   'https://www.sunat.gob.pe/descargaPRR/padron_reducido_ruc.zip';
 const DEFAULT_BATCH_SIZE = 5000;
-const DEFAULT_DOWNLOAD_TIMEOUT_MS = 120_000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 1_200_000;
 const DEFAULT_TEXT_CHUNK_SIZE = 1024 * 1024;
 
 type PadronImportStatus =
@@ -231,15 +231,7 @@ export class PadronSunatRucService {
       message: 'Descargando ZIP del padrón reducido RUC desde SUNAT.',
     });
 
-    const response = await this.fetchWithTimeout(sourceUrl, signal);
-
-    if (!response.ok) {
-      throw new ServiceUnavailableException(
-        `No se pudo descargar padrón SUNAT (${response.status})`,
-      );
-    }
-
-    const zipBuffer = Buffer.from(await response.arrayBuffer());
+    const zipBuffer = await this.fetchWithTimeout(sourceUrl, signal);
     await this.importFromZip(zipBuffer, {
       jobId,
       sourceUrl,
@@ -521,7 +513,7 @@ export class PadronSunatRucService {
     return result.count;
   }
 
-  private async fetchWithTimeout(sourceUrl: string, signal: AbortSignal) {
+  private async fetchWithTimeout(sourceUrl: string, signal: AbortSignal): Promise<Buffer> {
     const timeoutMs = Number(
       this.config.get<string>(
         'SUNAT_PADRON_RUC_TIMEOUT_MS',
@@ -546,7 +538,13 @@ export class PadronSunatRucService {
     signal.addEventListener('abort', onAbort, { once: true });
 
     try {
-      return await fetch(sourceUrl, { signal: timeoutController.signal });
+      const response = await fetch(sourceUrl, { signal: timeoutController.signal });
+      if (!response.ok) {
+        throw new ServiceUnavailableException(
+          `No se pudo descargar padrón SUNAT (${response.status})`,
+        );
+      }
+      return Buffer.from(await response.arrayBuffer());
     } catch (error) {
       if (cancelled || signal.aborted) {
         throw new PadronImportCancelledError();

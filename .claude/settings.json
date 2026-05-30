@@ -1,6 +1,0 @@
-{
-  "enabledPlugins": {
-    "claude-mem@thedotmack": true,
-    "auth0@claude-plugins-official": true
-  }
-}
